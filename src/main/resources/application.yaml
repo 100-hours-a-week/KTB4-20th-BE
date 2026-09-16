@@ -1,0 +1,11 @@
+spring:
+  application:
+    name: planit-backend
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/planit?connectionTimeZone=Asia/Seoul}
+    username: ${DB_USERNAME:planit}
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false

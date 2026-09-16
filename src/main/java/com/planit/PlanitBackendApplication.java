@@ -1,0 +1,13 @@
+package com.planit;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class PlanitBackendApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(PlanitBackendApplication.class, args);
+	}
+
+}
