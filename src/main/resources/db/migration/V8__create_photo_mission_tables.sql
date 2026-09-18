@@ -1,7 +1,7 @@
 -- PlanIt Flyway migration: V8  create photo mission tables
 
 CREATE TABLE `mission_generation_jobs` (
-	`id`	BIGINT	NOT NULL	COMMENT '일별 포토 미션 생성 작업 ID',
+	`id`	BIGINT	NOT NULL AUTO_INCREMENT	COMMENT '일별 포토 미션 생성 작업 ID',
 	`trip_id`	BIGINT	NOT NULL	COMMENT '여행 ID',
 	`schedule_day_id`	BIGINT	NOT NULL	COMMENT '오늘 여행 동선 ID',
 	`weather_check_id`	BIGINT	NULL	COMMENT '생성에 반영한 날씨 조회 ID',
@@ -16,12 +16,12 @@ CREATE TABLE `mission_generation_jobs` (
 	`finished_at`	DATETIME(6)	NULL,
 	`error_code`	VARCHAR(100)	NULL,
 	`created_at`	DATETIME(6)	NOT NULL	DEFAULT CURRENT_TIMESTAMP(6),
-	`updated_at`	DATETIME(6)	NOT NULL	DEFAULT CURRENT_TIMESTAMP(6)
+	`updated_at`	DATETIME(6)	NOT NULL	DEFAULT CURRENT_TIMESTAMP(6),
+	CONSTRAINT `PK_MISSION_GENERATION_JOBS` PRIMARY KEY (
+		`id`
+	)
 );
 
-ALTER TABLE `mission_generation_jobs` ADD CONSTRAINT `PK_MISSION_GENERATION_JOBS` PRIMARY KEY (
-	`id`
-);
 
 ALTER TABLE `mission_generation_jobs`
     ADD CONSTRAINT `fk_mission_generation_jobs_trip_id`
@@ -36,7 +36,7 @@ ALTER TABLE `mission_generation_jobs`
     FOREIGN KEY (`weather_check_id`) REFERENCES `weather_checks` (`id`);
 
 CREATE TABLE `missions` (
-	`id`	BIGINT	NOT NULL	COMMENT '포토 미션 ID',
+	`id`	BIGINT	NOT NULL AUTO_INCREMENT	COMMENT '포토 미션 ID',
 	`mission_generation_job_id`	BIGINT	NOT NULL	COMMENT '미션 생성 작업 ID',
 	`trip_id`	BIGINT	NOT NULL	COMMENT '여행 ID',
 	`schedule_day_id`	BIGINT	NOT NULL	COMMENT '미션 대상 Day ID',
@@ -48,12 +48,12 @@ CREATE TABLE `missions` (
 	`status`	VARCHAR(20)	NOT NULL	DEFAULT 'ACTIVE'	COMMENT 'ACTIVE, CLOSED',
 	`expires_at`	DATETIME(6)	NOT NULL	COMMENT '여행 종료 시각',
 	`created_at`	DATETIME(6)	NOT NULL	DEFAULT CURRENT_TIMESTAMP(6),
-	`updated_at`	DATETIME(6)	NOT NULL	DEFAULT CURRENT_TIMESTAMP(6)
+	`updated_at`	DATETIME(6)	NOT NULL	DEFAULT CURRENT_TIMESTAMP(6),
+	CONSTRAINT `PK_MISSIONS` PRIMARY KEY (
+		`id`
+	)
 );
 
-ALTER TABLE `missions` ADD CONSTRAINT `PK_MISSIONS` PRIMARY KEY (
-	`id`
-);
 
 ALTER TABLE `missions`
     ADD CONSTRAINT `fk_missions_mission_generation_job_id`
@@ -68,7 +68,7 @@ ALTER TABLE `missions`
     FOREIGN KEY (`schedule_day_id`) REFERENCES `schedule_days` (`id`);
 
 CREATE TABLE `mission_participations` (
-	`id`	BIGINT	NOT NULL	COMMENT '멤버별 미션 참여 ID',
+	`id`	BIGINT	NOT NULL AUTO_INCREMENT	COMMENT '멤버별 미션 참여 ID',
 	`mission_id`	BIGINT	NOT NULL	COMMENT '포토 미션 ID',
 	`trip_member_id`	BIGINT	NOT NULL	COMMENT '여행 멤버십 ID',
 	`status`	VARCHAR(20)	NOT NULL	DEFAULT 'PENDING'	COMMENT 'PENDING, COMPLETED',
@@ -76,12 +76,12 @@ CREATE TABLE `mission_participations` (
 	`completion_method`	VARCHAR(20)	NULL	COMMENT 'AI, MANUAL',
 	`completed_at`	DATETIME(6)	NULL,
 	`created_at`	DATETIME(6)	NOT NULL	DEFAULT CURRENT_TIMESTAMP(6),
-	`updated_at`	DATETIME(6)	NOT NULL	DEFAULT CURRENT_TIMESTAMP(6)
+	`updated_at`	DATETIME(6)	NOT NULL	DEFAULT CURRENT_TIMESTAMP(6),
+	CONSTRAINT `PK_MISSION_PARTICIPATIONS` PRIMARY KEY (
+		`id`
+	)
 );
 
-ALTER TABLE `mission_participations` ADD CONSTRAINT `PK_MISSION_PARTICIPATIONS` PRIMARY KEY (
-	`id`
-);
 
 ALTER TABLE `mission_participations`
     ADD CONSTRAINT `fk_mission_participations_mission_id`
@@ -92,7 +92,7 @@ ALTER TABLE `mission_participations`
     FOREIGN KEY (`trip_member_id`) REFERENCES `trip_members` (`id`);
 
 CREATE TABLE `mission_photos` (
-	`id`	BIGINT	NOT NULL	COMMENT '포토 미션 제출 사진 ID',
+	`id`	BIGINT	NOT NULL AUTO_INCREMENT	COMMENT '포토 미션 제출 사진 ID',
 	`mission_participation_id`	BIGINT	NOT NULL	COMMENT '멤버별 미션 참여 ID',
 	`mission_id`	BIGINT	NOT NULL	COMMENT '대표 사진 제약을 위한 미션 ID',
 	`image_file_id`	BIGINT	NOT NULL	COMMENT '이미지 파일 ID',
@@ -100,12 +100,12 @@ CREATE TABLE `mission_photos` (
 	`representative_slot`	TINYINT	NULL	COMMENT '그룹 대표 사진일 때만 1',
 	`submitted_at`	DATETIME(6)	NOT NULL	DEFAULT CURRENT_TIMESTAMP(6),
 	`replaced_at`	DATETIME(6)	NULL,
-	`deleted_at`	DATETIME(6)	NULL
+	`deleted_at`	DATETIME(6)	NULL,
+	CONSTRAINT `PK_MISSION_PHOTOS` PRIMARY KEY (
+		`id`
+	)
 );
 
-ALTER TABLE `mission_photos` ADD CONSTRAINT `PK_MISSION_PHOTOS` PRIMARY KEY (
-	`id`
-);
 
 ALTER TABLE `mission_photos`
     ADD CONSTRAINT `fk_mission_photos_mission_participation_id`
@@ -120,7 +120,7 @@ ALTER TABLE `mission_photos`
     FOREIGN KEY (`image_file_id`) REFERENCES `image_files` (`id`);
 
 CREATE TABLE `photo_evaluations` (
-	`id`	BIGINT	NOT NULL	COMMENT '사진 AI 판정 ID',
+	`id`	BIGINT	NOT NULL AUTO_INCREMENT	COMMENT '사진 AI 판정 ID',
 	`mission_photo_id`	BIGINT	NOT NULL	COMMENT '판정 대상 사진 ID',
 	`attempt_no`	TINYINT	NOT NULL	COMMENT '사진 기준 판정 시도 순서',
 	`match_score`	DECIMAL(5, 2)	NULL	COMMENT '0~100 일치도',
@@ -129,14 +129,13 @@ CREATE TABLE `photo_evaluations` (
 	`landmark_name`	VARCHAR(200)	NULL	COMMENT '가장 높은 신뢰도의 랜드마크',
 	`landmark_confidence`	DECIMAL(5, 2)	NULL	COMMENT '랜드마크 인식 신뢰도',
 	`error_code`	VARCHAR(100)	NULL,
-	`evaluated_at`	DATETIME(6)	NOT NULL	DEFAULT CURRENT_TIMESTAMP(6)
+	`evaluated_at`	DATETIME(6)	NOT NULL	DEFAULT CURRENT_TIMESTAMP(6),
+	CONSTRAINT `PK_PHOTO_EVALUATIONS` PRIMARY KEY (
+		`id`
+	)
 );
 
-ALTER TABLE `photo_evaluations` ADD CONSTRAINT `PK_PHOTO_EVALUATIONS` PRIMARY KEY (
-	`id`
-);
 
 ALTER TABLE `photo_evaluations`
     ADD CONSTRAINT `fk_photo_evaluations_mission_photo_id`
     FOREIGN KEY (`mission_photo_id`) REFERENCES `mission_photos` (`id`);
-
