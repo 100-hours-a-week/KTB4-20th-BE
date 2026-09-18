@@ -20,7 +20,7 @@ CREATE TABLE `image_files` (
 CREATE TABLE `users` (
 	`id`	BIGINT	NOT NULL AUTO_INCREMENT	COMMENT '사용자 ID',
 	`image_file_id`	BIGINT	NOT NULL	COMMENT '이미지 파일 ID',
-	`public_id`	BINARY(16)	NULL,
+	`public_id`	BINARY(16)	NOT NULL,
 	`username`	VARCHAR(20)	NULL,
 	`created_at`	DATETIME(6)	NOT NULL	DEFAULT CURRENT_TIMESTAMP(6),
 	`deleted_at`	DATETIME(6)	NULL	COMMENT '회원 탈퇴 시각',
@@ -31,7 +31,10 @@ CREATE TABLE `users` (
 	`gender`	VARCHAR(10)	NULL,
 	CONSTRAINT `PK_USERS` PRIMARY KEY (
 		`id`
-	)
+	),
+    CONSTRAINT `UK_USERS_PUBLIC_ID` UNIQUE (
+                                            `public_id`
+        )
 );
 
 
@@ -42,12 +45,16 @@ ALTER TABLE `users`
 CREATE TABLE `oauth_accounts` (
 	`id`	BIGINT	NOT NULL AUTO_INCREMENT,
 	`user_id`	BIGINT	NOT NULL	COMMENT '사용자 ID',
-	`provider`	VARCHAR(20)	NULL,
-	`provider_user_id`	VARCHAR(255)	NULL,
+	`provider`	VARCHAR(20)	NOT NULL,
+	`provider_user_id`	VARCHAR(255)	NOT NULL,
 	`created_at`	DATETIME(6)	NULL,
 	CONSTRAINT `PK_OAUTH_ACCOUNTS` PRIMARY KEY (
 		`id`
-	)
+	),
+    CONSTRAINT `UK_OAUTH_ACCOUNTS_PROVIDER_USER` UNIQUE (
+                                                         `provider`,
+                                                         `provider_user_id`
+        )
 );
 
 
