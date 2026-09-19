@@ -10,6 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 
 @Entity
 @Table(name = "chat_policy_versions")
@@ -53,7 +54,7 @@ public class ChatPolicyVersion {
         this.title = title;
         this.content = content;
         this.status = ChatPolicyStatus.DRAFT;
-        this.createdAt = LocalDateTime.now();
+        this.createdAt = LocalDateTime.now(ZoneOffset.UTC);
         this.updatedAt = this.createdAt;
     }
 

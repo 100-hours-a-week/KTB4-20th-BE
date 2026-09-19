@@ -11,6 +11,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 
 @Entity
 @Table(name = "chat_policy_consents")
@@ -40,7 +41,7 @@ public class ChatPolicyConsent {
     ) {
         this.user = user;
         this.chatPolicyVersion = chatPolicyVersion;
-        this.consentedAt = LocalDateTime.now();
+        this.consentedAt = LocalDateTime.now(ZoneOffset.UTC);
     }
 
     public Long getId() {

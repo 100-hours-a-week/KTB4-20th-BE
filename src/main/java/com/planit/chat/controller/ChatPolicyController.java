@@ -6,6 +6,7 @@ import com.planit.chat.dto.ChatPolicyResponse;
 import com.planit.chat.service.ChatPolicyService;
 import com.planit.global.response.ApiResponse;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -15,13 +16,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/chat-policy")
+@RequiredArgsConstructor
 public class ChatPolicyController {
 
     private final ChatPolicyService chatPolicyService;
-
-    public ChatPolicyController(ChatPolicyService chatPolicyService) {
-        this.chatPolicyService = chatPolicyService;
-    }
 
     @GetMapping
     public ApiResponse<ChatPolicyResponse> getCurrentPolicy(
