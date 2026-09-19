@@ -1,0 +1,75 @@
+name: BE PR CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: be-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and Image Build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: planit
+          MYSQL_USER: planit
+          MYSQL_PASSWORD: ci-db-password
+          MYSQL_ROOT_PASSWORD: ci-root-password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+
+    steps:
+      - name: Check main PR source
+        if: >-
+          github.base_ref == 'main' &&
+          (github.head_ref != 'dev' ||
+           github.event.pull_request.head.repo.full_name != github.repository)
+        run: |
+          echo "::error::main에는 같은 저장소의 dev 브랜치에서 PR을 보내야 합니다."
+          exit 1
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
+      - name: Test and build backend
+        env:
+          DB_URL: jdbc:mysql://127.0.0.1:3306/planit?sslMode=DISABLED&allowPublicKeyRetrieval=true&connectionTimeZone=Asia/Seoul
+          DB_USERNAME: planit
+          DB_PASSWORD: ci-db-password
+          KAKAO_REST_API_KEY: ci-client-id
+          KAKAO_CLIENT_SECRET: ci-client-secret
+        run: ./gradlew clean build --no-daemon
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            --platform linux/amd64 \
+            -t planit-backend:ci .
