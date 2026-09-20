@@ -19,18 +19,28 @@ spring:
     open-in-view: false
 
 planit:
+  image:
+    default-profile-url: ${DEFAULT_PROFILE_IMAGE_URL:http://localhost:8080/images/default-profile.svg}
   auth:
     frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
     allowed-frontend-origin: ${ALLOWED_FRONTEND_ORIGIN:http://localhost:5173}
-    cookie-secure: ${AUTH_COOKIE_SECURE:false}
+    cookie-secure: ${AUTH_COOKIE_SECURE}
 
     oauth-state-cookie-name: planit_oauth_state
     oauth-state-cookie-max-age: 10m
 
+    jwt:
+      secret-base64: ${JWT_HS256_SECRET_BASE64}
+      issuer: planit-auth
+      audience: planit-api
+      access-token-ttl: 15m
+
     kakao:
       client-id: ${KAKAO_REST_API_KEY}
       client-secret: ${KAKAO_CLIENT_SECRET}
+      admin-key: ${KAKAO_ADMIN_KEY}
       redirect-uri: ${KAKAO_REDIRECT_URI:http://localhost:8080/api/auth/oauth/callback}
       authorization-uri: https://kauth.kakao.com/oauth/authorize
       token-uri: https://kauth.kakao.com/oauth/token
       user-info-uri: https://kapi.kakao.com/v2/user/me
+      unlink-uri: https://kapi.kakao.com/v1/user/unlink

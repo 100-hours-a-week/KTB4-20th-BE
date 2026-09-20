@@ -18,12 +18,18 @@ class AuthPropertiesTest {
                     "planit.auth.cookie-secure=false",
                     "planit.auth.oauth-state-cookie-name=planit_oauth_state",
                     "planit.auth.oauth-state-cookie-max-age=10m",
+                    "planit.auth.jwt.secret-base64=MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=",
+                    "planit.auth.jwt.issuer=planit-auth",
+                    "planit.auth.jwt.audience=planit-api",
+                    "planit.auth.jwt.access-token-ttl=15m",
                     "planit.auth.kakao.client-id=test-client-id",
                     "planit.auth.kakao.client-secret=test-client-secret",
+                    "planit.auth.kakao.admin-key=test-admin-key",
                     "planit.auth.kakao.redirect-uri=http://localhost:8080/api/auth/oauth/callback",
                     "planit.auth.kakao.authorization-uri=https://kauth.kakao.com/oauth/authorize",
                     "planit.auth.kakao.token-uri=https://kauth.kakao.com/oauth/token",
-                    "planit.auth.kakao.user-info-uri=https://kapi.kakao.com/v2/user/me"
+                    "planit.auth.kakao.user-info-uri=https://kapi.kakao.com/v2/user/me",
+                    "planit.auth.kakao.unlink-uri=https://kapi.kakao.com/v1/user/unlink"
             );
 
     @Test
@@ -35,8 +41,15 @@ class AuthPropertiesTest {
                     .isEqualTo(URI.create("http://localhost:5173"));
             assertThat(properties.oauthStateCookieMaxAge())
                     .isEqualTo(Duration.ofMinutes(10));
+            assertThat(properties.jwt().issuer())
+                    .isEqualTo("planit-auth");
+            assertThat(properties.jwt().audience())
+                    .isEqualTo("planit-api");
+            assertThat(properties.jwt().accessTokenTtl())
+                    .isEqualTo(Duration.ofMinutes(15));
             assertThat(properties.kakao().clientId()).isEqualTo("test-client-id");
             assertThat(properties.kakao().clientSecret()).isEqualTo("test-client-secret");
+            assertThat(properties.kakao().adminKey()).isEqualTo("test-admin-key");
             assertThat(properties.kakao().redirectUri())
                     .isEqualTo(URI.create("http://localhost:8080/api/auth/oauth/callback"));
         });
