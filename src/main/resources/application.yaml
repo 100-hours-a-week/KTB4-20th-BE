@@ -5,7 +5,32 @@ spring:
     url: ${DB_URL:jdbc:mysql://localhost:3306/planit?connectionTimeZone=Asia/Seoul}
     username: ${DB_USERNAME:planit}
     password: ${DB_PASSWORD}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    fail-on-missing-locations: true
+    validate-migration-naming: true
+    validate-on-migrate: true
+    baseline-on-migrate: false
+    clean-disabled: true
   jpa:
     hibernate:
-      ddl-auto: none
+      ddl-auto: validate
     open-in-view: false
+
+planit:
+  auth:
+    frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
+    allowed-frontend-origin: ${ALLOWED_FRONTEND_ORIGIN:http://localhost:5173}
+    cookie-secure: ${AUTH_COOKIE_SECURE:false}
+
+    oauth-state-cookie-name: planit_oauth_state
+    oauth-state-cookie-max-age: 10m
+
+    kakao:
+      client-id: ${KAKAO_REST_API_KEY}
+      client-secret: ${KAKAO_CLIENT_SECRET}
+      redirect-uri: ${KAKAO_REDIRECT_URI:http://localhost:8080/api/auth/oauth/callback}
+      authorization-uri: https://kauth.kakao.com/oauth/authorize
+      token-uri: https://kauth.kakao.com/oauth/token
+      user-info-uri: https://kapi.kakao.com/v2/user/me
