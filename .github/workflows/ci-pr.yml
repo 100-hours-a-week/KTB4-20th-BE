@@ -64,8 +64,12 @@ jobs:
           DB_URL: jdbc:mysql://127.0.0.1:3306/planit?sslMode=DISABLED&allowPublicKeyRetrieval=true&connectionTimeZone=Asia/Seoul
           DB_USERNAME: planit
           DB_PASSWORD: ci-db-password
+          AUTH_COOKIE_SECURE: 'false'
+          # CI 테스트 전용 키이며 운영 환경에서는 사용하지 않습니다.
+          JWT_HS256_SECRET_BASE64: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY='
           KAKAO_REST_API_KEY: ci-client-id
           KAKAO_CLIENT_SECRET: ci-client-secret
+          KAKAO_ADMIN_KEY: ci-admin-key
         run: ./gradlew clean build --no-daemon
 
       - name: Build Docker image
