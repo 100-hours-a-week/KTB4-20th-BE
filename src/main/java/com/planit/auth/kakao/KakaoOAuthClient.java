@@ -1,6 +1,7 @@
 package com.planit.auth.kakao;
 
 import com.planit.auth.config.AuthProperties;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
@@ -9,19 +10,12 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
+@RequiredArgsConstructor
 @Component
 public class KakaoOAuthClient {
 
     private final RestClient restClient;
     private final AuthProperties authProperties;
-
-    public KakaoOAuthClient(
-            RestClient.Builder restClientBuilder,
-            AuthProperties authProperties
-    ) {
-        this.restClient = restClientBuilder.build();
-        this.authProperties = authProperties;
-    }
 
     public String exchangeCode(String code) {
         MultiValueMap<String, String> form =

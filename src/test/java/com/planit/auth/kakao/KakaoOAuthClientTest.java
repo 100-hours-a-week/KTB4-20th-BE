@@ -74,7 +74,7 @@ class KakaoOAuthClientTest {
         );
 
         kakaoOAuthClient = new KakaoOAuthClient(
-                builder,
+                builder.build(),
                 properties
         );
     }
