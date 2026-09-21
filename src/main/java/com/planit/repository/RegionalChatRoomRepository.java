@@ -26,14 +26,14 @@ public interface RegionalChatRoomRepository extends JpaRepository<RegionalChatRo
                          AND trip.deleted_at IS NULL
                          AND trip.sub_region_id = room.region_id
                          AND :today BETWEEN trip.start_date AND trip.end_date
-                   ) AS relatedToMyTrip,
+                   ) AS relatedToMyTripValue,
                    EXISTS (
                        SELECT 1
                        FROM regional_chat_room_members my_membership
                        WHERE my_membership.user_id = :userId
                          AND my_membership.regional_chat_room_id = room.id
                          AND my_membership.left_at IS NULL
-                   ) AS joined,
+                   ) AS joinedValue,
                    (
                        SELECT COUNT(DISTINCT membership.user_id)
                        FROM regional_chat_room_members membership
@@ -47,7 +47,7 @@ public interface RegionalChatRoomRepository extends JpaRepository<RegionalChatRo
                          ON consent.chat_policy_version_id = policy.id
                        WHERE policy.status = 'ACTIVE'
                          AND consent.user_id = :userId
-                   ) AS canJoin
+                   ) AS canJoinValue
             FROM regional_chat_rooms room
             """, nativeQuery = true)
     List<RegionalChatRoomListProjection> findListEntries(
@@ -62,12 +62,28 @@ public interface RegionalChatRoomRepository extends JpaRepository<RegionalChatRo
 
         String getName();
 
-        Boolean getRelatedToMyTrip();
+        Long getRelatedToMyTripValue();
 
-        Boolean getJoined();
+        Long getJoinedValue();
 
         Long getMemberCount();
 
-        Boolean getCanJoin();
+        Long getCanJoinValue();
+
+        default Boolean getRelatedToMyTrip() {
+            return isTrue(getRelatedToMyTripValue());
+        }
+
+        default Boolean getJoined() {
+            return isTrue(getJoinedValue());
+        }
+
+        default Boolean getCanJoin() {
+            return isTrue(getCanJoinValue());
+        }
+
+        private static boolean isTrue(Long value) {
+            return value != null && value != 0L;
+        }
     }
 }
