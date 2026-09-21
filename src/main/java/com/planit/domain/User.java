@@ -28,7 +28,7 @@ public class User {
     @Column(name = "public_id", columnDefinition = "BINARY(16)")
     private UUID publicId;
 
-    @Column(name = "username", length = 20)
+    @Column(name = "username", nullable = false, length = 20)
     private String username;
 
     @Column(name = "created_at", nullable = false)
@@ -64,6 +64,12 @@ public class User {
         this.publicId = publicId;
         this.username = username;
         this.createdAt = LocalDateTime.now();
+    }
+
+    public void withdraw(LocalDateTime deletedAt) {
+        if (this.deletedAt == null) {
+            this.deletedAt = deletedAt;
+        }
     }
 
     public Long getId() {

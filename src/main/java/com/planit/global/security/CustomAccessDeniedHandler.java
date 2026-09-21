@@ -4,20 +4,18 @@ import com.planit.global.error.ErrorCode;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 
+@RequiredArgsConstructor
 @Component
 public class CustomAccessDeniedHandler implements AccessDeniedHandler {
 
     private final SecurityErrorResponseWriter responseWriter;
-
-    public CustomAccessDeniedHandler(SecurityErrorResponseWriter responseWriter) {
-        this.responseWriter = responseWriter;
-    }
 
     @Override
     public void handle(
