@@ -15,6 +15,7 @@ public enum ErrorCode {
     FILE_TOO_LARGE(HttpStatus.valueOf(413), "허용된 파일 크기를 초과했습니다."),
     UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "지원하지 않는 미디어 타입입니다."),
     RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "요청 횟수 제한을 초과했습니다."),
+    INVALID_CURSOR(HttpStatus.BAD_REQUEST, "유효하지 않은 cursor입니다."),
     CHAT_POLICY_VERSION_NOT_ACTIVE(HttpStatus.CONFLICT, "현재 활성 채팅 운영 정책이 아닙니다."),
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "예상하지 못한 서버 오류가 발생했습니다."),
     SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "서비스를 일시적으로 사용할 수 없습니다."),
