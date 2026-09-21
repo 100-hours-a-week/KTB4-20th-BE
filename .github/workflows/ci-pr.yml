@@ -68,6 +68,27 @@ jobs:
           KAKAO_CLIENT_SECRET: ci-client-secret
         run: ./gradlew clean build --no-daemon
 
+      - name: Print failed test details
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          reports = sorted(Path("build/test-results/test").glob("TEST-*.xml"))
+          if not reports:
+              print("No test XML reports found.")
+
+          for report in reports:
+              root = ET.parse(report).getroot()
+              for case in root.iter("testcase"):
+                  failures = list(case.findall("failure")) + list(case.findall("error"))
+                  for failure in failures:
+                      print(f"\n=== {case.get('classname')} / {case.get('name')} ===")
+                      print(failure.get("message", ""))
+                      print(failure.text or "")
+          PY
+
       - name: Build Docker image
         run: |
           docker build \
