@@ -3,7 +3,10 @@ package com.planit.chat.controller;
 import com.planit.chat.dto.RegionalChatRoomListResponse;
 import com.planit.chat.dto.RegionalChatRoomListResponse.CursorPageResponse;
 import com.planit.chat.dto.RegionalChatRoomListResponse.RegionalChatRoomItemResponse;
+import com.planit.chat.dto.RegionalChatRoomJoinResponse;
+import com.planit.chat.dto.RegionalChatRoomLeaveResponse;
 import com.planit.chat.service.RegionalChatRoomListService;
+import com.planit.chat.service.RegionalChatRoomMembershipService;
 import com.planit.global.error.GlobalExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -11,12 +14,15 @@ import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.time.Instant;
 import java.util.List;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -25,12 +31,16 @@ class RegionalChatRoomControllerTest {
     private static final String USER_PUBLIC_ID = "01991f6e-7300-7b21-a3cc-1436db3df95e";
 
     private RegionalChatRoomListService service;
+    private RegionalChatRoomMembershipService membershipService;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         service = mock(RegionalChatRoomListService.class);
-        mockMvc = MockMvcBuilders.standaloneSetup(new RegionalChatRoomController(service))
+        membershipService = mock(RegionalChatRoomMembershipService.class);
+        mockMvc = MockMvcBuilders.standaloneSetup(
+                        new RegionalChatRoomController(service, membershipService)
+                )
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -60,5 +70,39 @@ class RegionalChatRoomControllerTest {
                 .andExpect(jsonPath("$.data.page.hasNext").value(true));
 
         verify(service).getRegionalChatRooms(USER_PUBLIC_ID, "cursor");
+    }
+
+    @Test
+    void joinsRegionalChatRoom() throws Exception {
+        Instant joinedAt = Instant.parse("2026-09-20T01:00:00.123456Z");
+        when(membershipService.join(USER_PUBLIC_ID, 3001L))
+                .thenReturn(new RegionalChatRoomJoinResponse("3001", joinedAt));
+
+        mockMvc.perform(put("/api/regional-chat-rooms/3001/members/me")
+                        .principal(new TestingAuthenticationToken(USER_PUBLIC_ID, null)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("REGIONAL_CHAT_ROOM_JOINED"))
+                .andExpect(jsonPath("$.data.roomId").value("3001"))
+                .andExpect(jsonPath("$.data.joinedAt")
+                        .value("2026-09-20T01:00:00.123456Z"));
+
+        verify(membershipService).join(USER_PUBLIC_ID, 3001L);
+    }
+
+    @Test
+    void leavesRegionalChatRoom() throws Exception {
+        Instant leftAt = Instant.parse("2026-09-20T02:00:00.123456Z");
+        when(membershipService.leave(USER_PUBLIC_ID, 3001L))
+                .thenReturn(new RegionalChatRoomLeaveResponse("3001", leftAt));
+
+        mockMvc.perform(delete("/api/regional-chat-rooms/3001/members/me")
+                        .principal(new TestingAuthenticationToken(USER_PUBLIC_ID, null)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("REGIONAL_CHAT_ROOM_LEFT"))
+                .andExpect(jsonPath("$.data.roomId").value("3001"))
+                .andExpect(jsonPath("$.data.leftAt")
+                        .value("2026-09-20T02:00:00.123456Z"));
+
+        verify(membershipService).leave(USER_PUBLIC_ID, 3001L);
     }
 }
