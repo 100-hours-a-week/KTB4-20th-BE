@@ -1,6 +1,8 @@
 package com.planit.chat.controller;
 
 import com.planit.chat.dto.RegionalChatRoomListResponse;
+import com.planit.chat.dto.ChatMessageHistoryResponse;
+import com.planit.chat.service.ChatMessageHistoryService;
 import com.planit.chat.dto.RegionalChatRoomJoinResponse;
 import com.planit.chat.dto.RegionalChatRoomLeaveResponse;
 import com.planit.chat.service.RegionalChatRoomListService;
@@ -26,6 +28,7 @@ public class RegionalChatRoomController {
 
     private final RegionalChatRoomListService regionalChatRoomListService;
     private final RegionalChatRoomMembershipService membershipService;
+    private final ChatMessageHistoryService messageHistoryService;
 
     @GetMapping
     public ApiResponse<RegionalChatRoomListResponse> getRegionalChatRooms(
@@ -35,6 +38,25 @@ public class RegionalChatRoomController {
         RegionalChatRoomListResponse response = regionalChatRoomListService
                 .getRegionalChatRooms(authentication.getName(), cursor);
         return ApiResponse.success(SUCCESS_CODE, SUCCESS_MESSAGE, response);
+    }
+
+    @GetMapping("/{roomId}/messages")
+    public ApiResponse<ChatMessageHistoryResponse> getMessages(
+            Authentication authentication,
+            @PathVariable Long roomId,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(required = false) Long afterMessageId
+    ) {
+        return ApiResponse.success(
+                "CHAT_MESSAGES_RETRIEVED",
+                "채팅 메시지를 조회했습니다.",
+                messageHistoryService.getMessages(
+                        authentication.getName(),
+                        roomId,
+                        cursor,
+                        afterMessageId
+                )
+        );
     }
 
     @PutMapping("/{roomId}/members/me")
