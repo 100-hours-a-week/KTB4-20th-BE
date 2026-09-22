@@ -1,0 +1,131 @@
+package com.planit.trip.controller;
+
+import com.planit.global.error.GlobalExceptionHandler;
+import com.planit.trip.dto.TripCreateRequest;
+import com.planit.trip.dto.TripCreateResponse;
+import com.planit.trip.service.TripService;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.http.MediaType;
+import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class TripControllerTest {
+
+    private static final String USER_PUBLIC_ID =
+            "01991f6e-7300-7b21-a3cc-1436db3df95e";
+
+    private TripService tripService;
+    private MockMvc mockMvc;
+
+    @BeforeEach
+    void setUp() {
+        tripService = mock(TripService.class);
+        mockMvc = MockMvcBuilders.standaloneSetup(
+                        new TripController(tripService)
+                )
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+    }
+
+    @Test
+    void createsTrip() throws Exception {
+        when(tripService.createTrip(
+                org.mockito.ArgumentMatchers.eq(USER_PUBLIC_ID),
+                any(TripCreateRequest.class)
+        )).thenReturn(new TripCreateResponse("100"));
+
+        mockMvc.perform(post("/api/trips")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        ))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "제주 여행",
+                                  "subRegionId": 1,
+                                  "startDate": "2026-10-01",
+                                  "capacity": 4,
+                                  "surveyDeadlineDate": "2026-09-30"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.code").value("TRIP_CREATED"))
+                .andExpect(jsonPath("$.message")
+                        .value("여행방을 생성했습니다."))
+                .andExpect(jsonPath("$.data.tripId").value("100"));
+
+        verify(tripService).createTrip(
+                org.mockito.ArgumentMatchers.eq(USER_PUBLIC_ID),
+                any(TripCreateRequest.class)
+        );
+    }
+
+    @Test
+    void appliesDefaultCapacityAndAcceptsMissingDeadline() throws Exception {
+        when(tripService.createTrip(
+                org.mockito.ArgumentMatchers.eq(USER_PUBLIC_ID),
+                any(TripCreateRequest.class)
+        )).thenReturn(new TripCreateResponse("100"));
+
+        mockMvc.perform(post("/api/trips")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        ))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "부산 여행",
+                                  "subRegionId": 1,
+                                  "startDate": "2026-10-01"
+                                }
+                                """))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<TripCreateRequest> captor =
+                ArgumentCaptor.forClass(TripCreateRequest.class);
+        verify(tripService).createTrip(
+                org.mockito.ArgumentMatchers.eq(USER_PUBLIC_ID),
+                captor.capture()
+        );
+        assertThat(captor.getValue().capacity()).isEqualTo(4);
+        assertThat(captor.getValue().surveyDeadlineDate()).isNull();
+    }
+
+    @Test
+    void rejectsInvalidTripName() throws Exception {
+        mockMvc.perform(post("/api/trips")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        ))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "제주여행1",
+                                  "subRegionId": 1,
+                                  "startDate": "2026-10-01",
+                                  "capacity": 4
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+                .andExpect(jsonPath("$.errors[0].field").value("name"));
+
+        verify(tripService, never()).createTrip(any(), any());
+    }
+}

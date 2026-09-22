@@ -1,0 +1,44 @@
+package com.planit.trip.controller;
+
+import com.planit.global.response.ApiResponse;
+import com.planit.trip.dto.TripCreateRequest;
+import com.planit.trip.dto.TripCreateResponse;
+import com.planit.trip.service.TripService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/trips")
+@RequiredArgsConstructor
+public class TripController {
+
+    private static final String SUCCESS_CODE = "TRIP_CREATED";
+    private static final String SUCCESS_MESSAGE = "여행방을 생성했습니다.";
+
+    private final TripService tripService;
+
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<TripCreateResponse> createTrip(
+            Authentication authentication,
+            @Valid @RequestBody TripCreateRequest request
+    ) {
+        TripCreateResponse response = tripService.createTrip(
+                authentication.getName(),
+                request
+        );
+
+        return ApiResponse.success(
+                SUCCESS_CODE,
+                SUCCESS_MESSAGE,
+                response
+        );
+    }
+}
