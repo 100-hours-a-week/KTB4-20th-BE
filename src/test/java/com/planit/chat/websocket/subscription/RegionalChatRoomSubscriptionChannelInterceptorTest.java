@@ -1,26 +1,24 @@
 package com.planit.chat.websocket.subscription;
 
 import com.planit.chat.presence.RegionalChatRoomPresenceRegistry;
-import com.planit.chat.websocket.dto.ChatRoomSubscriptionResultEvent;
+import com.planit.global.error.ErrorCode;
 import com.planit.repository.RegionalChatRoomMemberRepository;
 import com.planit.repository.RegionalChatRoomRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 
-import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -33,7 +31,7 @@ class RegionalChatRoomSubscriptionChannelInterceptorTest {
     private RegionalChatRoomRepository roomRepository;
     private RegionalChatRoomMemberRepository memberRepository;
     private RegionalChatRoomPresenceRegistry presenceRegistry;
-    private SimpMessagingTemplate messagingTemplate;
+    private ApplicationEventPublisher eventPublisher;
     private RegionalChatRoomSubscriptionChannelInterceptor interceptor;
     private MessageChannel channel;
 
@@ -42,13 +40,13 @@ class RegionalChatRoomSubscriptionChannelInterceptorTest {
         roomRepository = mock(RegionalChatRoomRepository.class);
         memberRepository = mock(RegionalChatRoomMemberRepository.class);
         presenceRegistry = mock(RegionalChatRoomPresenceRegistry.class);
-        messagingTemplate = mock(SimpMessagingTemplate.class);
+        eventPublisher = mock(ApplicationEventPublisher.class);
         channel = mock(MessageChannel.class);
         interceptor = new RegionalChatRoomSubscriptionChannelInterceptor(
                 roomRepository,
                 memberRepository,
                 presenceRegistry,
-                messagingTemplate
+                eventPublisher
         );
     }
 
@@ -75,7 +73,10 @@ class RegionalChatRoomSubscriptionChannelInterceptorTest {
                 "session-1",
                 "subscription-1"
         );
-        verifySubscriptionResult("ACCEPTED", "CHAT_ROOM_SUBSCRIBED");
+        verify(eventPublisher).publishEvent(new ChatSubscriptionReceiptEvent(
+                "session-1",
+                "subscribe-3001"
+        ));
     }
 
     @Test
@@ -91,11 +92,11 @@ class RegionalChatRoomSubscriptionChannelInterceptorTest {
                 "subscription-1"
         );
 
-        Message<?> result = interceptor.preSend(message, channel);
-
-        assertThat(result).isNull();
+        assertThatThrownBy(() -> interceptor.preSend(message, channel))
+                .isInstanceOf(ChatSubscriptionException.class)
+                .extracting(exception -> ((ChatSubscriptionException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.REGIONAL_CHAT_MEMBER_REQUIRED);
         verify(presenceRegistry, never()).register(any(), any(), any(), any());
-        verifySubscriptionResult("REJECTED", "REGIONAL_CHAT_MEMBER_REQUIRED");
     }
 
     @Test
@@ -137,22 +138,12 @@ class RegionalChatRoomSubscriptionChannelInterceptorTest {
         accessor.setSessionId("session-1");
         accessor.setSubscriptionId(subscriptionId);
         accessor.setDestination(destination);
+        if (StompCommand.SUBSCRIBE.equals(command)) {
+            accessor.setReceipt("subscribe-3001");
+        }
         accessor.setUser(new TestingAuthenticationToken(USER_PUBLIC_ID, null));
         accessor.setLeaveMutable(true);
         return MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
     }
 
-    @SuppressWarnings("unchecked")
-    private void verifySubscriptionResult(String status, String code) {
-        verify(messagingTemplate).convertAndSendToUser(
-                eq(USER_PUBLIC_ID),
-                eq("/queue/chat-events"),
-                argThat(payload -> {
-                    ChatRoomSubscriptionResultEvent event =
-                            (ChatRoomSubscriptionResultEvent) payload;
-                    return event.status().equals(status) && event.code().equals(code);
-                }),
-                any(Map.class)
-        );
-    }
 }

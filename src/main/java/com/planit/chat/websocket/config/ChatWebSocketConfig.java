@@ -2,6 +2,7 @@ package com.planit.chat.websocket.config;
 
 import com.planit.auth.config.AuthProperties;
 import com.planit.chat.websocket.auth.StompAuthenticationChannelInterceptor;
+import com.planit.chat.websocket.subscription.ChatStompErrorHandler;
 import com.planit.chat.websocket.subscription.RegionalChatRoomSubscriptionChannelInterceptor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -23,9 +24,11 @@ public class ChatWebSocketConfig implements WebSocketMessageBrokerConfigurer {
     private final AuthProperties authProperties;
     private final StompAuthenticationChannelInterceptor authenticationChannelInterceptor;
     private final RegionalChatRoomSubscriptionChannelInterceptor subscriptionChannelInterceptor;
+    private final ChatStompErrorHandler stompErrorHandler;
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
+        registry.setErrorHandler(stompErrorHandler);
         registry.addEndpoint("/ws")
                 .setAllowedOrigins(authProperties.allowedFrontendOrigin().toString());
     }
