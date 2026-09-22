@@ -14,6 +14,8 @@ import java.util.UUID;
 public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByPublicIdAndDeletedAtIsNull(UUID publicId);
+  
+    boolean existsByPublicIdAndDeletedAtIsNull(UUID publicId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
@@ -23,4 +25,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
               AND userEntity.deletedAt IS NULL
             """)
     Optional<User> findActiveByPublicIdForUpdate(@Param("publicId") UUID publicId);
+           
+
 }

@@ -6,6 +6,9 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.InsufficientAuthenticationException;
+import org.springframework.security.oauth2.core.OAuth2Error;
+import org.springframework.security.oauth2.jwt.JwtValidationException;
+import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -35,6 +38,36 @@ class SecurityErrorHandlerTest {
         assertThat(body.get("code").asText()).isEqualTo("AUTHENTICATION_REQUIRED");
         assertThat(body.get("message").asText()).isEqualTo("인증이 필요합니다.");
         assertThat(body.get("data").isNull()).isTrue();
+    }
+
+    @Test
+    void authenticationEntryPointWritesWithdrawnUserResponse() throws Exception {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        CustomAuthenticationEntryPoint entryPoint =
+                new CustomAuthenticationEntryPoint(responseWriter);
+        JwtValidationException validationException =
+                new JwtValidationException(
+                        "활성 사용자가 아닙니다.",
+                        java.util.List.of(new OAuth2Error(
+                                "user_withdrawn"
+                        ))
+                );
+
+        entryPoint.commence(
+                new MockHttpServletRequest(),
+                response,
+                new InvalidBearerTokenException(
+                        "JWT가 유효하지 않습니다.",
+                        validationException
+                )
+        );
+
+        JsonNode body = objectMapper.readTree(
+                response.getContentAsString()
+        );
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(body.get("code").asText())
+                .isEqualTo("USER_WITHDRAWN");
     }
 
     @Test
