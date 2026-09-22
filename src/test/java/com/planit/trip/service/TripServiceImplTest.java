@@ -1,13 +1,17 @@
 package com.planit.trip.service;
 
+import com.planit.auth.token.SecureTokenGenerator;
+import com.planit.auth.token.TokenHasher;
 import com.planit.domain.SubRegion;
 import com.planit.domain.Trip;
+import com.planit.domain.TripInvitation;
 import com.planit.domain.TripMember;
 import com.planit.domain.TripMemberRole;
 import com.planit.domain.User;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
 import com.planit.repository.SubRegionRepository;
+import com.planit.repository.TripInvitationRepository;
 import com.planit.repository.TripMemberRepository;
 import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
@@ -37,11 +41,16 @@ class TripServiceImplTest {
     private static final UUID USER_PUBLIC_ID = UUID.fromString(
             "01991f6e-7300-7b21-a3cc-1436db3df95e"
     );
+    private static final String INVITATION_TOKEN = "a".repeat(43);
+    private static final String INVITATION_TOKEN_HASH = "token-hash";
 
     private UserRepository userRepository;
     private SubRegionRepository subRegionRepository;
     private TripRepository tripRepository;
     private TripMemberRepository tripMemberRepository;
+    private TripInvitationRepository tripInvitationRepository;
+    private SecureTokenGenerator secureTokenGenerator;
+    private TokenHasher tokenHasher;
     private TripServiceImpl tripService;
     private User user;
     private SubRegion subRegion;
@@ -52,11 +61,17 @@ class TripServiceImplTest {
         subRegionRepository = mock(SubRegionRepository.class);
         tripRepository = mock(TripRepository.class);
         tripMemberRepository = mock(TripMemberRepository.class);
+        tripInvitationRepository = mock(TripInvitationRepository.class);
+        secureTokenGenerator = mock(SecureTokenGenerator.class);
+        tokenHasher = mock(TokenHasher.class);
         tripService = new TripServiceImpl(
                 userRepository,
                 subRegionRepository,
                 tripRepository,
-                tripMemberRepository
+                tripMemberRepository,
+                tripInvitationRepository,
+                secureTokenGenerator,
+                tokenHasher
         );
 
         user = mock(User.class);
@@ -74,10 +89,16 @@ class TripServiceImplTest {
                 });
         when(tripMemberRepository.save(any(TripMember.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
+        when(secureTokenGenerator.generate())
+                .thenReturn(INVITATION_TOKEN);
+        when(tokenHasher.sha256(INVITATION_TOKEN))
+                .thenReturn(INVITATION_TOKEN_HASH);
+        when(tripInvitationRepository.save(any(TripInvitation.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @Test
-    void createsTripAndHostMembership() {
+    void createsTripHostMembershipAndInvitation() {
         LocalDate today = LocalDate.now(SEOUL_ZONE);
         LocalDate startDate = today.plusDays(5);
         LocalDate deadlineDate = today.plusDays(1);
@@ -104,6 +125,16 @@ class TripServiceImplTest {
         assertThat(host.getTrip()).isSameAs(savedTrip);
         assertThat(host.getUser()).isSameAs(user);
         assertThat(host.getRole()).isEqualTo(TripMemberRole.HOST);
+
+        ArgumentCaptor<TripInvitation> invitationCaptor =
+                ArgumentCaptor.forClass(TripInvitation.class);
+        verify(tripInvitationRepository).save(invitationCaptor.capture());
+        TripInvitation invitation = invitationCaptor.getValue();
+        assertThat(invitation.getTrip()).isSameAs(savedTrip);
+        assertThat(invitation.getTokenHash())
+                .isEqualTo(INVITATION_TOKEN_HASH);
+        assertThat(response.invitationToken())
+                .isEqualTo(INVITATION_TOKEN);
     }
 
     @Test

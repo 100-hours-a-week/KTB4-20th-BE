@@ -26,6 +26,7 @@ class TripControllerTest {
 
     private static final String USER_PUBLIC_ID =
             "01991f6e-7300-7b21-a3cc-1436db3df95e";
+    private static final String INVITATION_TOKEN = "a".repeat(43);
 
     private TripService tripService;
     private MockMvc mockMvc;
@@ -45,7 +46,10 @@ class TripControllerTest {
         when(tripService.createTrip(
                 org.mockito.ArgumentMatchers.eq(USER_PUBLIC_ID),
                 any(TripCreateRequest.class)
-        )).thenReturn(new TripCreateResponse("100"));
+        )).thenReturn(new TripCreateResponse(
+                "100",
+                INVITATION_TOKEN
+        ));
 
         mockMvc.perform(post("/api/trips")
                         .principal(new TestingAuthenticationToken(
@@ -66,7 +70,9 @@ class TripControllerTest {
                 .andExpect(jsonPath("$.code").value("TRIP_CREATED"))
                 .andExpect(jsonPath("$.message")
                         .value("여행방을 생성했습니다."))
-                .andExpect(jsonPath("$.data.tripId").value("100"));
+                .andExpect(jsonPath("$.data.tripId").value("100"))
+                .andExpect(jsonPath("$.data.invitationToken")
+                        .value(INVITATION_TOKEN));
 
         verify(tripService).createTrip(
                 org.mockito.ArgumentMatchers.eq(USER_PUBLIC_ID),
@@ -79,7 +85,10 @@ class TripControllerTest {
         when(tripService.createTrip(
                 org.mockito.ArgumentMatchers.eq(USER_PUBLIC_ID),
                 any(TripCreateRequest.class)
-        )).thenReturn(new TripCreateResponse("100"));
+        )).thenReturn(new TripCreateResponse(
+                "100",
+                INVITATION_TOKEN
+        ));
 
         mockMvc.perform(post("/api/trips")
                         .principal(new TestingAuthenticationToken(
