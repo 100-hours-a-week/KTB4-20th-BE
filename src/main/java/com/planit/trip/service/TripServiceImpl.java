@@ -1,12 +1,12 @@
 package com.planit.trip.service;
 
-import com.planit.domain.SubRegion;
-import com.planit.domain.Trip;
-import com.planit.domain.TripMember;
-import com.planit.domain.User;
+import com.planit.auth.token.SecureTokenGenerator;
+import com.planit.auth.token.TokenHasher;
+import com.planit.domain.*;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
 import com.planit.repository.SubRegionRepository;
+import com.planit.repository.TripInvitationRepository;
 import com.planit.repository.TripMemberRepository;
 import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
@@ -32,6 +32,9 @@ public class TripServiceImpl implements TripService {
     private final SubRegionRepository subRegionRepository;
     private final TripRepository tripRepository;
     private final TripMemberRepository tripMemberRepository;
+    private final TripInvitationRepository tripInvitationRepository;
+    private final SecureTokenGenerator secureTokenGenerator;
+    private final TokenHasher tokenHasher;
 
     @Override
     @Transactional
@@ -66,8 +69,21 @@ public class TripServiceImpl implements TripService {
         TripMember host = TripMember.createHost(savedTrip, user);
         tripMemberRepository.save(host);
 
+        String invitationToken = secureTokenGenerator.generate();
+
+        String invitationTokenHash = tokenHasher.sha256(invitationToken);
+
+        TripInvitation invitation =
+                new TripInvitation(
+                        savedTrip,
+                        invitationTokenHash
+                );
+
+        tripInvitationRepository.save(invitation);
+
         return new TripCreateResponse(
-                savedTrip.getId().toString()
+                savedTrip.getId().toString(),
+                invitationToken
         );
     }
 
