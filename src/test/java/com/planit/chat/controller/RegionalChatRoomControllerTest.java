@@ -1,6 +1,11 @@
 package com.planit.chat.controller;
 
 import com.planit.chat.dto.RegionalChatRoomListResponse;
+import com.planit.chat.dto.ChatMessageHistoryResponse;
+import com.planit.chat.dto.ChatMessageHistoryResponse.ChatMessageItemResponse;
+import com.planit.chat.dto.ChatMessageHistoryResponse.ChatMessagePageResponse;
+import com.planit.chat.dto.ChatMessageHistoryResponse.ChatSenderResponse;
+import com.planit.chat.service.ChatMessageHistoryService;
 import com.planit.chat.dto.RegionalChatRoomListResponse.CursorPageResponse;
 import com.planit.chat.dto.RegionalChatRoomListResponse.RegionalChatRoomItemResponse;
 import com.planit.chat.dto.RegionalChatRoomJoinResponse;
@@ -32,17 +37,58 @@ class RegionalChatRoomControllerTest {
 
     private RegionalChatRoomListService service;
     private RegionalChatRoomMembershipService membershipService;
+    private ChatMessageHistoryService messageHistoryService;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         service = mock(RegionalChatRoomListService.class);
         membershipService = mock(RegionalChatRoomMembershipService.class);
+        messageHistoryService = mock(ChatMessageHistoryService.class);
         mockMvc = MockMvcBuilders.standaloneSetup(
-                        new RegionalChatRoomController(service, membershipService)
+                        new RegionalChatRoomController(
+                                service,
+                                membershipService,
+                                messageHistoryService
+                        )
                 )
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    @Test
+    void getsLatestChatMessages() throws Exception {
+        ChatMessageHistoryResponse response = new ChatMessageHistoryResponse(
+                List.of(new ChatMessageItemResponse(
+                        "10001",
+                        "019b1234-5678-7000-8000-123456789abc",
+                        "TEXT",
+                        "경주역 근처 맛집 추천해주세요.",
+                        null,
+                        new ChatSenderResponse(
+                                USER_PUBLIC_ID,
+                                "플랜잇사용자",
+                                "http://localhost:8080/images/default-profile.svg"
+                        ),
+                        Instant.parse("2026-09-07T11:05:00.123456Z")
+                )),
+                new ChatMessagePageResponse("next-cursor", null, true)
+        );
+        when(messageHistoryService.getMessages(USER_PUBLIC_ID, 3001L, null, null))
+                .thenReturn(response);
+
+        mockMvc.perform(get("/api/regional-chat-rooms/3001/messages")
+                        .principal(new TestingAuthenticationToken(USER_PUBLIC_ID, null)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("CHAT_MESSAGES_RETRIEVED"))
+                .andExpect(jsonPath("$.data.items[0].messageId").value("10001"))
+                .andExpect(jsonPath("$.data.items[0].text")
+                        .value("경주역 근처 맛집 추천해주세요."))
+                .andExpect(jsonPath("$.data.page.nextCursor").value("next-cursor"))
+                .andExpect(jsonPath("$.data.page.nextAfterMessageId").isEmpty())
+                .andExpect(jsonPath("$.data.page.hasNext").value(true));
+
+        verify(messageHistoryService).getMessages(USER_PUBLIC_ID, 3001L, null, null);
     }
 
     @Test
