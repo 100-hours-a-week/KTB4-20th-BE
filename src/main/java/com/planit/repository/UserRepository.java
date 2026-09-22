@@ -15,12 +15,5 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByPublicIdAndDeletedAtIsNull(UUID publicId);
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("""
-            SELECT userEntity
-            FROM User userEntity
-            WHERE userEntity.publicId = :publicId
-              AND userEntity.deletedAt IS NULL
-            """)
-    Optional<User> findActiveByPublicIdForUpdate(@Param("publicId") UUID publicId);
+    boolean existsByPublicIdAndDeletedAtIsNull(UUID publicId);
 }
