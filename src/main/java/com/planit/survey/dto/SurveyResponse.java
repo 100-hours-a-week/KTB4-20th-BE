@@ -7,10 +7,12 @@ public record SurveyResponse(
         String tripId,
         String status,
         OffsetDateTime submittedAt,
-        List<SurveyAnswerResponse> answers
+        List<SurveyAnswerResponse> answers,
+        List<String> excludedCategoryIds
 ) {
 
     public SurveyResponse {
         answers = List.copyOf(answers);
+        excludedCategoryIds = List.copyOf(excludedCategoryIds);
     }
 }

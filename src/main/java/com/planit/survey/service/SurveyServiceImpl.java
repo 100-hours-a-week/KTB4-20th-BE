@@ -3,6 +3,8 @@ package com.planit.survey.service;
 import com.planit.domain.PreferenceQuestion;
 import com.planit.domain.Survey;
 import com.planit.domain.SurveyAnswer;
+import com.planit.domain.SurveyExcludedCategory;
+import com.planit.domain.SurveyExclusionCategory;
 import com.planit.domain.Trip;
 import com.planit.domain.TripMember;
 import com.planit.domain.User;
@@ -10,6 +12,8 @@ import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
 import com.planit.repository.PreferenceQuestionRepository;
 import com.planit.repository.SurveyAnswerRepository;
+import com.planit.repository.SurveyExcludedCategoryRepository;
+import com.planit.repository.SurveyExclusionCategoryRepository;
 import com.planit.repository.SurveyRepository;
 import com.planit.repository.TripMemberRepository;
 import com.planit.repository.TripRepository;
@@ -45,10 +49,14 @@ public class SurveyServiceImpl implements SurveyService {
     private final PreferenceQuestionRepository preferenceQuestionRepository;
     private final SurveyRepository surveyRepository;
     private final SurveyAnswerRepository surveyAnswerRepository;
+    private final SurveyExclusionCategoryRepository
+            surveyExclusionCategoryRepository;
+    private final SurveyExcludedCategoryRepository
+            surveyExcludedCategoryRepository;
 
     @Override
     public SurveyResponse getMySurvey(String userPublicId, Long tripId) {
-        TripMember member = findActiveMember(userPublicId, tripId);
+        TripMember member = findActiveMember(userPublicId, tripId);         //해당 여행방 멤버인지 확인
         List<PreferenceQuestion> questions = preferenceQuestionRepository
                 .findAllByOrderByDisplayOrderAsc();
 
@@ -65,7 +73,7 @@ public class SurveyServiceImpl implements SurveyService {
             Long tripId,
             SurveySaveRequest request
     ) {
-        TripMember member = findActiveMember(userPublicId, tripId);         //해당 여행방 멤버인지 확인
+        TripMember member = findActiveMember(userPublicId, tripId);
         List<PreferenceQuestion> questions = preferenceQuestionRepository
                 .findAllByOrderByDisplayOrderAsc();
         Map<Long, PreferenceQuestion> questionsById = questions.stream()
@@ -75,16 +83,25 @@ public class SurveyServiceImpl implements SurveyService {
                 ));
 
         List<Long> requestedQuestionIds = parseQuestionIds(request.answers());
-        validateCompleteAnswers(requestedQuestionIds, questionsById);   //설문 응답 무결성 섬증
+        validateCompleteAnswers(requestedQuestionIds, questionsById);
+
+        List<Long> requestedExclusionCategoryIds = parseIds(
+                request.excludedCategoryIds()
+        );
+        validateNoDuplicates(requestedExclusionCategoryIds);
+        Map<Long, SurveyExclusionCategory> exclusionCategoriesById =
+                findExclusionCategories(requestedExclusionCategoryIds);
 
         LocalDateTime now = LocalDateTime.now(SEOUL_ZONE);
         Survey survey = surveyRepository.findByTripMember(member)
                 .orElseGet(() -> new Survey(member, now));
-        validateSubmissionWindow(member.getTrip(), survey, now);        //설문 마감 기한 검증
+        validateSubmissionWindow(member.getTrip(), survey, now);
 
         Survey savedSurvey = surveyRepository.save(survey);
         surveyAnswerRepository.deleteBySurvey(savedSurvey);
+        surveyExcludedCategoryRepository.deleteBySurvey(savedSurvey);
         surveyAnswerRepository.flush();
+        surveyExcludedCategoryRepository.flush();
 
         List<SurveyAnswer> answers = request.answers().stream()
                 .map(answer -> new SurveyAnswer(
@@ -94,6 +111,15 @@ public class SurveyServiceImpl implements SurveyService {
                 ))
                 .toList();
         surveyAnswerRepository.saveAll(answers);
+
+        List<SurveyExcludedCategory> excludedCategories =
+                requestedExclusionCategoryIds.stream()
+                        .map(categoryId -> new SurveyExcludedCategory(
+                                savedSurvey,
+                                exclusionCategoriesById.get(categoryId)
+                        ))
+                        .toList();
+        surveyExcludedCategoryRepository.saveAll(excludedCategories);
         savedSurvey.submit(now);
 
         return submittedResponse(tripId, savedSurvey);
@@ -139,6 +165,42 @@ public class SurveyServiceImpl implements SurveyService {
         } catch (NumberFormatException exception) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, exception);
         }
+    }
+
+    private List<Long> parseIds(List<String> ids) {
+        try {
+            return ids.stream()
+                    .map(Long::parseLong)
+                    .toList();
+        } catch (NumberFormatException exception) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, exception);
+        }
+    }
+
+    private void validateNoDuplicates(List<Long> ids) {
+        if (new HashSet<>(ids).size() != ids.size()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST);
+        }
+    }
+
+    private Map<Long, SurveyExclusionCategory> findExclusionCategories(
+            List<Long> categoryIds
+    ) {
+        Map<Long, SurveyExclusionCategory> categoriesById =
+                surveyExclusionCategoryRepository.findAllById(categoryIds)
+                        .stream()
+                        .collect(Collectors.toMap(
+                                SurveyExclusionCategory::getId,
+                                Function.identity()
+                        ));
+
+        if (categoriesById.size() != categoryIds.size()) {
+            throw new BusinessException(
+                    ErrorCode.EXCLUSION_CATEGORY_NOT_FOUND
+            );
+        }
+
+        return categoriesById;
     }
 
     private void validateCompleteAnswers(
@@ -189,18 +251,28 @@ public class SurveyServiceImpl implements SurveyService {
                 tripId.toString(),
                 "DRAFT",
                 null,
-                answers
+                answers,
+                List.of()
         );
     }
 
     private SurveyResponse submittedResponse(Long tripId, Survey survey) {
         List<SurveyAnswerResponse> answers = surveyAnswerRepository
-                .findBySurveyOrderByPreferenceQuestionIdAsc(survey)
+                .findBySurveyOrderByPreferenceQuestionDisplayOrderAsc(survey)
                 .stream()
                 .map(answer -> new SurveyAnswerResponse(
                         answer.getPreferenceQuestion().getId().toString(),
                         answer.getScore()
                 ))
+                .toList();
+
+        List<String> excludedCategoryIds = surveyExcludedCategoryRepository
+                .findBySurveyOrderByExclusionCategoryIdAsc(survey)
+                .stream()
+                .map(excludedCategory -> excludedCategory
+                        .getExclusionCategory()
+                        .getId()
+                        .toString())
                 .toList();
 
         return new SurveyResponse(
@@ -209,7 +281,8 @@ public class SurveyServiceImpl implements SurveyService {
                 survey.getSubmittedAt()
                         .atZone(SEOUL_ZONE)
                         .toOffsetDateTime(),
-                answers
+                answers,
+                excludedCategoryIds
         );
     }
 }

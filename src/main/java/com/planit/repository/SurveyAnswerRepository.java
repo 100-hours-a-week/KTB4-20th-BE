@@ -9,7 +9,8 @@ import java.util.List;
 public interface SurveyAnswerRepository
         extends JpaRepository<SurveyAnswer, Long> {
 
-    List<SurveyAnswer> findBySurveyOrderByPreferenceQuestionIdAsc(Survey survey);
+    List<SurveyAnswer>
+    findBySurveyOrderByPreferenceQuestionDisplayOrderAsc(Survey survey);
 
     void deleteBySurvey(Survey survey);
 }

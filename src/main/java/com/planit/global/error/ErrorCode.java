@@ -31,6 +31,7 @@ public enum ErrorCode {
     TRIP_MEMBER_REQUIRED(HttpStatus.FORBIDDEN, "여행방 참여가 필요합니다."),
     SURVEY_SUBMISSION_CLOSED(HttpStatus.CONFLICT, "설문 제출 기간이 종료되었습니다."),
     SURVEY_RESUBMISSION_CLOSED(HttpStatus.CONFLICT, "설문 수정 기간이 종료되었습니다."),
+    EXCLUSION_CATEGORY_NOT_FOUND(HttpStatus.NOT_FOUND, "설문 제외 항목을 찾을 수 없습니다."),
     CHAT_POLICY_VERSION_NOT_ACTIVE(HttpStatus.CONFLICT, "현재 활성 채팅 운영 정책이 아닙니다."),
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "예상하지 못한 서버 오류가 발생했습니다."),
     SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "서비스를 일시적으로 사용할 수 없습니다."),

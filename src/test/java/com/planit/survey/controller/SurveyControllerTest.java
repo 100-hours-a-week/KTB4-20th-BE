@@ -48,7 +48,8 @@ class SurveyControllerTest {
                         "1001",
                         "DRAFT",
                         null,
-                        List.of(new SurveyAnswerResponse("10", 3))
+                        List.of(new SurveyAnswerResponse("10", 3)),
+                        List.of()
                 ));
 
         mockMvc.perform(get("/api/trips/1001/survey")
@@ -75,7 +76,8 @@ class SurveyControllerTest {
                 "1001",
                 "SUBMITTED",
                 submittedAt,
-                List.of(new SurveyAnswerResponse("10", 4))
+                List.of(new SurveyAnswerResponse("10", 4)),
+                List.of("1")
         ));
 
         mockMvc.perform(put("/api/trips/1001/survey")
@@ -85,7 +87,8 @@ class SurveyControllerTest {
                                 {
                                   "answers": [
                                     {"questionId": "10", "score": 4}
-                                  ]
+                                  ],
+                                  "excludedCategoryIds": ["1"]
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -93,7 +96,9 @@ class SurveyControllerTest {
                 .andExpect(jsonPath("$.data.status").value("SUBMITTED"))
                 .andExpect(jsonPath("$.data.submittedAt")
                         .value("2026-09-23T12:00:00.123456+09:00"))
-                .andExpect(jsonPath("$.data.answers[0].score").value(4));
+                .andExpect(jsonPath("$.data.answers[0].score").value(4))
+                .andExpect(jsonPath("$.data.excludedCategoryIds[0]")
+                        .value("1"));
     }
 
     @Test
@@ -105,6 +110,23 @@ class SurveyControllerTest {
                                 {
                                   "answers": [
                                     {"questionId": "10", "score": 6}
+                                  ],
+                                  "excludedCategoryIds": []
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+    }
+
+    @Test
+    void requiresExcludedCategoryIds() throws Exception {
+        mockMvc.perform(put("/api/trips/1001/survey")
+                        .principal(authentication())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "answers": [
+                                    {"questionId": "10", "score": 3}
                                   ]
                                 }
                                 """))
