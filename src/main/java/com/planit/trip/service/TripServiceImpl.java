@@ -12,6 +12,8 @@ import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
 import com.planit.trip.dto.TripCreateRequest;
 import com.planit.trip.dto.TripCreateResponse;
+import com.planit.trip.dto.TripJoinRequest;
+import com.planit.trip.dto.TripJoinResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -85,6 +87,84 @@ public class TripServiceImpl implements TripService {
                 savedTrip.getId().toString(),
                 invitationToken
         );
+    }
+
+    @Override
+    @Transactional
+    public TripJoinResponse joinTrip(
+            String userPublicId,
+            TripJoinRequest request
+    ) {
+        User user = findActiveUser(userPublicId);
+
+        String tokenHash = tokenHasher.sha256(
+                request.invitationToken()
+        );
+        TripInvitation invitation = tripInvitationRepository
+                .findByTokenHash(tokenHash)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_NOT_FOUND
+                ));
+
+        Trip trip = findTripForUpdate(invitation);
+        validateJoinConditions(trip, user);
+
+        TripMember member = TripMember.createMember(trip, user);
+        tripMemberRepository.save(member);
+
+        return new TripJoinResponse(
+                trip.getId().toString()
+        );
+    }
+
+    private Trip findTripForUpdate(TripInvitation invitation) {
+        return tripRepository
+                .findByIdForUpdate(invitation.getTrip().getId())
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_NOT_FOUND
+                ));
+    }
+
+    private void validateJoinConditions(Trip trip, User user) {
+        if (trip.getDeletedAt() != null) {
+            throw new BusinessException(
+                    ErrorCode.RESOURCE_NOT_FOUND
+            );
+        }
+
+        LocalDate today = LocalDate.now(SEOUL_ZONE);
+        if (trip.getEndDate().isBefore(today)) {
+            throw new BusinessException(
+                    ErrorCode.RESOURCE_NOT_FOUND
+            );
+        }
+
+        if (tripMemberRepository
+                .existsByTripAndUserAndLeftAtIsNull(trip, user)) {
+            throw new BusinessException(
+                    ErrorCode.TRIP_ALREADY_JOINED
+            );
+        }
+
+        long activeMemberCount = tripMemberRepository
+                .countByTripAndLeftAtIsNull(trip);
+        if (activeMemberCount >= trip.getCapacity()) {
+            throw new BusinessException(
+                    ErrorCode.TRIP_CAPACITY_EXCEEDED
+            );
+        }
+
+        long overlappingTripCount = tripMemberRepository
+                .countActiveTripsOverlapping(
+                        user,
+                        trip.getStartDate(),
+                        trip.getEndDate()
+                );
+        if (overlappingTripCount > 0) {
+            throw new BusinessException(
+                    ErrorCode.TRIP_DATE_CONFLICT
+            );
+        }
     }
 
     private User findActiveUser(String userPublicId) {

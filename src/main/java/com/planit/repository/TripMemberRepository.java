@@ -1,6 +1,7 @@
 package com.planit.repository;
 
 import com.planit.domain.TripMember;
+import com.planit.domain.Trip;
 import com.planit.domain.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -10,6 +11,13 @@ import java.time.LocalDate;
 
 public interface TripMemberRepository
         extends JpaRepository<TripMember, Long> {
+
+    boolean existsByTripAndUserAndLeftAtIsNull(
+            Trip trip,
+            User user
+    );
+
+    long countByTripAndLeftAtIsNull(Trip trip);
 
     @Query("""
             SELECT COUNT(tm)

@@ -3,6 +3,8 @@ package com.planit.trip.controller;
 import com.planit.global.response.ApiResponse;
 import com.planit.trip.dto.TripCreateRequest;
 import com.planit.trip.dto.TripCreateResponse;
+import com.planit.trip.dto.TripJoinRequest;
+import com.planit.trip.dto.TripJoinResponse;
 import com.planit.trip.service.TripService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +23,8 @@ public class TripController {
 
     private static final String SUCCESS_CODE = "TRIP_CREATED";
     private static final String SUCCESS_MESSAGE = "여행방을 생성했습니다.";
+    private static final String JOIN_SUCCESS_CODE = "TRIP_JOINED";
+    private static final String JOIN_SUCCESS_MESSAGE = "여행방에 참여했습니다.";
 
     private final TripService tripService;
 
@@ -38,6 +42,23 @@ public class TripController {
         return ApiResponse.success(
                 SUCCESS_CODE,
                 SUCCESS_MESSAGE,
+                response
+        );
+    }
+
+    @PostMapping("/join")
+    public ApiResponse<TripJoinResponse> joinTrip(
+            Authentication authentication,
+            @Valid @RequestBody TripJoinRequest request
+    ) {
+        TripJoinResponse response = tripService.joinTrip(
+                authentication.getName(),
+                request
+        );
+
+        return ApiResponse.success(
+                JOIN_SUCCESS_CODE,
+                JOIN_SUCCESS_MESSAGE,
                 response
         );
     }

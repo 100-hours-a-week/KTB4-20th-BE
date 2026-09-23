@@ -24,6 +24,8 @@ public enum ErrorCode {
     REGIONAL_CHAT_ROOM_NOT_FOUND(HttpStatus.NOT_FOUND, "지역 채팅방을 찾을 수 없습니다."),
     REGIONAL_CHAT_MEMBER_REQUIRED(HttpStatus.FORBIDDEN, "지역 채팅방 참여가 필요합니다."),
     CHAT_POLICY_CONSENT_REQUIRED(HttpStatus.CONFLICT, "현재 채팅 운영 정책에 동의해야 합니다."),
+    TRIP_ALREADY_JOINED(HttpStatus.CONFLICT, "이미 참여 중인 여행방입니다."),
+    TRIP_CAPACITY_EXCEEDED(HttpStatus.CONFLICT, "여행방 정원이 가득 찼습니다."),
     TRIP_DATE_CONFLICT(HttpStatus.CONFLICT, "해당 날짜에 참여 중인 여행이 있습니다."),
     CHAT_POLICY_VERSION_NOT_ACTIVE(HttpStatus.CONFLICT, "현재 활성 채팅 운영 정책이 아닙니다."),
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "예상하지 못한 서버 오류가 발생했습니다."),
