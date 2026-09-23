@@ -25,7 +25,7 @@ public class PreferenceQuestion {
     private String questionText;
 
     @Column(name = "display_order", nullable = false)
-    private int displayOrder;
+    private short displayOrder;
 
     protected PreferenceQuestion() {
     }
@@ -34,7 +34,7 @@ public class PreferenceQuestion {
         return id;
     }
 
-    public int getDisplayOrder() {
+    public short getDisplayOrder() {
         return displayOrder;
     }
 }
