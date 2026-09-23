@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
+import java.util.Optional;
 
 public interface TripMemberRepository
         extends JpaRepository<TripMember, Long> {
@@ -18,6 +19,11 @@ public interface TripMemberRepository
     );
 
     long countByTripAndLeftAtIsNull(Trip trip);
+
+    Optional<TripMember> findByTripAndUserAndLeftAtIsNull(
+            Trip trip,
+            User user
+    );
 
     @Query("""
             SELECT COUNT(tm)
