@@ -1,5 +1,7 @@
 package com.planit.chat.websocket.subscription;
 
+import com.planit.chat.error.ChatAuthenticationException;
+import com.planit.chat.error.ChatErrorCode;
 import com.planit.global.error.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.springframework.messaging.Message;
@@ -46,5 +48,33 @@ class ChatStompErrorHandlerTest {
                 .isEqualTo("REGIONAL_CHAT_MEMBER_REQUIRED");
         assertThat(payload.get("message").asText())
                 .isEqualTo(ErrorCode.REGIONAL_CHAT_MEMBER_REQUIRED.getMessage());
+    }
+
+    @Test
+    void convertsAuthenticationFailureToErrorFrame() throws Exception {
+        StompHeaderAccessor clientAccessor = StompHeaderAccessor.create(
+                StompCommand.CONNECT
+        );
+        clientAccessor.setLeaveMutable(true);
+        Message<byte[]> clientMessage = MessageBuilder.createMessage(
+                new byte[0],
+                clientAccessor.getMessageHeaders()
+        );
+        ChatAuthenticationException cause = new ChatAuthenticationException(
+                ChatErrorCode.INVALID_ACCESS_TOKEN
+        );
+
+        Message<byte[]> result = errorHandler.handleClientMessageProcessingError(
+                clientMessage,
+                new MessageDeliveryException(clientMessage, "인증 처리 실패", cause)
+        );
+
+        StompHeaderAccessor resultAccessor = StompHeaderAccessor.wrap(result);
+        JsonNode payload = objectMapper.readTree(result.getPayload());
+        assertThat(resultAccessor.getCommand()).isEqualTo(StompCommand.ERROR);
+        assertThat(resultAccessor.getMessage()).isEqualTo("INVALID_ACCESS_TOKEN");
+        assertThat(payload.get("code").asText()).isEqualTo("INVALID_ACCESS_TOKEN");
+        assertThat(payload.get("message").asText())
+                .isEqualTo(ChatErrorCode.INVALID_ACCESS_TOKEN.getMessage());
     }
 }
