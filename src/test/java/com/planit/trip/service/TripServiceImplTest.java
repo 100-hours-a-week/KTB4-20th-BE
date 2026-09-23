@@ -17,6 +17,8 @@ import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
 import com.planit.trip.dto.TripCreateRequest;
 import com.planit.trip.dto.TripCreateResponse;
+import com.planit.trip.dto.TripJoinRequest;
+import com.planit.trip.dto.TripJoinResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -135,6 +137,66 @@ class TripServiceImplTest {
                 .isEqualTo(INVITATION_TOKEN_HASH);
         assertThat(response.invitationToken())
                 .isEqualTo(INVITATION_TOKEN);
+    }
+
+    @Test
+    void findsTripUsingInvitationToken() {
+        Trip invitedTrip = trip(200L);
+        when(tripInvitationRepository.findByTokenHash(
+                INVITATION_TOKEN_HASH
+        )).thenReturn(Optional.of(new TripInvitation(
+                invitedTrip,
+                INVITATION_TOKEN_HASH
+        )));
+
+        TripJoinResponse response = tripService.joinTrip(
+                USER_PUBLIC_ID.toString(),
+                new TripJoinRequest(INVITATION_TOKEN)
+        );
+
+        assertThat(response.tripId()).isEqualTo("200");
+        verify(tokenHasher).sha256(INVITATION_TOKEN);
+        verify(tripInvitationRepository)
+                .findByTokenHash(INVITATION_TOKEN_HASH);
+    }
+
+    @Test
+    void rejectsMissingInvitationToken() {
+        when(tripInvitationRepository.findByTokenHash(
+                INVITATION_TOKEN_HASH
+        )).thenReturn(Optional.empty());
+
+        assertError(
+                () -> tripService.joinTrip(
+                        USER_PUBLIC_ID.toString(),
+                        new TripJoinRequest(INVITATION_TOKEN)
+                ),
+                ErrorCode.RESOURCE_NOT_FOUND
+        );
+    }
+
+    @Test
+    void rejectsInvitationForDeletedTrip() {
+        Trip deletedTrip = trip(200L);
+        ReflectionTestUtils.setField(
+                deletedTrip,
+                "deletedAt",
+                java.time.LocalDateTime.now()
+        );
+        when(tripInvitationRepository.findByTokenHash(
+                INVITATION_TOKEN_HASH
+        )).thenReturn(Optional.of(new TripInvitation(
+                deletedTrip,
+                INVITATION_TOKEN_HASH
+        )));
+
+        assertError(
+                () -> tripService.joinTrip(
+                        USER_PUBLIC_ID.toString(),
+                        new TripJoinRequest(INVITATION_TOKEN)
+                ),
+                ErrorCode.RESOURCE_NOT_FOUND
+        );
     }
 
     @Test
@@ -269,6 +331,19 @@ class TripServiceImplTest {
                 4,
                 surveyDeadlineDate
         );
+    }
+
+    private Trip trip(Long id) {
+        LocalDate startDate = LocalDate.now(SEOUL_ZONE).plusDays(5);
+        Trip trip = new Trip(
+                subRegion,
+                "제주 여행",
+                startDate,
+                (byte) 4,
+                startDate.minusDays(1).atTime(23, 59, 59)
+        );
+        ReflectionTestUtils.setField(trip, "id", id);
+        return trip;
     }
 
     private void assertError(Runnable action, ErrorCode errorCode) {

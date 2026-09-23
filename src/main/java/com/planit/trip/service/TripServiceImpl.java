@@ -12,6 +12,8 @@ import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
 import com.planit.trip.dto.TripCreateRequest;
 import com.planit.trip.dto.TripCreateResponse;
+import com.planit.trip.dto.TripJoinRequest;
+import com.planit.trip.dto.TripJoinResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -84,6 +86,35 @@ public class TripServiceImpl implements TripService {
         return new TripCreateResponse(
                 savedTrip.getId().toString(),
                 invitationToken
+        );
+    }
+
+    @Override
+    @Transactional
+    public TripJoinResponse joinTrip(
+            String userPublicId,
+            TripJoinRequest request
+    ) {
+        findActiveUser(userPublicId);
+
+        String tokenHash = tokenHasher.sha256(
+                request.invitationToken()
+        );
+        TripInvitation invitation = tripInvitationRepository
+                .findByTokenHash(tokenHash)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_NOT_FOUND
+                ));
+
+        Trip trip = invitation.getTrip();
+        if (trip.getDeletedAt() != null) {
+            throw new BusinessException(
+                    ErrorCode.RESOURCE_NOT_FOUND
+            );
+        }
+
+        return new TripJoinResponse(
+                trip.getId().toString()
         );
     }
 

@@ -3,9 +3,15 @@ package com.planit.trip.controller;
 import com.planit.global.error.GlobalExceptionHandler;
 import com.planit.trip.dto.TripCreateRequest;
 import com.planit.trip.dto.TripCreateResponse;
+import com.planit.trip.dto.TripJoinRequest;
+import com.planit.trip.dto.TripJoinResponse;
 import com.planit.trip.service.TripService;
+import java.util.stream.Stream;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.TestingAuthenticationToken;
@@ -81,6 +87,59 @@ class TripControllerTest {
     }
 
     @Test
+    void joinsTripUsingInvitationToken() throws Exception {
+        when(tripService.joinTrip(
+                org.mockito.ArgumentMatchers.eq(USER_PUBLIC_ID),
+                any(TripJoinRequest.class)
+        )).thenReturn(new TripJoinResponse("100"));
+
+        mockMvc.perform(post("/api/trips/join")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        ))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "invitationToken": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("TRIP_JOINED"))
+                .andExpect(jsonPath("$.message")
+                        .value("여행방에 참여했습니다."))
+                .andExpect(jsonPath("$.data.tripId").value("100"));
+
+        verify(tripService).joinTrip(
+                USER_PUBLIC_ID,
+                new TripJoinRequest(INVITATION_TOKEN)
+        );
+    }
+
+    @ParameterizedTest
+    @MethodSource("invalidInvitationTokens")
+    void rejectsInvalidInvitationToken(String invitationToken)
+            throws Exception {
+        mockMvc.perform(post("/api/trips/join")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        ))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "invitationToken": "%s"
+                                }
+                                """.formatted(invitationToken)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+                .andExpect(jsonPath("$.errors[0].field")
+                        .value("invitationToken"));
+
+        verify(tripService, never()).joinTrip(any(), any());
+    }
+
+    @Test
     void appliesDefaultCapacityAndAcceptsMissingDeadline() throws Exception {
         when(tripService.createTrip(
                 org.mockito.ArgumentMatchers.eq(USER_PUBLIC_ID),
@@ -136,5 +195,14 @@ class TripControllerTest {
                 .andExpect(jsonPath("$.errors[0].field").value("name"));
 
         verify(tripService, never()).createTrip(any(), any());
+    }
+
+    private static Stream<String> invalidInvitationTokens() {
+        return Stream.of(
+                "",
+                "a".repeat(42),
+                "a".repeat(44),
+                "a".repeat(42) + "!"
+        );
     }
 }
