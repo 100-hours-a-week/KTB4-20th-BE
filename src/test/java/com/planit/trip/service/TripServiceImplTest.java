@@ -142,12 +142,7 @@ class TripServiceImplTest {
     @Test
     void findsTripUsingInvitationToken() {
         Trip invitedTrip = trip(200L);
-        when(tripInvitationRepository.findByTokenHash(
-                INVITATION_TOKEN_HASH
-        )).thenReturn(Optional.of(new TripInvitation(
-                invitedTrip,
-                INVITATION_TOKEN_HASH
-        )));
+        stubInvitation(invitedTrip);
 
         TripJoinResponse response = tripService.joinTrip(
                 USER_PUBLIC_ID.toString(),
@@ -158,6 +153,15 @@ class TripServiceImplTest {
         verify(tokenHasher).sha256(INVITATION_TOKEN);
         verify(tripInvitationRepository)
                 .findByTokenHash(INVITATION_TOKEN_HASH);
+        verify(tripRepository).findByIdForUpdate(200L);
+
+        ArgumentCaptor<TripMember> memberCaptor =
+                ArgumentCaptor.forClass(TripMember.class);
+        verify(tripMemberRepository).save(memberCaptor.capture());
+        TripMember member = memberCaptor.getValue();
+        assertThat(member.getTrip()).isSameAs(invitedTrip);
+        assertThat(member.getUser()).isSameAs(user);
+        assertThat(member.getRole()).isEqualTo(TripMemberRole.MEMBER);
     }
 
     @Test
@@ -183,12 +187,7 @@ class TripServiceImplTest {
                 "deletedAt",
                 java.time.LocalDateTime.now()
         );
-        when(tripInvitationRepository.findByTokenHash(
-                INVITATION_TOKEN_HASH
-        )).thenReturn(Optional.of(new TripInvitation(
-                deletedTrip,
-                INVITATION_TOKEN_HASH
-        )));
+        stubInvitation(deletedTrip);
 
         assertError(
                 () -> tripService.joinTrip(
@@ -205,12 +204,7 @@ class TripServiceImplTest {
         LocalDate yesterday = LocalDate.now(SEOUL_ZONE).minusDays(1);
         ReflectionTestUtils.setField(pastTrip, "startDate", yesterday);
         ReflectionTestUtils.setField(pastTrip, "endDate", yesterday);
-        when(tripInvitationRepository.findByTokenHash(
-                INVITATION_TOKEN_HASH
-        )).thenReturn(Optional.of(new TripInvitation(
-                pastTrip,
-                INVITATION_TOKEN_HASH
-        )));
+        stubInvitation(pastTrip);
 
         assertError(
                 () -> tripService.joinTrip(
@@ -224,12 +218,7 @@ class TripServiceImplTest {
     @Test
     void rejectsUserAlreadyParticipatingInTrip() {
         Trip invitedTrip = trip(200L);
-        when(tripInvitationRepository.findByTokenHash(
-                INVITATION_TOKEN_HASH
-        )).thenReturn(Optional.of(new TripInvitation(
-                invitedTrip,
-                INVITATION_TOKEN_HASH
-        )));
+        stubInvitation(invitedTrip);
         when(tripMemberRepository
                 .existsByTripAndUserAndLeftAtIsNull(invitedTrip, user))
                 .thenReturn(true);
@@ -246,12 +235,7 @@ class TripServiceImplTest {
     @Test
     void rejectsTripAtCapacity() {
         Trip invitedTrip = trip(200L);
-        when(tripInvitationRepository.findByTokenHash(
-                INVITATION_TOKEN_HASH
-        )).thenReturn(Optional.of(new TripInvitation(
-                invitedTrip,
-                INVITATION_TOKEN_HASH
-        )));
+        stubInvitation(invitedTrip);
         when(tripMemberRepository.countByTripAndLeftAtIsNull(invitedTrip))
                 .thenReturn(4L);
 
@@ -267,12 +251,7 @@ class TripServiceImplTest {
     @Test
     void rejectsJoiningTripWithOverlappingDate() {
         Trip invitedTrip = trip(200L);
-        when(tripInvitationRepository.findByTokenHash(
-                INVITATION_TOKEN_HASH
-        )).thenReturn(Optional.of(new TripInvitation(
-                invitedTrip,
-                INVITATION_TOKEN_HASH
-        )));
+        stubInvitation(invitedTrip);
         when(tripMemberRepository.countActiveTripsOverlapping(
                 user,
                 invitedTrip.getStartDate(),
@@ -433,6 +412,17 @@ class TripServiceImplTest {
         );
         ReflectionTestUtils.setField(trip, "id", id);
         return trip;
+    }
+
+    private void stubInvitation(Trip trip) {
+        when(tripInvitationRepository.findByTokenHash(
+                INVITATION_TOKEN_HASH
+        )).thenReturn(Optional.of(new TripInvitation(
+                trip,
+                INVITATION_TOKEN_HASH
+        )));
+        when(tripRepository.findByIdForUpdate(trip.getId()))
+                .thenReturn(Optional.of(trip));
     }
 
     private void assertError(Runnable action, ErrorCode errorCode) {

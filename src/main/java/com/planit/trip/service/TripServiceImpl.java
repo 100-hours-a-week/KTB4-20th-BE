@@ -106,7 +106,26 @@ public class TripServiceImpl implements TripService {
                         ErrorCode.RESOURCE_NOT_FOUND
                 ));
 
-        Trip trip = invitation.getTrip();
+        Trip trip = findTripForUpdate(invitation);
+        validateJoinConditions(trip, user);
+
+        TripMember member = TripMember.createMember(trip, user);
+        tripMemberRepository.save(member);
+
+        return new TripJoinResponse(
+                trip.getId().toString()
+        );
+    }
+
+    private Trip findTripForUpdate(TripInvitation invitation) {
+        return tripRepository
+                .findByIdForUpdate(invitation.getTrip().getId())
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_NOT_FOUND
+                ));
+    }
+
+    private void validateJoinConditions(Trip trip, User user) {
         if (trip.getDeletedAt() != null) {
             throw new BusinessException(
                     ErrorCode.RESOURCE_NOT_FOUND
@@ -146,10 +165,6 @@ public class TripServiceImpl implements TripService {
                     ErrorCode.TRIP_DATE_CONFLICT
             );
         }
-
-        return new TripJoinResponse(
-                trip.getId().toString()
-        );
     }
 
     private User findActiveUser(String userPublicId) {
