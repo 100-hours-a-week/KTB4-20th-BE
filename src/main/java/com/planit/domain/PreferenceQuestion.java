@@ -34,6 +34,18 @@ public class PreferenceQuestion {
         return id;
     }
 
+    public String getCode() {
+        return code;
+    }
+
+    public String getCategoryCode() {
+        return categoryCode;
+    }
+
+    public String getQuestionText() {
+        return questionText;
+    }
+
     public short getDisplayOrder() {
         return displayOrder;
     }
