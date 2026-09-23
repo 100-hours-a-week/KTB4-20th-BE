@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 public interface TripMemberRepository
@@ -23,6 +24,20 @@ public interface TripMemberRepository
     Optional<TripMember> findByTripAndUserAndLeftAtIsNull(
             Trip trip,
             User user
+    );
+
+    @Query("""
+            SELECT tm
+            FROM TripMember tm
+            JOIN FETCH tm.user memberUser
+            WHERE tm.trip = :trip
+              AND tm.activeSlot = 1
+              AND tm.leftAt IS NULL
+              AND memberUser.deletedAt IS NULL
+            ORDER BY tm.joinedAt ASC, tm.id ASC
+            """)
+    List<TripMember> findActiveMembersByTrip(
+            @Param("trip") Trip trip
     );
 
     @Query("""

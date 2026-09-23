@@ -3,6 +3,7 @@ package com.planit.trip.controller;
 import com.planit.global.response.ApiResponse;
 import com.planit.trip.dto.TripCreateRequest;
 import com.planit.trip.dto.TripCreateResponse;
+import com.planit.trip.dto.TripDetailResponse;
 import com.planit.trip.dto.TripJoinRequest;
 import com.planit.trip.dto.TripJoinResponse;
 import com.planit.trip.service.TripService;
@@ -10,6 +11,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,6 +28,8 @@ public class TripController {
     private static final String SUCCESS_MESSAGE = "여행방을 생성했습니다.";
     private static final String JOIN_SUCCESS_CODE = "TRIP_JOINED";
     private static final String JOIN_SUCCESS_MESSAGE = "여행방에 참여했습니다.";
+    private static final String DETAIL_SUCCESS_CODE = "TRIP_RETRIEVED";
+    private static final String DETAIL_SUCCESS_MESSAGE = "여행방을 조회했습니다.";
 
     private final TripService tripService;
 
@@ -59,6 +64,23 @@ public class TripController {
         return ApiResponse.success(
                 JOIN_SUCCESS_CODE,
                 JOIN_SUCCESS_MESSAGE,
+                response
+        );
+    }
+
+    @GetMapping("/{tripId}")
+    public ApiResponse<TripDetailResponse> getTripDetail(
+            Authentication authentication,
+            @PathVariable Long tripId
+    ) {
+        TripDetailResponse response = tripService.getTripDetail(
+                authentication.getName(),
+                tripId
+        );
+
+        return ApiResponse.success(
+                DETAIL_SUCCESS_CODE,
+                DETAIL_SUCCESS_MESSAGE,
                 response
         );
     }

@@ -1,11 +1,15 @@
 package com.planit.trip.controller;
 
+import com.planit.domain.TripMemberRole;
 import com.planit.global.error.GlobalExceptionHandler;
 import com.planit.trip.dto.TripCreateRequest;
 import com.planit.trip.dto.TripCreateResponse;
+import com.planit.trip.dto.TripDetailResponse;
 import com.planit.trip.dto.TripJoinRequest;
 import com.planit.trip.dto.TripJoinResponse;
 import com.planit.trip.service.TripService;
+import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -24,6 +28,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -114,6 +119,95 @@ class TripControllerTest {
                 USER_PUBLIC_ID,
                 new TripJoinRequest(INVITATION_TOKEN)
         );
+    }
+
+    @Test
+    void getsTripDetail() throws Exception {
+        when(tripService.getTripDetail(USER_PUBLIC_ID, 1001L))
+                .thenReturn(new TripDetailResponse(
+                        "1001",
+                        "부산 맛집 여행",
+                        new TripDetailResponse.Region(
+                                "123",
+                                "26",
+                                "부산광역시",
+                                "26350",
+                                "해운대구"
+                        ),
+                        java.time.LocalDate.of(2026, 9, 12),
+                        java.time.LocalDate.of(2026, 9, 14),
+                        4,
+                        2,
+                        TripMemberRole.HOST,
+                        OffsetDateTime.parse(
+                                "2026-09-11T23:59:59.999999+09:00"
+                        ),
+                        OffsetDateTime.parse(
+                                "2026-09-07T14:30:00.123456+09:00"
+                        ),
+                        List.of(
+                                new TripDetailResponse.Member(
+                                        java.util.UUID.fromString(
+                                                USER_PUBLIC_ID
+                                        ),
+                                        "채령",
+                                        "https://example.com/default-profile.png",
+                                        TripMemberRole.HOST
+                                ),
+                                new TripDetailResponse.Member(
+                                        java.util.UUID.fromString(
+                                                "01991f6e-7300-7b21-a3cc-1436db3df95f"
+                                        ),
+                                        "민수",
+                                        "https://example.com/default-profile.png",
+                                        TripMemberRole.MEMBER
+                                )
+                        )
+                ));
+
+        mockMvc.perform(get("/api/trips/{tripId}", 1001L)
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("TRIP_RETRIEVED"))
+                .andExpect(jsonPath("$.message")
+                        .value("여행방을 조회했습니다."))
+                .andExpect(jsonPath("$.data.tripId").value("1001"))
+                .andExpect(jsonPath("$.data.name")
+                        .value("부산 맛집 여행"))
+                .andExpect(jsonPath("$.data.region.regionId")
+                        .value("123"))
+                .andExpect(jsonPath("$.data.region.broadRegionCode")
+                        .value("26"))
+                .andExpect(jsonPath("$.data.region.broadRegionName")
+                        .value("부산광역시"))
+                .andExpect(jsonPath("$.data.region.subRegionCode")
+                        .value("26350"))
+                .andExpect(jsonPath("$.data.region.subRegionName")
+                        .value("해운대구"))
+                .andExpect(jsonPath("$.data.startDate")
+                        .value("2026-09-12"))
+                .andExpect(jsonPath("$.data.endDate")
+                        .value("2026-09-14"))
+                .andExpect(jsonPath("$.data.capacity").value(4))
+                .andExpect(jsonPath("$.data.memberCount").value(2))
+                .andExpect(jsonPath("$.data.myRole").value("HOST"))
+                .andExpect(jsonPath("$.data.surveyDeadlineAt")
+                        .value("2026-09-11T23:59:59.999999+09:00"))
+                .andExpect(jsonPath("$.data.createdAt")
+                        .value("2026-09-07T14:30:00.123456+09:00"))
+                .andExpect(jsonPath("$.data.members[0].userPublicId")
+                        .value(USER_PUBLIC_ID))
+                .andExpect(jsonPath("$.data.members[0].userName")
+                        .value("채령"))
+                .andExpect(jsonPath("$.data.members[0].profileImageUrl")
+                        .value("https://example.com/default-profile.png"))
+                .andExpect(jsonPath("$.data.members[0].role")
+                        .value("HOST"));
+
+        verify(tripService).getTripDetail(USER_PUBLIC_ID, 1001L);
     }
 
     @ParameterizedTest

@@ -5,6 +5,7 @@ import com.planit.auth.token.TokenHasher;
 import com.planit.domain.*;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
+import com.planit.image.config.ImageProperties;
 import com.planit.repository.SubRegionRepository;
 import com.planit.repository.TripInvitationRepository;
 import com.planit.repository.TripMemberRepository;
@@ -12,6 +13,7 @@ import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
 import com.planit.trip.dto.TripCreateRequest;
 import com.planit.trip.dto.TripCreateResponse;
+import com.planit.trip.dto.TripDetailResponse;
 import com.planit.trip.dto.TripJoinRequest;
 import com.planit.trip.dto.TripJoinResponse;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -37,6 +40,7 @@ public class TripServiceImpl implements TripService {
     private final TripInvitationRepository tripInvitationRepository;
     private final SecureTokenGenerator secureTokenGenerator;
     private final TokenHasher tokenHasher;
+    private final ImageProperties imageProperties;
 
     @Override
     @Transactional
@@ -115,6 +119,70 @@ public class TripServiceImpl implements TripService {
         return new TripJoinResponse(
                 trip.getId().toString()
         );
+    }
+
+    @Override
+    public TripDetailResponse getTripDetail(
+            String userPublicId,
+            Long tripId
+    ) {
+        User user = findActiveUser(userPublicId);
+        Trip trip = findActiveTrip(tripId);
+        TripMember currentMember = tripMemberRepository
+                .findByTripAndUserAndLeftAtIsNull(trip, user)
+                .filter(member -> member.getActiveSlot() != null
+                        && member.getActiveSlot() == 1)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.TRIP_MEMBER_REQUIRED
+                ));
+        List<TripMember> activeMembers =
+                tripMemberRepository.findActiveMembersByTrip(trip);
+
+        SubRegion subRegion = trip.getSubRegion();
+        BroadRegion broadRegion = subRegion.getBroadRegion();
+        List<TripDetailResponse.Member> members = activeMembers.stream()
+                .map(member -> new TripDetailResponse.Member(
+                        member.getUser().getPublicId(),
+                        member.getUser().getUsername(),
+                        imageProperties.defaultProfileUrl().toString(),
+                        member.getRole()
+                ))
+                .toList();
+
+        return new TripDetailResponse(
+                trip.getId().toString(),
+                trip.getName(),
+                new TripDetailResponse.Region(
+                        subRegion.getId().toString(),
+                        broadRegion.getCode(),
+                        broadRegion.getName(),
+                        subRegion.getCode(),
+                        subRegion.getName()
+                ),
+                trip.getStartDate(),
+                trip.getEndDate(),
+                trip.getCapacity(),
+                members.size(),
+                currentMember.getRole(),
+                trip.getSurveyDeadlineAt()
+                        .atZone(SEOUL_ZONE)
+                        .toOffsetDateTime(),
+                trip.getCreatedAt()
+                        .atZone(SEOUL_ZONE)
+                        .toOffsetDateTime(),
+                members
+        );
+    }
+
+    private Trip findActiveTrip(Long tripId) {
+        Trip trip = tripRepository.findById(tripId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.TRIP_NOT_FOUND
+                ));
+        if (trip.getDeletedAt() != null) {
+            throw new BusinessException(ErrorCode.TRIP_NOT_FOUND);
+        }
+        return trip;
     }
 
     private Trip findTripForUpdate(TripInvitation invitation) {

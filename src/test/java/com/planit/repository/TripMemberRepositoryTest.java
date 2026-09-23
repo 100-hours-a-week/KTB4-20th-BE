@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -95,6 +96,54 @@ class TripMemberRepositoryTest {
         );
 
         assertThat(count).isZero();
+    }
+
+    @Test
+    void findsOnlyActiveMembersInJoinOrder() {
+        Trip trip = createTrip();
+        User firstUser = createUser();
+        User secondUser = createUser();
+        User leftUser = createUser();
+        User withdrawnUser = createUser();
+        withdrawnUser.withdraw(LocalDateTime.now());
+        userRepository.save(withdrawnUser);
+
+        LocalDateTime joinedAt = LocalDateTime.of(
+                2026,
+                9,
+                24,
+                12,
+                0
+        );
+        TripMember firstMember = TripMember.createMember(trip, firstUser);
+        TripMember secondMember = TripMember.createMember(trip, secondUser);
+        TripMember leftMember = TripMember.createMember(trip, leftUser);
+        TripMember withdrawnMember =
+                TripMember.createMember(trip, withdrawnUser);
+
+        List.of(firstMember, secondMember, leftMember, withdrawnMember)
+                .forEach(member -> ReflectionTestUtils.setField(
+                        member,
+                        "joinedAt",
+                        joinedAt
+                ));
+        ReflectionTestUtils.setField(leftMember, "activeSlot", (byte) 0);
+        ReflectionTestUtils.setField(
+                leftMember,
+                "leftAt",
+                joinedAt.plusHours(1)
+        );
+        tripMemberRepository.saveAll(List.of(
+                firstMember,
+                secondMember,
+                leftMember,
+                withdrawnMember
+        ));
+
+        List<TripMember> members =
+                tripMemberRepository.findActiveMembersByTrip(trip);
+
+        assertThat(members).containsExactly(firstMember, secondMember);
     }
 
     private User createUser() {
