@@ -50,7 +50,7 @@ public class SurveyServiceImpl implements SurveyService {
     public SurveyResponse getMySurvey(String userPublicId, Long tripId) {
         TripMember member = findActiveMember(userPublicId, tripId);
         List<PreferenceQuestion> questions = preferenceQuestionRepository
-                .findAllByOrderByIdAsc();
+                .findAllByOrderByDisplayOrderAsc();
 
         return surveyRepository.findByTripMember(member)
                 .filter(survey -> survey.getSubmittedAt() != null)
@@ -67,7 +67,7 @@ public class SurveyServiceImpl implements SurveyService {
     ) {
         TripMember member = findActiveMember(userPublicId, tripId);         //해당 여행방 멤버인지 확인
         List<PreferenceQuestion> questions = preferenceQuestionRepository
-                .findAllByOrderByIdAsc();
+                .findAllByOrderByDisplayOrderAsc();
         Map<Long, PreferenceQuestion> questionsById = questions.stream()
                 .collect(Collectors.toMap(
                         PreferenceQuestion::getId,

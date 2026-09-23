@@ -8,5 +8,5 @@ import java.util.List;
 public interface PreferenceQuestionRepository
         extends JpaRepository<PreferenceQuestion, Long> {
 
-    List<PreferenceQuestion> findAllByOrderByIdAsc();
+    List<PreferenceQuestion> findAllByOrderByDisplayOrderAsc();
 }

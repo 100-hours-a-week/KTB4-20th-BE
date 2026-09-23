@@ -74,7 +74,7 @@ class SurveyServiceImplTest {
                 trip,
                 user
         )).thenReturn(Optional.of(member));
-        when(preferenceQuestionRepository.findAllByOrderByIdAsc())
+        when(preferenceQuestionRepository.findAllByOrderByDisplayOrderAsc())
                 .thenReturn(List.of(firstQuestion, secondQuestion));
         when(surveyRepository.findByTripMember(member))
                 .thenReturn(Optional.empty());

@@ -24,10 +24,17 @@ public class PreferenceQuestion {
     @Column(name = "question_text", nullable = false, length = 300)
     private String questionText;
 
+    @Column(name = "display_order", nullable = false)
+    private int displayOrder;
+
     protected PreferenceQuestion() {
     }
 
     public Long getId() {
         return id;
+    }
+
+    public int getDisplayOrder() {
+        return displayOrder;
     }
 }
