@@ -27,6 +27,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpHeaders;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.messaging.MessageDeliveryException;
 import org.springframework.messaging.converter.JacksonJsonMessageConverter;
 import org.springframework.messaging.simp.stomp.StompFrameHandler;
 import org.springframework.messaging.simp.stomp.StompHeaders;
@@ -116,9 +117,7 @@ class RegionalChatMessagingIntegrationTest {
 
     @AfterEach
     void tearDown() {
-        if (session != null && session.isConnected()) {
-            session.disconnect();
-        }
+        disconnectSession();
         if (stompClient != null) {
             stompClient.stop();
         }
@@ -147,6 +146,17 @@ class RegionalChatMessagingIntegrationTest {
                     userId
             );
             jdbcTemplate.update("DELETE FROM users WHERE id = ?", userId);
+        }
+    }
+
+    private void disconnectSession() {
+        if (session == null || !session.isConnected()) {
+            return;
+        }
+        try {
+            session.disconnect();
+        } catch (MessageDeliveryException | IllegalStateException ignored) {
+            // The server can close the connection first after sending an ERROR frame.
         }
     }
 
