@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface TripRepository
@@ -15,4 +16,14 @@ public interface TripRepository
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT trip FROM Trip trip WHERE trip.id = :id")
     Optional<Trip> findByIdForUpdate(@Param("id") Long id);
+
+    @Query(value = """
+            SELECT DISTINCT s.trip_id
+            FROM schedules s
+            WHERE s.trip_id IN (:tripIds)
+              AND s.active_confirmed_slot = 1
+            """, nativeQuery = true)
+    List<Long> findIdsWithActiveConfirmedSchedule(
+            @Param("tripIds") List<Long> tripIds
+    );
 }
