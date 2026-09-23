@@ -200,6 +200,95 @@ class TripServiceImplTest {
     }
 
     @Test
+    void rejectsInvitationForPastTrip() {
+        Trip pastTrip = trip(200L);
+        LocalDate yesterday = LocalDate.now(SEOUL_ZONE).minusDays(1);
+        ReflectionTestUtils.setField(pastTrip, "startDate", yesterday);
+        ReflectionTestUtils.setField(pastTrip, "endDate", yesterday);
+        when(tripInvitationRepository.findByTokenHash(
+                INVITATION_TOKEN_HASH
+        )).thenReturn(Optional.of(new TripInvitation(
+                pastTrip,
+                INVITATION_TOKEN_HASH
+        )));
+
+        assertError(
+                () -> tripService.joinTrip(
+                        USER_PUBLIC_ID.toString(),
+                        new TripJoinRequest(INVITATION_TOKEN)
+                ),
+                ErrorCode.RESOURCE_NOT_FOUND
+        );
+    }
+
+    @Test
+    void rejectsUserAlreadyParticipatingInTrip() {
+        Trip invitedTrip = trip(200L);
+        when(tripInvitationRepository.findByTokenHash(
+                INVITATION_TOKEN_HASH
+        )).thenReturn(Optional.of(new TripInvitation(
+                invitedTrip,
+                INVITATION_TOKEN_HASH
+        )));
+        when(tripMemberRepository
+                .existsByTripAndUserAndLeftAtIsNull(invitedTrip, user))
+                .thenReturn(true);
+
+        assertError(
+                () -> tripService.joinTrip(
+                        USER_PUBLIC_ID.toString(),
+                        new TripJoinRequest(INVITATION_TOKEN)
+                ),
+                ErrorCode.TRIP_ALREADY_JOINED
+        );
+    }
+
+    @Test
+    void rejectsTripAtCapacity() {
+        Trip invitedTrip = trip(200L);
+        when(tripInvitationRepository.findByTokenHash(
+                INVITATION_TOKEN_HASH
+        )).thenReturn(Optional.of(new TripInvitation(
+                invitedTrip,
+                INVITATION_TOKEN_HASH
+        )));
+        when(tripMemberRepository.countByTripAndLeftAtIsNull(invitedTrip))
+                .thenReturn(4L);
+
+        assertError(
+                () -> tripService.joinTrip(
+                        USER_PUBLIC_ID.toString(),
+                        new TripJoinRequest(INVITATION_TOKEN)
+                ),
+                ErrorCode.TRIP_CAPACITY_EXCEEDED
+        );
+    }
+
+    @Test
+    void rejectsJoiningTripWithOverlappingDate() {
+        Trip invitedTrip = trip(200L);
+        when(tripInvitationRepository.findByTokenHash(
+                INVITATION_TOKEN_HASH
+        )).thenReturn(Optional.of(new TripInvitation(
+                invitedTrip,
+                INVITATION_TOKEN_HASH
+        )));
+        when(tripMemberRepository.countActiveTripsOverlapping(
+                user,
+                invitedTrip.getStartDate(),
+                invitedTrip.getEndDate()
+        )).thenReturn(1L);
+
+        assertError(
+                () -> tripService.joinTrip(
+                        USER_PUBLIC_ID.toString(),
+                        new TripJoinRequest(INVITATION_TOKEN)
+                ),
+                ErrorCode.TRIP_DATE_CONFLICT
+        );
+    }
+
+    @Test
     void usesDayBeforeTripAsDefaultSurveyDeadline() {
         LocalDate startDate = LocalDate.now(SEOUL_ZONE).plusDays(5);
 

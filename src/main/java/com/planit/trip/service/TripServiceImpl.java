@@ -95,7 +95,7 @@ public class TripServiceImpl implements TripService {
             String userPublicId,
             TripJoinRequest request
     ) {
-        findActiveUser(userPublicId);
+        User user = findActiveUser(userPublicId);
 
         String tokenHash = tokenHasher.sha256(
                 request.invitationToken()
@@ -110,6 +110,40 @@ public class TripServiceImpl implements TripService {
         if (trip.getDeletedAt() != null) {
             throw new BusinessException(
                     ErrorCode.RESOURCE_NOT_FOUND
+            );
+        }
+
+        LocalDate today = LocalDate.now(SEOUL_ZONE);
+        if (trip.getEndDate().isBefore(today)) {
+            throw new BusinessException(
+                    ErrorCode.RESOURCE_NOT_FOUND
+            );
+        }
+
+        if (tripMemberRepository
+                .existsByTripAndUserAndLeftAtIsNull(trip, user)) {
+            throw new BusinessException(
+                    ErrorCode.TRIP_ALREADY_JOINED
+            );
+        }
+
+        long activeMemberCount = tripMemberRepository
+                .countByTripAndLeftAtIsNull(trip);
+        if (activeMemberCount >= trip.getCapacity()) {
+            throw new BusinessException(
+                    ErrorCode.TRIP_CAPACITY_EXCEEDED
+            );
+        }
+
+        long overlappingTripCount = tripMemberRepository
+                .countActiveTripsOverlapping(
+                        user,
+                        trip.getStartDate(),
+                        trip.getEndDate()
+                );
+        if (overlappingTripCount > 0) {
+            throw new BusinessException(
+                    ErrorCode.TRIP_DATE_CONFLICT
             );
         }
 
