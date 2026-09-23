@@ -6,6 +6,8 @@ import com.planit.domain.TripMember;
 import com.planit.domain.User;
 import com.planit.repository.PreferenceQuestionRepository;
 import com.planit.repository.SurveyAnswerRepository;
+import com.planit.repository.SurveyExcludedCategoryRepository;
+import com.planit.repository.SurveyExclusionCategoryRepository;
 import com.planit.repository.SurveyRepository;
 import com.planit.repository.TripMemberRepository;
 import com.planit.repository.TripRepository;
@@ -46,6 +48,12 @@ class SurveyServiceImplTest {
         SurveyAnswerRepository surveyAnswerRepository = mock(
                 SurveyAnswerRepository.class
         );
+        SurveyExclusionCategoryRepository exclusionCategoryRepository = mock(
+                SurveyExclusionCategoryRepository.class
+        );
+        SurveyExcludedCategoryRepository excludedCategoryRepository = mock(
+                SurveyExcludedCategoryRepository.class
+        );
 
         surveyService = new SurveyServiceImpl(
                 userRepository,
@@ -53,7 +61,9 @@ class SurveyServiceImplTest {
                 tripMemberRepository,
                 preferenceQuestionRepository,
                 surveyRepository,
-                surveyAnswerRepository
+                surveyAnswerRepository,
+                exclusionCategoryRepository,
+                excludedCategoryRepository
         );
     }
 
@@ -88,6 +98,7 @@ class SurveyServiceImplTest {
         assertThat(response.answers())
                 .extracting(answer -> answer.questionId() + ":" + answer.score())
                 .containsExactly("10:3", "11:3");
+        assertThat(response.excludedCategoryIds()).isEmpty();
     }
 
     private PreferenceQuestion questionWithId(Long id) {
