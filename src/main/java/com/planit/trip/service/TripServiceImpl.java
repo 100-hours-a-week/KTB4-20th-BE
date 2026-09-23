@@ -5,6 +5,7 @@ import com.planit.auth.token.TokenHasher;
 import com.planit.domain.*;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
+import com.planit.image.config.ImageProperties;
 import com.planit.repository.SubRegionRepository;
 import com.planit.repository.TripInvitationRepository;
 import com.planit.repository.TripMemberRepository;
@@ -14,14 +15,21 @@ import com.planit.trip.dto.TripCreateRequest;
 import com.planit.trip.dto.TripCreateResponse;
 import com.planit.trip.dto.TripJoinRequest;
 import com.planit.trip.dto.TripJoinResponse;
+import com.planit.trip.dto.TripListResponse;
+import com.planit.trip.pagination.TripListCursorCodec;
+import com.planit.trip.pagination.TripListCursorCodec.Cursor;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -37,6 +45,10 @@ public class TripServiceImpl implements TripService {
     private final TripInvitationRepository tripInvitationRepository;
     private final SecureTokenGenerator secureTokenGenerator;
     private final TokenHasher tokenHasher;
+    private final TripListCursorCodec tripListCursorCodec;
+    private final ImageProperties imageProperties;
+
+    private static final int MAX_TRIP_LIST_SIZE = 10;
 
     @Override
     @Transactional
@@ -115,6 +127,134 @@ public class TripServiceImpl implements TripService {
         return new TripJoinResponse(
                 trip.getId().toString()
         );
+    }
+
+    @Override
+    public TripListResponse getTrips(
+            String userPublicId,
+            String encodedCursor,
+            int size
+    ) {
+        validateTripListSize(size);
+        User user = findActiveUser(userPublicId);
+
+        Cursor cursor = encodedCursor == null
+                ? null
+                : tripListCursorCodec.decode(encodedCursor);
+        LocalDate referenceDate = cursor == null
+                ? LocalDate.now(SEOUL_ZONE)
+                : cursor.referenceDate();
+
+        List<TripMember> memberships = findTripMemberships(
+                user,
+                referenceDate,
+                cursor,
+                size
+        );
+        boolean hasNext = memberships.size() > size;
+        List<TripMember> pageMemberships = memberships.subList(
+                0,
+                Math.min(size, memberships.size())
+        );
+
+        if (pageMemberships.isEmpty()) {
+            return new TripListResponse(List.of(), null, false);
+        }
+
+        List<Long> tripIds = pageMemberships.stream()
+                .map(member -> member.getTrip().getId())
+                .toList();
+        Map<Long, List<TripMember>> membersByTripId =
+                tripMemberRepository.findActiveMembersByTripIds(tripIds)
+                        .stream()
+                        .collect(Collectors.groupingBy(
+                                member -> member.getTrip().getId()
+                        ));
+
+        List<TripListResponse.TripSummary> trips = pageMemberships.stream()
+                .map(member -> toTripSummary(
+                        member.getTrip(),
+                        membersByTripId.getOrDefault(
+                                member.getTrip().getId(),
+                                List.of()
+                        )
+                ))
+                .toList();
+
+        return new TripListResponse(
+                trips,
+                hasNext
+                        ? encodeNextCursor(
+                                pageMemberships.getLast(),
+                                referenceDate
+                        )
+                        : null,
+                hasNext
+        );
+    }
+
+    private List<TripMember> findTripMemberships(
+            User user,
+            LocalDate referenceDate,
+            Cursor cursor,
+            int size
+    ) {
+        PageRequest pageRequest = PageRequest.of(0, size + 1);
+
+        if (cursor == null) {
+            return tripMemberRepository.findActiveTripMemberships(
+                    user,
+                    referenceDate,
+                    pageRequest
+            );
+        }
+
+        return tripMemberRepository.findActiveTripMembershipsAfter(
+                user,
+                referenceDate,
+                cursor.startDate().isBefore(referenceDate) ? 1 : 0,
+                cursor.startDate(),
+                cursor.tripId(),
+                pageRequest
+        );
+    }
+
+    private TripListResponse.TripSummary toTripSummary(
+            Trip trip,
+            List<TripMember> members
+    ) {
+        List<TripListResponse.MemberSummary> memberResponses = members.stream()
+                .map(member -> new TripListResponse.MemberSummary(
+                        member.getUser().getUsername(),
+                        imageProperties.defaultProfileUrl().toString()
+                ))
+                .toList();
+
+        return new TripListResponse.TripSummary(
+                trip.getId().toString(),
+                trip.getName(),
+                trip.getStartDate(),
+                memberResponses.size(),
+                memberResponses
+        );
+    }
+
+    private String encodeNextCursor(
+            TripMember lastMembership,
+            LocalDate referenceDate
+    ) {
+        Trip trip = lastMembership.getTrip();
+        return tripListCursorCodec.encode(new Cursor(
+                referenceDate,
+                trip.getStartDate(),
+                trip.getId()
+        ));
+    }
+
+    private void validateTripListSize(int size) {
+        if (size < 1 || size > MAX_TRIP_LIST_SIZE) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST);
+        }
     }
 
     private Trip findTripForUpdate(TripInvitation invitation) {

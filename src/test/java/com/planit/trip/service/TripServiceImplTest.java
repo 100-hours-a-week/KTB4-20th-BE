@@ -10,6 +10,7 @@ import com.planit.domain.TripMemberRole;
 import com.planit.domain.User;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
+import com.planit.image.config.ImageProperties;
 import com.planit.repository.SubRegionRepository;
 import com.planit.repository.TripInvitationRepository;
 import com.planit.repository.TripMemberRepository;
@@ -19,6 +20,9 @@ import com.planit.trip.dto.TripCreateRequest;
 import com.planit.trip.dto.TripCreateResponse;
 import com.planit.trip.dto.TripJoinRequest;
 import com.planit.trip.dto.TripJoinResponse;
+import com.planit.trip.dto.TripListResponse;
+import com.planit.trip.pagination.TripListCursorCodec;
+import com.planit.trip.pagination.TripListCursorCodec.Cursor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -26,6 +30,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.net.URI;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -35,6 +41,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class TripServiceImplTest {
@@ -53,6 +60,7 @@ class TripServiceImplTest {
     private TripInvitationRepository tripInvitationRepository;
     private SecureTokenGenerator secureTokenGenerator;
     private TokenHasher tokenHasher;
+    private TripListCursorCodec tripListCursorCodec;
     private TripServiceImpl tripService;
     private User user;
     private SubRegion subRegion;
@@ -66,6 +74,7 @@ class TripServiceImplTest {
         tripInvitationRepository = mock(TripInvitationRepository.class);
         secureTokenGenerator = mock(SecureTokenGenerator.class);
         tokenHasher = mock(TokenHasher.class);
+        tripListCursorCodec = new TripListCursorCodec();
         tripService = new TripServiceImpl(
                 userRepository,
                 subRegionRepository,
@@ -73,7 +82,11 @@ class TripServiceImplTest {
                 tripMemberRepository,
                 tripInvitationRepository,
                 secureTokenGenerator,
-                tokenHasher
+                tokenHasher,
+                tripListCursorCodec,
+                new ImageProperties(URI.create(
+                        "https://example.com/default-profile.png"
+                ))
         );
 
         user = mock(User.class);
@@ -137,6 +150,130 @@ class TripServiceImplTest {
                 .isEqualTo(INVITATION_TOKEN_HASH);
         assertThat(response.invitationToken())
                 .isEqualTo(INVITATION_TOKEN);
+    }
+
+    @Test
+    void returnsRequestedTripsAndNextCursor() {
+        LocalDate referenceDate = LocalDate.now(SEOUL_ZONE);
+        Trip firstTrip = trip(101L, referenceDate.plusDays(1));
+        Trip secondTrip = trip(102L, referenceDate.plusDays(2));
+        Trip extraTrip = trip(103L, referenceDate.plusDays(3));
+
+        TripMember firstMembership =
+                TripMember.createMember(firstTrip, user);
+        TripMember secondMembership =
+                TripMember.createMember(secondTrip, user);
+        TripMember extraMembership =
+                TripMember.createMember(extraTrip, user);
+
+        when(user.getUsername()).thenReturn("채령");
+        when(tripMemberRepository.findActiveTripMemberships(
+                org.mockito.ArgumentMatchers.eq(user),
+                org.mockito.ArgumentMatchers.eq(referenceDate),
+                any()
+        )).thenReturn(List.of(
+                firstMembership,
+                secondMembership,
+                extraMembership
+        ));
+        when(tripMemberRepository.findActiveMembersByTripIds(
+                List.of(101L, 102L)
+        )).thenReturn(List.of(firstMembership, secondMembership));
+
+        TripListResponse response = tripService.getTrips(
+                USER_PUBLIC_ID.toString(),
+                null,
+                2
+        );
+
+        assertThat(response.trips()).hasSize(2);
+        assertThat(response.trips().getFirst().tripId())
+                .isEqualTo("101");
+        assertThat(response.trips().getFirst().members().getFirst().userName())
+                .isEqualTo("채령");
+        assertThat(response.trips().getFirst().members().getFirst()
+                .profileImageUrl())
+                .isEqualTo("https://example.com/default-profile.png");
+        assertThat(response.hasNext()).isTrue();
+
+        Cursor nextCursor = tripListCursorCodec.decode(
+                response.nextCursor()
+        );
+        assertThat(nextCursor).isEqualTo(new Cursor(
+                referenceDate,
+                referenceDate.plusDays(2),
+                102L
+        ));
+    }
+
+    @Test
+    void returnsTripsAfterCursor() {
+        LocalDate referenceDate = LocalDate.now(SEOUL_ZONE);
+        Cursor cursor = new Cursor(
+                referenceDate,
+                referenceDate.plusDays(1),
+                101L
+        );
+        Trip nextTrip = trip(102L, referenceDate.plusDays(2));
+        TripMember nextMembership =
+                TripMember.createMember(nextTrip, user);
+
+        when(tripMemberRepository.findActiveTripMembershipsAfter(
+                user,
+                referenceDate,
+                0,
+                cursor.startDate(),
+                cursor.tripId(),
+                org.springframework.data.domain.PageRequest.of(0, 6)
+        )).thenReturn(List.of(nextMembership));
+        when(tripMemberRepository.findActiveMembersByTripIds(
+                List.of(102L)
+        )).thenReturn(List.of(nextMembership));
+
+        TripListResponse response = tripService.getTrips(
+                USER_PUBLIC_ID.toString(),
+                tripListCursorCodec.encode(cursor),
+                5
+        );
+
+        assertThat(response.trips())
+                .extracting(tripResponse -> tripResponse.tripId())
+                .containsExactly("102");
+        assertThat(response.hasNext()).isFalse();
+        assertThat(response.nextCursor()).isNull();
+    }
+
+    @Test
+    void returnsEmptyTripList() {
+        when(tripMemberRepository.findActiveTripMemberships(
+                org.mockito.ArgumentMatchers.eq(user),
+                org.mockito.ArgumentMatchers.any(LocalDate.class),
+                org.mockito.ArgumentMatchers.any()
+        )).thenReturn(List.of());
+
+        TripListResponse response = tripService.getTrips(
+                USER_PUBLIC_ID.toString(),
+                null,
+                10
+        );
+
+        assertThat(response.trips()).isEmpty();
+        assertThat(response.hasNext()).isFalse();
+        assertThat(response.nextCursor()).isNull();
+    }
+
+    @Test
+    void rejectsInvalidTripListSize() {
+        assertError(
+                () -> tripService.getTrips(
+                        USER_PUBLIC_ID.toString(),
+                        null,
+                        11
+                ),
+                ErrorCode.INVALID_REQUEST
+        );
+
+        verifyNoInteractions(userRepository);
     }
 
     @Test
@@ -403,6 +540,10 @@ class TripServiceImplTest {
 
     private Trip trip(Long id) {
         LocalDate startDate = LocalDate.now(SEOUL_ZONE).plusDays(5);
+        return trip(id, startDate);
+    }
+
+    private Trip trip(Long id, LocalDate startDate) {
         Trip trip = new Trip(
                 subRegion,
                 "제주 여행",
