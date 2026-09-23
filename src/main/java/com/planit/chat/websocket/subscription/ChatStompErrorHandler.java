@@ -13,6 +13,8 @@ import org.springframework.util.MimeTypeUtils;
 import org.springframework.web.socket.messaging.StompSubProtocolErrorHandler;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.Optional;
+
 @Component
 @RequiredArgsConstructor
 public class ChatStompErrorHandler extends StompSubProtocolErrorHandler {
@@ -24,35 +26,46 @@ public class ChatStompErrorHandler extends StompSubProtocolErrorHandler {
             Message<byte[]> clientMessage,
             Throwable exception
     ) {
-        ChatAuthenticationException authenticationException =
-                findException(exception, ChatAuthenticationException.class);
-        if (authenticationException != null) {
-            return errorMessage(
-                    clientMessage,
-                    authenticationException.getErrorCode().getCode(),
-                    authenticationException.getErrorCode().getMessage()
-            );
-        }
-        ChatSubscriptionException subscriptionException = findSubscriptionException(exception);
-        if (subscriptionException == null) {
-            return super.handleClientMessageProcessingError(clientMessage, exception);
-        }
-
-        return errorMessage(
-                clientMessage,
-                subscriptionException.getErrorCode().getCode(),
-                subscriptionException.getErrorCode().getMessage()
-        );
+        return resolveError(exception)
+                .map(error -> createErrorFrame(clientMessage, error))
+                .orElseGet(() -> handleUnknownError(clientMessage, exception));
     }
 
-    private Message<byte[]> errorMessage(
-            Message<byte[]> clientMessage,
-            String errorCode,
-            String errorMessage
-    ) {
+    private Optional<ChatStompError> resolveError(Throwable exception) {
+        return resolveAuthenticationError(exception)
+                .or(() -> resolveSubscriptionError(exception));
+    }
 
+    private Optional<ChatStompError> resolveAuthenticationError(
+            Throwable exception
+    ) {
+        return Optional.ofNullable(findException(
+                exception,
+                ChatAuthenticationException.class
+        )).map(authenticationException -> new ChatStompError(
+                authenticationException.getErrorCode().getCode(),
+                authenticationException.getErrorCode().getMessage()
+        ));
+    }
+
+    private Optional<ChatStompError> resolveSubscriptionError(
+            Throwable exception
+    ) {
+        return Optional.ofNullable(findException(
+                exception,
+                ChatSubscriptionException.class
+        )).map(subscriptionException -> new ChatStompError(
+                subscriptionException.getErrorCode().getCode(),
+                subscriptionException.getErrorCode().getMessage()
+        ));
+    }
+
+    private Message<byte[]> createErrorFrame(
+            Message<byte[]> clientMessage,
+            ChatStompError error
+    ) {
         StompHeaderAccessor errorAccessor = StompHeaderAccessor.create(StompCommand.ERROR);
-        errorAccessor.setMessage(errorCode);
+        errorAccessor.setMessage(error.code());
         errorAccessor.setContentType(MimeTypeUtils.APPLICATION_JSON);
         errorAccessor.setLeaveMutable(true);
 
@@ -64,14 +77,17 @@ public class ChatStompErrorHandler extends StompSubProtocolErrorHandler {
         }
 
         byte[] payload = objectMapper.writeValueAsBytes(ApiResponse.error(
-                errorCode,
-                errorMessage
+                error.code(),
+                error.message()
         ));
         return MessageBuilder.createMessage(payload, errorAccessor.getMessageHeaders());
     }
 
-    private ChatSubscriptionException findSubscriptionException(Throwable exception) {
-        return findException(exception, ChatSubscriptionException.class);
+    private Message<byte[]> handleUnknownError(
+            Message<byte[]> clientMessage,
+            Throwable exception
+    ) {
+        return super.handleClientMessageProcessingError(clientMessage, exception);
     }
 
     private <T extends Throwable> T findException(
@@ -86,5 +102,11 @@ public class ChatStompErrorHandler extends StompSubProtocolErrorHandler {
             current = current.getCause();
         }
         return null;
+    }
+
+    private record ChatStompError(
+            String code,
+            String message
+    ) {
     }
 }
