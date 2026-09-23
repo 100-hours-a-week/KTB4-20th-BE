@@ -37,6 +37,7 @@ public class SecurityConfig {
                                 "/api/auth/oauth/callback",
                                 "/api/auth/refresh",
                                 "/api/auth/logout",
+                                "/ws",
                                 "/images/**"
                         ).permitAll()
                         .anyRequest().authenticated())

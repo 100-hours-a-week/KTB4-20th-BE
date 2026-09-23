@@ -13,6 +13,14 @@ public class ChatAuthenticationException extends AuthenticationException {
         this.errorCode = errorCode;
     }
 
+    public ChatAuthenticationException(
+            ChatErrorCode errorCode,
+            Throwable cause
+    ) {
+        super(Objects.requireNonNull(errorCode).getMessage(), cause);
+        this.errorCode = errorCode;
+    }
+
     public ChatErrorCode getErrorCode() {
         return errorCode;
     }

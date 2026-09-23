@@ -141,6 +141,12 @@ class SecurityConfigTest {
                 ));
     }
 
+    @Test
+    void allowsWebSocketHandshakePathWithoutHttpAccessToken() throws Exception {
+        mockMvc.perform(get("/ws"))
+                .andExpect(status().isNotFound());
+    }
+
     @TestConfiguration(proxyBeanMethods = false)
     static class TestAuthPropertiesConfiguration {
 
