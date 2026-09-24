@@ -214,7 +214,6 @@ public class TripServiceImpl implements TripService {
                 referenceDate,
                 cursor.startDate().isBefore(referenceDate) ? 1 : 0,
                 cursor.startDate(),
-                cursor.tripId(),
                 pageRequest
         );
     }
@@ -246,8 +245,7 @@ public class TripServiceImpl implements TripService {
         Trip trip = lastMembership.getTrip();
         return tripListCursorCodec.encode(new Cursor(
                 referenceDate,
-                trip.getStartDate(),
-                trip.getId()
+                trip.getStartDate()
         ));
     }
 
