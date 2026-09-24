@@ -31,6 +31,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -136,7 +137,7 @@ class TripControllerTest {
                                 TripProgressStatus.SURVEY_IN_PROGRESS,
                                 1,
                                 List.of(new TripListResponse.MemberSummary(
-                                        "채령",
+                                        "사용자A",
                                         "https://example.com/profile.png"
                                 ))
                         )),
@@ -200,7 +201,7 @@ class TripControllerTest {
                                         java.util.UUID.fromString(
                                                 USER_PUBLIC_ID
                                         ),
-                                        "채령",
+                                        "사용자A",
                                         "https://example.com/default-profile.png",
                                         TripMemberRole.HOST
                                 ),
@@ -208,7 +209,7 @@ class TripControllerTest {
                                         java.util.UUID.fromString(
                                                 "01991f6e-7300-7b21-a3cc-1436db3df95f"
                                         ),
-                                        "민수",
+                                        "사용자B",
                                         "https://example.com/default-profile.png",
                                         TripMemberRole.MEMBER
                                 )
@@ -228,9 +229,21 @@ class TripControllerTest {
                 .andExpect(jsonPath("$.data.name")
                         .value("부산 맛집 여행"))
                 .andExpect(jsonPath("$.data.members[0].userName")
-                        .value("채령"));
+                        .value("사용자A"));
 
         verify(tripService).getTripDetail(USER_PUBLIC_ID, 1001L);
+    }
+
+    @Test
+    void leavesTrip() throws Exception {
+        mockMvc.perform(delete("/api/trips/{tripId}/members/me", 1001L)
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        )))
+                .andExpect(status().isNoContent());
+
+        verify(tripService).leaveTrip(USER_PUBLIC_ID, 1001L);
     }
 
     @ParameterizedTest

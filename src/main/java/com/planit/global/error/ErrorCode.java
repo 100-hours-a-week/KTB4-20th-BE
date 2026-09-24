@@ -29,6 +29,7 @@ public enum ErrorCode {
     TRIP_DATE_CONFLICT(HttpStatus.CONFLICT, "해당 날짜에 참여 중인 여행이 있습니다."),
     TRIP_NOT_FOUND(HttpStatus.NOT_FOUND, "여행방을 찾을 수 없습니다."),
     TRIP_MEMBER_REQUIRED(HttpStatus.FORBIDDEN, "여행방 참여가 필요합니다."),
+    HOST_CANNOT_LEAVE_ALONE(HttpStatus.CONFLICT, "다른 멤버가 참여한 후 여행방을 나갈 수 있습니다."),
     SURVEY_SUBMISSION_CLOSED(HttpStatus.CONFLICT, "설문 제출 기간이 종료되었습니다."),
     SURVEY_RESUBMISSION_CLOSED(HttpStatus.CONFLICT, "설문 수정 기간이 종료되었습니다."),
     EXCLUSION_CATEGORY_NOT_FOUND(HttpStatus.NOT_FOUND, "설문 제외 항목을 찾을 수 없습니다."),

@@ -12,14 +12,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/trips")
@@ -106,5 +99,14 @@ public class TripController {
                 DETAIL_SUCCESS_MESSAGE,
                 response
         );
+    }
+
+    @DeleteMapping("/{tripId}/members/me")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void leaveTrip(
+            Authentication authentication,
+            @PathVariable Long tripId
+    ) {
+        tripService.leaveTrip(authentication.getName(), tripId);
     }
 }

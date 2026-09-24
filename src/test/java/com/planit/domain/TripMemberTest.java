@@ -43,6 +43,40 @@ class TripMemberTest {
         assertThat(member.getLeftAt()).isNull();
     }
 
+    @Test
+    void leavesTripMembership() {
+        TripMember member = TripMember.createHost(
+                createTrip(),
+                createUser()
+        );
+        LocalDateTime leftAt = LocalDateTime.of(
+                2026,
+                9,
+                24,
+                18,
+                0
+        );
+
+        member.leave(leftAt);
+
+        assertThat(member.getActiveSlot()).isEqualTo((byte) 0);
+        assertThat(member.getHostSlot()).isNull();
+        assertThat(member.getLeftAt()).isEqualTo(leftAt);
+    }
+
+    @Test
+    void promotesMemberToHost() {
+        TripMember member = TripMember.createMember(
+                createTrip(),
+                createUser()
+        );
+
+        member.promoteToHost();
+
+        assertThat(member.getRole()).isEqualTo(TripMemberRole.HOST);
+        assertThat(member.getHostSlot()).isEqualTo((byte) 1);
+    }
+
     private Trip createTrip() {
         return new Trip(
                 new SubRegion(),

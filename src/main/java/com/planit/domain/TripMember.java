@@ -87,6 +87,17 @@ public class TripMember {
         );
     }
 
+    public void leave(LocalDateTime leftAt) {
+        this.hostSlot = null;
+        this.activeSlot = (byte) 0;
+        this.leftAt = leftAt;
+    }
+
+    public void promoteToHost() {
+        this.role = TripMemberRole.HOST;
+        this.hostSlot = (byte) 1;
+    }
+
     public Long getId() {
         return id;
     }

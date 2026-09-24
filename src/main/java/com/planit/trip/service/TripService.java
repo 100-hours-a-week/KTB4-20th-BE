@@ -29,4 +29,9 @@ public interface TripService {
             String userPublicId,
             Long tripId
     );
+
+    void leaveTrip(
+            String userPublicId,
+            Long tripId
+    );
 }
