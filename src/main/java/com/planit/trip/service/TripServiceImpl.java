@@ -13,6 +13,7 @@ import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
 import com.planit.trip.dto.TripCreateRequest;
 import com.planit.trip.dto.TripCreateResponse;
+import com.planit.trip.dto.TripDetailResponse;
 import com.planit.trip.dto.TripJoinRequest;
 import com.planit.trip.dto.TripJoinResponse;
 import com.planit.trip.dto.TripListResponse;
@@ -128,6 +129,59 @@ public class TripServiceImpl implements TripService {
 
         return new TripJoinResponse(
                 trip.getId().toString()
+        );
+    }
+
+    @Override
+    public TripDetailResponse getTripDetail(
+            String userPublicId,
+            Long tripId
+    ) {
+        User user = findActiveUser(userPublicId);
+        Trip trip = findActiveTrip(tripId);
+        TripMember currentMember = tripMemberRepository
+                .findByTripAndUserAndLeftAtIsNull(trip, user)
+                .filter(member -> member.getActiveSlot() != null
+                        && member.getActiveSlot() == 1)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.TRIP_MEMBER_REQUIRED
+                ));
+        List<TripMember> activeMembers =
+                tripMemberRepository.findActiveMembersByTrip(trip);
+
+        SubRegion subRegion = trip.getSubRegion();
+        BroadRegion broadRegion = subRegion.getBroadRegion();
+        List<TripDetailResponse.Member> members = activeMembers.stream()
+                .map(member -> new TripDetailResponse.Member(
+                        member.getUser().getPublicId(),
+                        member.getUser().getUsername(),
+                        imageProperties.defaultProfileUrl().toString(),
+                        member.getRole()
+                ))
+                .toList();
+
+        return new TripDetailResponse(
+                trip.getId().toString(),
+                trip.getName(),
+                new TripDetailResponse.Region(
+                        subRegion.getId().toString(),
+                        broadRegion.getCode(),
+                        broadRegion.getName(),
+                        subRegion.getCode(),
+                        subRegion.getName()
+                ),
+                trip.getStartDate(),
+                trip.getEndDate(),
+                trip.getCapacity(),
+                members.size(),
+                currentMember.getRole(),
+                trip.getSurveyDeadlineAt()
+                        .atZone(SEOUL_ZONE)
+                        .toOffsetDateTime(),
+                trip.getCreatedAt()
+                        .atZone(SEOUL_ZONE)
+                        .toOffsetDateTime(),
+                members
         );
     }
 
@@ -269,6 +323,17 @@ public class TripServiceImpl implements TripService {
         if (size < 1 || size > MAX_TRIP_LIST_SIZE) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST);
         }
+    }
+
+    private Trip findActiveTrip(Long tripId) {
+        Trip trip = tripRepository.findById(tripId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.TRIP_NOT_FOUND
+                ));
+        if (trip.getDeletedAt() != null) {
+            throw new BusinessException(ErrorCode.TRIP_NOT_FOUND);
+        }
+        return trip;
     }
 
     private Trip findTripForUpdate(TripInvitation invitation) {

@@ -1,15 +1,18 @@
 package com.planit.trip.controller;
 
+import com.planit.domain.TripMemberRole;
 import com.planit.domain.TripProgressStatus;
 import com.planit.global.error.GlobalExceptionHandler;
 import com.planit.trip.dto.TripCreateRequest;
 import com.planit.trip.dto.TripCreateResponse;
+import com.planit.trip.dto.TripDetailResponse;
 import com.planit.trip.dto.TripJoinRequest;
 import com.planit.trip.dto.TripJoinResponse;
 import com.planit.trip.dto.TripListResponse;
 import com.planit.trip.service.TripService;
 import java.util.stream.Stream;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -166,6 +169,68 @@ class TripControllerTest {
                 .andExpect(jsonPath("$.data.hasNext").value(true));
 
         verify(tripService).getTrips(USER_PUBLIC_ID, cursor, 5);
+    }
+
+    @Test
+    void getsTripDetail() throws Exception {
+        when(tripService.getTripDetail(USER_PUBLIC_ID, 1001L))
+                .thenReturn(new TripDetailResponse(
+                        "1001",
+                        "부산 맛집 여행",
+                        new TripDetailResponse.Region(
+                                "123",
+                                "26",
+                                "부산광역시",
+                                "26350",
+                                "해운대구"
+                        ),
+                        LocalDate.of(2026, 9, 12),
+                        LocalDate.of(2026, 9, 14),
+                        4,
+                        2,
+                        TripMemberRole.HOST,
+                        OffsetDateTime.parse(
+                                "2026-09-11T23:59:59.999999+09:00"
+                        ),
+                        OffsetDateTime.parse(
+                                "2026-09-07T14:30:00.123456+09:00"
+                        ),
+                        List.of(
+                                new TripDetailResponse.Member(
+                                        java.util.UUID.fromString(
+                                                USER_PUBLIC_ID
+                                        ),
+                                        "채령",
+                                        "https://example.com/default-profile.png",
+                                        TripMemberRole.HOST
+                                ),
+                                new TripDetailResponse.Member(
+                                        java.util.UUID.fromString(
+                                                "01991f6e-7300-7b21-a3cc-1436db3df95f"
+                                        ),
+                                        "민수",
+                                        "https://example.com/default-profile.png",
+                                        TripMemberRole.MEMBER
+                                )
+                        )
+                ));
+
+        mockMvc.perform(get("/api/trips/{tripId}", 1001L)
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("TRIP_RETRIEVED"))
+                .andExpect(jsonPath("$.message")
+                        .value("여행방을 조회했습니다."))
+                .andExpect(jsonPath("$.data.tripId").value("1001"))
+                .andExpect(jsonPath("$.data.name")
+                        .value("부산 맛집 여행"))
+                .andExpect(jsonPath("$.data.members[0].userName")
+                        .value("채령"));
+
+        verify(tripService).getTripDetail(USER_PUBLIC_ID, 1001L);
     }
 
     @ParameterizedTest

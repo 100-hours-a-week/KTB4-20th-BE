@@ -2,6 +2,7 @@ package com.planit.trip.service;
 
 import com.planit.auth.token.SecureTokenGenerator;
 import com.planit.auth.token.TokenHasher;
+import com.planit.domain.BroadRegion;
 import com.planit.domain.SubRegion;
 import com.planit.domain.Trip;
 import com.planit.domain.TripInvitation;
@@ -19,6 +20,7 @@ import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
 import com.planit.trip.dto.TripCreateRequest;
 import com.planit.trip.dto.TripCreateResponse;
+import com.planit.trip.dto.TripDetailResponse;
 import com.planit.trip.dto.TripJoinRequest;
 import com.planit.trip.dto.TripJoinResponse;
 import com.planit.trip.dto.TripListResponse;
@@ -340,6 +342,126 @@ class TripServiceImplTest {
         assertThat(member.getTrip()).isSameAs(invitedTrip);
         assertThat(member.getUser()).isSameAs(user);
         assertThat(member.getRole()).isEqualTo(TripMemberRole.MEMBER);
+    }
+
+    @Test
+    void returnsTripDetailWithActiveMembers() {
+        Trip trip = trip(200L);
+        BroadRegion broadRegion = mock(BroadRegion.class);
+        User memberUser = mock(User.class);
+        TripMember host = TripMember.createHost(trip, user);
+        TripMember member = TripMember.createMember(trip, memberUser);
+
+        when(subRegion.getId()).thenReturn(123L);
+        when(subRegion.getCode()).thenReturn("26350");
+        when(subRegion.getName()).thenReturn("해운대구");
+        when(subRegion.getBroadRegion()).thenReturn(broadRegion);
+        when(broadRegion.getCode()).thenReturn("26");
+        when(broadRegion.getName()).thenReturn("부산광역시");
+        when(user.getPublicId()).thenReturn(USER_PUBLIC_ID);
+        when(user.getUsername()).thenReturn("채령");
+        when(memberUser.getPublicId()).thenReturn(UUID.fromString(
+                "01991f6e-7300-7b21-a3cc-1436db3df95f"
+        ));
+        when(memberUser.getUsername()).thenReturn("민수");
+        when(tripRepository.findById(200L)).thenReturn(Optional.of(trip));
+        when(tripMemberRepository.findByTripAndUserAndLeftAtIsNull(
+                trip,
+                user
+        )).thenReturn(Optional.of(host));
+        when(tripMemberRepository.findActiveMembersByTrip(trip))
+                .thenReturn(List.of(host, member));
+
+        TripDetailResponse response = tripService.getTripDetail(
+                USER_PUBLIC_ID.toString(),
+                200L
+        );
+
+        assertThat(response.tripId()).isEqualTo("200");
+        assertThat(response.region().broadRegionName())
+                .isEqualTo("부산광역시");
+        assertThat(response.memberCount()).isEqualTo(2);
+        assertThat(response.myRole()).isEqualTo(TripMemberRole.HOST);
+        assertThat(response.members())
+                .extracting(TripDetailResponse.Member::userName)
+                .containsExactly("채령", "민수");
+        assertThat(response.members())
+                .extracting(TripDetailResponse.Member::profileImageUrl)
+                .containsOnly("https://example.com/default-profile.png");
+    }
+
+    @Test
+    void rejectsTripDetailForNonMember() {
+        Trip trip = trip(200L);
+        when(tripRepository.findById(200L)).thenReturn(Optional.of(trip));
+        when(tripMemberRepository.findByTripAndUserAndLeftAtIsNull(
+                trip,
+                user
+        )).thenReturn(Optional.empty());
+
+        assertError(
+                () -> tripService.getTripDetail(
+                        USER_PUBLIC_ID.toString(),
+                        200L
+                ),
+                ErrorCode.TRIP_MEMBER_REQUIRED
+        );
+    }
+
+    @Test
+    void rejectsMissingTripDetail() {
+        when(tripRepository.findById(200L)).thenReturn(Optional.empty());
+
+        assertError(
+                () -> tripService.getTripDetail(
+                        USER_PUBLIC_ID.toString(),
+                        200L
+                ),
+                ErrorCode.TRIP_NOT_FOUND
+        );
+    }
+
+    @Test
+    void rejectsDeletedTripDetail() {
+        Trip trip = trip(200L);
+        ReflectionTestUtils.setField(
+                trip,
+                "deletedAt",
+                java.time.LocalDateTime.now()
+        );
+        when(tripRepository.findById(200L)).thenReturn(Optional.of(trip));
+
+        assertError(
+                () -> tripService.getTripDetail(
+                        USER_PUBLIC_ID.toString(),
+                        200L
+                ),
+                ErrorCode.TRIP_NOT_FOUND
+        );
+    }
+
+    @Test
+    void rejectsInactiveTripMember() {
+        Trip trip = trip(200L);
+        TripMember inactiveMember = TripMember.createMember(trip, user);
+        ReflectionTestUtils.setField(
+                inactiveMember,
+                "activeSlot",
+                (byte) 0
+        );
+        when(tripRepository.findById(200L)).thenReturn(Optional.of(trip));
+        when(tripMemberRepository.findByTripAndUserAndLeftAtIsNull(
+                trip,
+                user
+        )).thenReturn(Optional.of(inactiveMember));
+
+        assertError(
+                () -> tripService.getTripDetail(
+                        USER_PUBLIC_ID.toString(),
+                        200L
+                ),
+                ErrorCode.TRIP_MEMBER_REQUIRED
+        );
     }
 
     @Test

@@ -28,6 +28,20 @@ public interface TripMemberRepository
     );
 
     @Query("""
+            SELECT tm
+            FROM TripMember tm
+            JOIN FETCH tm.user memberUser
+            WHERE tm.trip = :trip
+              AND tm.activeSlot = 1
+              AND tm.leftAt IS NULL
+              AND memberUser.deletedAt IS NULL
+            ORDER BY tm.joinedAt ASC, tm.id ASC
+            """)
+    List<TripMember> findActiveMembersByTrip(
+            @Param("trip") Trip trip
+    );
+
+    @Query("""
             SELECT COUNT(tm)
             FROM TripMember tm
             WHERE tm.user = :user
