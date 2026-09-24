@@ -1,5 +1,6 @@
 package com.planit.trip.controller;
 
+import com.planit.domain.TripProgressStatus;
 import com.planit.global.error.GlobalExceptionHandler;
 import com.planit.trip.dto.TripCreateRequest;
 import com.planit.trip.dto.TripCreateResponse;
@@ -129,6 +130,7 @@ class TripControllerTest {
                                 "100",
                                 "경주 여행",
                                 LocalDate.of(2026, 9, 26),
+                                TripProgressStatus.SURVEY_IN_PROGRESS,
                                 1,
                                 List.of(new TripListResponse.MemberSummary(
                                         "채령",
@@ -155,6 +157,8 @@ class TripControllerTest {
                         .value("100"))
                 .andExpect(jsonPath("$.data.trips[0].name")
                         .value("경주 여행"))
+                .andExpect(jsonPath("$.data.trips[0].status")
+                        .value("SURVEY_IN_PROGRESS"))
                 .andExpect(jsonPath("$.data.trips[0].memberCount")
                         .value(1))
                 .andExpect(jsonPath("$.data.nextCursor")

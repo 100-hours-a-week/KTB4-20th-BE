@@ -1,5 +1,7 @@
 package com.planit.trip.dto;
 
+import com.planit.domain.TripProgressStatus;
+
 import java.time.LocalDate;
 import java.util.List;
 
@@ -12,6 +14,7 @@ public record TripListResponse(
             String tripId,
             String name,
             LocalDate startDate,
+            TripProgressStatus status,
             int memberCount,
             List<MemberSummary> members
     ) {

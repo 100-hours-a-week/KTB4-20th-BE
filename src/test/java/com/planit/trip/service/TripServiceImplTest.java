@@ -7,6 +7,7 @@ import com.planit.domain.Trip;
 import com.planit.domain.TripInvitation;
 import com.planit.domain.TripMember;
 import com.planit.domain.TripMemberRole;
+import com.planit.domain.TripProgressStatus;
 import com.planit.domain.User;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
@@ -238,6 +239,49 @@ class TripServiceImplTest {
                 .containsExactly("102");
         assertThat(response.hasNext()).isFalse();
         assertThat(response.nextCursor()).isNull();
+    }
+
+    @Test
+    void returnsProgressStatusForEachTrip() {
+        LocalDate today = LocalDate.now(SEOUL_ZONE);
+        Trip surveyTrip = trip(101L, today.plusDays(1));
+        Trip scheduledTrip = trip(102L, today.plusDays(2));
+        Trip ongoingTrip = trip(103L, today);
+        Trip completedTrip = trip(104L, today.minusDays(1));
+
+        List<TripMember> memberships = List.of(
+                TripMember.createMember(surveyTrip, user),
+                TripMember.createMember(scheduledTrip, user),
+                TripMember.createMember(ongoingTrip, user),
+                TripMember.createMember(completedTrip, user)
+        );
+
+        when(tripMemberRepository.findActiveTripMemberships(
+                org.mockito.ArgumentMatchers.eq(user),
+                org.mockito.ArgumentMatchers.eq(today),
+                any()
+        )).thenReturn(memberships);
+        when(tripMemberRepository.findActiveMembersByTripIds(
+                List.of(101L, 102L, 103L, 104L)
+        )).thenReturn(memberships);
+        when(tripRepository.findIdsWithActiveConfirmedSchedule(
+                List.of(101L, 102L, 103L, 104L)
+        )).thenReturn(List.of(102L));
+
+        TripListResponse response = tripService.getTrips(
+                USER_PUBLIC_ID.toString(),
+                null,
+                4
+        );
+
+        assertThat(response.trips())
+                .extracting(TripListResponse.TripSummary::status)
+                .containsExactly(
+                        TripProgressStatus.SURVEY_IN_PROGRESS,
+                        TripProgressStatus.SCHEDULE_COMPLETED,
+                        TripProgressStatus.TRIP_IN_PROGRESS,
+                        TripProgressStatus.TRIP_COMPLETED
+                );
     }
 
     @Test

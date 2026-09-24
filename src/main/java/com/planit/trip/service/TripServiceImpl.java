@@ -26,8 +26,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -170,6 +172,9 @@ public class TripServiceImpl implements TripService {
                         .collect(Collectors.groupingBy(
                                 member -> member.getTrip().getId()
                         ));
+        Set<Long> confirmedScheduleTripIds = new HashSet<>(
+                tripRepository.findIdsWithActiveConfirmedSchedule(tripIds)
+        );
 
         List<TripListResponse.TripSummary> trips = pageMemberships.stream()
                 .map(member -> toTripSummary(
@@ -177,7 +182,11 @@ public class TripServiceImpl implements TripService {
                         membersByTripId.getOrDefault(
                                 member.getTrip().getId(),
                                 List.of()
-                        )
+                        ),
+                        confirmedScheduleTripIds.contains(
+                                member.getTrip().getId()
+                        ),
+                        referenceDate
                 ))
                 .toList();
 
@@ -220,7 +229,9 @@ public class TripServiceImpl implements TripService {
 
     private TripListResponse.TripSummary toTripSummary(
             Trip trip,
-            List<TripMember> members
+            List<TripMember> members,
+            boolean hasConfirmedSchedule,
+            LocalDate referenceDate
     ) {
         List<TripListResponse.MemberSummary> memberResponses = members.stream()
                 .map(member -> new TripListResponse.MemberSummary(
@@ -233,6 +244,11 @@ public class TripServiceImpl implements TripService {
                 trip.getId().toString(),
                 trip.getName(),
                 trip.getStartDate(),
+                TripProgressStatus.resolve(
+                        trip.getStartDate(),
+                        hasConfirmedSchedule,
+                        referenceDate
+                ),
                 memberResponses.size(),
                 memberResponses
         );
