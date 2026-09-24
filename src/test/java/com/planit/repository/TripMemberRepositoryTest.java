@@ -173,41 +173,12 @@ class TripMemberRepositoryTest {
                         referenceDate,
                         0,
                         upcomingSoon.getStartDate(),
-                        upcomingSoon.getId(),
                         PageRequest.of(0, 10)
                 );
 
         assertThat(memberships)
                 .extracting(TripMember::getTrip)
                 .containsExactly(upcomingLater, pastTrip);
-    }
-
-    @Test
-    void listsSameDateTripsAfterCursorByTripId() {
-        LocalDate referenceDate = LocalDate.of(2026, 9, 23);
-        User user = createUser();
-        LocalDate sameDate = referenceDate.plusDays(1);
-        Trip firstTrip = createTrip("경주 여행", sameDate);
-        Trip secondTrip = createTrip("부산 여행", sameDate);
-
-        tripMemberRepository.saveAll(List.of(
-                TripMember.createMember(firstTrip, user),
-                TripMember.createMember(secondTrip, user)
-        ));
-
-        List<TripMember> memberships =
-                tripMemberRepository.findActiveTripMembershipsAfter(
-                        user,
-                        referenceDate,
-                        0,
-                        sameDate,
-                        firstTrip.getId(),
-                        PageRequest.of(0, 10)
-                );
-
-        assertThat(memberships)
-                .extracting(TripMember::getTrip)
-                .containsExactly(secondTrip);
     }
 
     @Test
@@ -234,7 +205,6 @@ class TripMemberRepositoryTest {
                         referenceDate,
                         1,
                         olderTrip.getStartDate(),
-                        olderTrip.getId(),
                         PageRequest.of(0, 10)
                 );
 

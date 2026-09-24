@@ -202,8 +202,7 @@ class TripServiceImplTest {
         );
         assertThat(nextCursor).isEqualTo(new Cursor(
                 referenceDate,
-                referenceDate.plusDays(2),
-                102L
+                referenceDate.plusDays(2)
         ));
     }
 
@@ -212,8 +211,7 @@ class TripServiceImplTest {
         LocalDate referenceDate = LocalDate.now(SEOUL_ZONE);
         Cursor cursor = new Cursor(
                 referenceDate,
-                referenceDate.plusDays(1),
-                101L
+                referenceDate.plusDays(1)
         );
         Trip nextTrip = trip(102L, referenceDate.plusDays(2));
         TripMember nextMembership =
@@ -224,7 +222,6 @@ class TripServiceImplTest {
                 referenceDate,
                 0,
                 cursor.startDate(),
-                cursor.tripId(),
                 org.springframework.data.domain.PageRequest.of(0, 6)
         )).thenReturn(List.of(nextMembership));
         when(tripMemberRepository.findActiveMembersByTripIds(
