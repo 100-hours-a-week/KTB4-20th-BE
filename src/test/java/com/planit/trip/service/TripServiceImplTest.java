@@ -169,7 +169,7 @@ class TripServiceImplTest {
         TripMember extraMembership =
                 TripMember.createMember(extraTrip, user);
 
-        when(user.getUsername()).thenReturn("채령");
+        when(user.getUsername()).thenReturn("사용자A");
         when(tripMemberRepository.findActiveTripMemberships(
                 org.mockito.ArgumentMatchers.eq(user),
                 org.mockito.ArgumentMatchers.eq(referenceDate),
@@ -193,7 +193,7 @@ class TripServiceImplTest {
         assertThat(response.trips().getFirst().tripId())
                 .isEqualTo("101");
         assertThat(response.trips().getFirst().members().getFirst().userName())
-                .isEqualTo("채령");
+                .isEqualTo("사용자A");
         assertThat(response.trips().getFirst().members().getFirst()
                 .profileImageUrl())
                 .isEqualTo("https://example.com/default-profile.png");
@@ -359,11 +359,11 @@ class TripServiceImplTest {
         when(broadRegion.getCode()).thenReturn("26");
         when(broadRegion.getName()).thenReturn("부산광역시");
         when(user.getPublicId()).thenReturn(USER_PUBLIC_ID);
-        when(user.getUsername()).thenReturn("채령");
+        when(user.getUsername()).thenReturn("사용자A");
         when(memberUser.getPublicId()).thenReturn(UUID.fromString(
                 "01991f6e-7300-7b21-a3cc-1436db3df95f"
         ));
-        when(memberUser.getUsername()).thenReturn("민수");
+        when(memberUser.getUsername()).thenReturn("사용자B");
         when(tripRepository.findById(200L)).thenReturn(Optional.of(trip));
         when(tripMemberRepository.findByTripAndUserAndLeftAtIsNull(
                 trip,
@@ -384,7 +384,7 @@ class TripServiceImplTest {
         assertThat(response.myRole()).isEqualTo(TripMemberRole.HOST);
         assertThat(response.members())
                 .extracting(TripDetailResponse.Member::userName)
-                .containsExactly("채령", "민수");
+                .containsExactly("사용자A", "사용자B");
         assertThat(response.members())
                 .extracting(TripDetailResponse.Member::profileImageUrl)
                 .containsOnly("https://example.com/default-profile.png");
@@ -457,6 +457,101 @@ class TripServiceImplTest {
 
         assertError(
                 () -> tripService.getTripDetail(
+                        USER_PUBLIC_ID.toString(),
+                        200L
+                ),
+                ErrorCode.TRIP_MEMBER_REQUIRED
+        );
+    }
+
+    @Test
+    void leavesTripAsMember() {
+        Trip trip = trip(200L);
+        TripMember member = TripMember.createMember(trip, user);
+        when(tripRepository.findByIdForUpdate(200L))
+                .thenReturn(Optional.of(trip));
+        when(tripMemberRepository.findByTripAndUserAndLeftAtIsNull(
+                trip,
+                user
+        )).thenReturn(Optional.of(member));
+
+        tripService.leaveTrip(USER_PUBLIC_ID.toString(), 200L);
+
+        assertThat(member.getActiveSlot()).isEqualTo((byte) 0);
+        assertThat(member.getLeftAt()).isNotNull();
+        verify(tripRepository).findByIdForUpdate(200L);
+        verify(tripMemberRepository, never()).findActiveMembersByTrip(trip);
+    }
+
+    @Test
+    void rejectsLeavingWhenHostIsAlone() {
+        Trip trip = trip(200L);
+        TripMember host = TripMember.createHost(trip, user);
+        when(tripRepository.findByIdForUpdate(200L))
+                .thenReturn(Optional.of(trip));
+        when(tripMemberRepository.findByTripAndUserAndLeftAtIsNull(
+                trip,
+                user
+        )).thenReturn(Optional.of(host));
+        when(tripMemberRepository.findActiveMembersByTrip(trip))
+                .thenReturn(List.of(host));
+
+        assertError(
+                () -> tripService.leaveTrip(
+                        USER_PUBLIC_ID.toString(),
+                        200L
+                ),
+                ErrorCode.HOST_CANNOT_LEAVE_ALONE
+        );
+
+        assertThat(host.getActiveSlot()).isEqualTo((byte) 1);
+        assertThat(host.getLeftAt()).isNull();
+    }
+
+    @Test
+    void transfersHostRoleToFirstJoinedMember() {
+        Trip trip = trip(200L);
+        TripMember host = TripMember.createHost(trip, user);
+        TripMember nextHost = TripMember.createMember(
+                trip,
+                mock(User.class)
+        );
+        TripMember otherMember = TripMember.createMember(
+                trip,
+                mock(User.class)
+        );
+        when(tripRepository.findByIdForUpdate(200L))
+                .thenReturn(Optional.of(trip));
+        when(tripMemberRepository.findByTripAndUserAndLeftAtIsNull(
+                trip,
+                user
+        )).thenReturn(Optional.of(host));
+        when(tripMemberRepository.findActiveMembersByTrip(trip))
+                .thenReturn(List.of(host, nextHost, otherMember));
+
+        tripService.leaveTrip(USER_PUBLIC_ID.toString(), 200L);
+
+        assertThat(host.getActiveSlot()).isEqualTo((byte) 0);
+        assertThat(host.getHostSlot()).isNull();
+        assertThat(host.getLeftAt()).isNotNull();
+        assertThat(nextHost.getRole()).isEqualTo(TripMemberRole.HOST);
+        assertThat(nextHost.getHostSlot()).isEqualTo((byte) 1);
+        assertThat(otherMember.getRole()).isEqualTo(TripMemberRole.MEMBER);
+        verify(tripMemberRepository).flush();
+    }
+
+    @Test
+    void rejectsLeavingTripForNonMember() {
+        Trip trip = trip(200L);
+        when(tripRepository.findByIdForUpdate(200L))
+                .thenReturn(Optional.of(trip));
+        when(tripMemberRepository.findByTripAndUserAndLeftAtIsNull(
+                trip,
+                user
+        )).thenReturn(Optional.empty());
+
+        assertError(
+                () -> tripService.leaveTrip(
                         USER_PUBLIC_ID.toString(),
                         200L
                 ),

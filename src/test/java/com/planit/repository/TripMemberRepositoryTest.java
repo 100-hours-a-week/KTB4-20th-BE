@@ -8,6 +8,7 @@ import com.planit.domain.User;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +19,7 @@ import java.util.UUID;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
 @Transactional
@@ -335,6 +337,18 @@ class TripMemberRepositoryTest {
                 tripMemberRepository.findActiveMembersByTrip(trip);
 
         assertThat(members).containsExactly(firstMember, secondMember);
+    }
+
+    @Test
+    void preventsMultipleActiveHostsInSameTrip() {
+        Trip trip = createTrip();
+        tripMemberRepository.saveAndFlush(
+                TripMember.createHost(trip, createUser())
+        );
+
+        assertThatThrownBy(() -> tripMemberRepository.saveAndFlush(
+                TripMember.createHost(trip, createUser())
+        )).isInstanceOf(DataIntegrityViolationException.class);
     }
 
     private User createUser() {

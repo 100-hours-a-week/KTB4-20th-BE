@@ -139,13 +139,7 @@ public class TripServiceImpl implements TripService {
     ) {
         User user = findActiveUser(userPublicId);
         Trip trip = findActiveTrip(tripId);
-        TripMember currentMember = tripMemberRepository
-                .findByTripAndUserAndLeftAtIsNull(trip, user)
-                .filter(member -> member.getActiveSlot() != null
-                        && member.getActiveSlot() == 1)
-                .orElseThrow(() -> new BusinessException(
-                        ErrorCode.TRIP_MEMBER_REQUIRED
-                ));
+        TripMember currentMember = findActiveMember(trip, user);
         List<TripMember> activeMembers =
                 tripMemberRepository.findActiveMembersByTrip(trip);
 
@@ -183,6 +177,37 @@ public class TripServiceImpl implements TripService {
                         .toOffsetDateTime(),
                 members
         );
+    }
+
+    @Override
+    @Transactional
+    public void leaveTrip(
+            String userPublicId,
+            Long tripId
+    ) {
+        User user = findActiveUser(userPublicId);
+        Trip trip = findActiveTripForUpdate(tripId);
+        TripMember currentMember = findActiveMember(trip, user);
+        LocalDateTime leftAt = LocalDateTime.now(SEOUL_ZONE);
+
+        if (currentMember.getRole() == TripMemberRole.HOST) {
+            TripMember nextHost = tripMemberRepository
+                    .findActiveMembersByTrip(trip)
+                    .stream()
+                    .filter(member -> member.getRole()
+                            == TripMemberRole.MEMBER)
+                    .findFirst()
+                    .orElseThrow(() -> new BusinessException(
+                            ErrorCode.HOST_CANNOT_LEAVE_ALONE
+                    ));
+
+            currentMember.leave(leftAt);
+            tripMemberRepository.flush();
+            nextHost.promoteToHost();
+            return;
+        }
+
+        currentMember.leave(leftAt);
     }
 
     @Override
@@ -327,6 +352,27 @@ public class TripServiceImpl implements TripService {
 
     private Trip findActiveTrip(Long tripId) {
         Trip trip = tripRepository.findById(tripId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.TRIP_NOT_FOUND
+                ));
+        if (trip.getDeletedAt() != null) {
+            throw new BusinessException(ErrorCode.TRIP_NOT_FOUND);
+        }
+        return trip;
+    }
+
+    private TripMember findActiveMember(Trip trip, User user) {
+        return tripMemberRepository
+                .findByTripAndUserAndLeftAtIsNull(trip, user)
+                .filter(member -> member.getActiveSlot() != null
+                        && member.getActiveSlot() == 1)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.TRIP_MEMBER_REQUIRED
+                ));
+    }
+
+    private Trip findActiveTripForUpdate(Long tripId) {
+        Trip trip = tripRepository.findByIdForUpdate(tripId)
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.TRIP_NOT_FOUND
                 ));

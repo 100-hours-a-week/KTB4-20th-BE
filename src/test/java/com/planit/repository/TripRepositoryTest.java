@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class TripRepositoryTest {
 
     @Test
-    void locksTripForJoiningMember() throws NoSuchMethodException {
+    void locksTripForMembershipChanges() throws NoSuchMethodException {
         Method method = TripRepository.class.getMethod(
                 "findByIdForUpdate",
                 Long.class
