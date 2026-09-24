@@ -5,6 +5,7 @@ import com.planit.trip.dto.TripCreateResponse;
 import com.planit.trip.dto.TripDetailResponse;
 import com.planit.trip.dto.TripJoinRequest;
 import com.planit.trip.dto.TripJoinResponse;
+import com.planit.trip.dto.TripListResponse;
 
 public interface TripService {
 
@@ -16,6 +17,12 @@ public interface TripService {
     TripJoinResponse joinTrip(
             String userPublicId,
             TripJoinRequest request
+    );
+
+    TripListResponse getTrips(
+            String userPublicId,
+            String cursor,
+            int size
     );
 
     TripDetailResponse getTripDetail(

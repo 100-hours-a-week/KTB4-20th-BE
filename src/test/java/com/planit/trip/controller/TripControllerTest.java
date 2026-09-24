@@ -1,16 +1,19 @@
 package com.planit.trip.controller;
 
 import com.planit.domain.TripMemberRole;
+import com.planit.domain.TripProgressStatus;
 import com.planit.global.error.GlobalExceptionHandler;
 import com.planit.trip.dto.TripCreateRequest;
 import com.planit.trip.dto.TripCreateResponse;
 import com.planit.trip.dto.TripDetailResponse;
 import com.planit.trip.dto.TripJoinRequest;
 import com.planit.trip.dto.TripJoinResponse;
+import com.planit.trip.dto.TripListResponse;
 import com.planit.trip.service.TripService;
+import java.util.stream.Stream;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.stream.Stream;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,8 +31,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -122,6 +125,53 @@ class TripControllerTest {
     }
 
     @Test
+    void getsParticipatingTrips() throws Exception {
+        String cursor = "next-cursor";
+        when(tripService.getTrips(USER_PUBLIC_ID, cursor, 5))
+                .thenReturn(new TripListResponse(
+                        List.of(new TripListResponse.TripSummary(
+                                "100",
+                                "경주 여행",
+                                LocalDate.of(2026, 9, 26),
+                                TripProgressStatus.SURVEY_IN_PROGRESS,
+                                1,
+                                List.of(new TripListResponse.MemberSummary(
+                                        "채령",
+                                        "https://example.com/profile.png"
+                                ))
+                        )),
+                        "following-cursor",
+                        true
+                ));
+
+        mockMvc.perform(get("/api/trips")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        ))
+                        .queryParam("cursor", cursor)
+                        .queryParam("size", "5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code")
+                        .value("TRIP_LIST_RETRIEVED"))
+                .andExpect(jsonPath("$.message")
+                        .value("참여 중인 여행방 목록을 조회했습니다."))
+                .andExpect(jsonPath("$.data.trips[0].tripId")
+                        .value("100"))
+                .andExpect(jsonPath("$.data.trips[0].name")
+                        .value("경주 여행"))
+                .andExpect(jsonPath("$.data.trips[0].status")
+                        .value("SURVEY_IN_PROGRESS"))
+                .andExpect(jsonPath("$.data.trips[0].memberCount")
+                        .value(1))
+                .andExpect(jsonPath("$.data.nextCursor")
+                        .value("following-cursor"))
+                .andExpect(jsonPath("$.data.hasNext").value(true));
+
+        verify(tripService).getTrips(USER_PUBLIC_ID, cursor, 5);
+    }
+
+    @Test
     void getsTripDetail() throws Exception {
         when(tripService.getTripDetail(USER_PUBLIC_ID, 1001L))
                 .thenReturn(new TripDetailResponse(
@@ -134,8 +184,8 @@ class TripControllerTest {
                                 "26350",
                                 "해운대구"
                         ),
-                        java.time.LocalDate.of(2026, 9, 12),
-                        java.time.LocalDate.of(2026, 9, 14),
+                        LocalDate.of(2026, 9, 12),
+                        LocalDate.of(2026, 9, 14),
                         4,
                         2,
                         TripMemberRole.HOST,
