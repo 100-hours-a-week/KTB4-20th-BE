@@ -5,14 +5,17 @@ import com.planit.trip.dto.TripCreateRequest;
 import com.planit.trip.dto.TripCreateResponse;
 import com.planit.trip.dto.TripJoinRequest;
 import com.planit.trip.dto.TripJoinResponse;
+import com.planit.trip.dto.TripListResponse;
 import com.planit.trip.service.TripService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -25,6 +28,8 @@ public class TripController {
     private static final String SUCCESS_MESSAGE = "여행방을 생성했습니다.";
     private static final String JOIN_SUCCESS_CODE = "TRIP_JOINED";
     private static final String JOIN_SUCCESS_MESSAGE = "여행방에 참여했습니다.";
+    private static final String LIST_SUCCESS_CODE = "TRIP_LIST_RETRIEVED";
+    private static final String LIST_SUCCESS_MESSAGE = "참여 중인 여행방 목록을 조회했습니다.";
 
     private final TripService tripService;
 
@@ -59,6 +64,25 @@ public class TripController {
         return ApiResponse.success(
                 JOIN_SUCCESS_CODE,
                 JOIN_SUCCESS_MESSAGE,
+                response
+        );
+    }
+
+    @GetMapping
+    public ApiResponse<TripListResponse> getTrips(
+            Authentication authentication,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        TripListResponse response = tripService.getTrips(
+                authentication.getName(),
+                cursor,
+                size
+        );
+
+        return ApiResponse.success(
+                LIST_SUCCESS_CODE,
+                LIST_SUCCESS_MESSAGE,
                 response
         );
     }
