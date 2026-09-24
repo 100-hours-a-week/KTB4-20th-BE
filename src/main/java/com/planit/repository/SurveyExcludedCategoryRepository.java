@@ -12,5 +12,8 @@ public interface SurveyExcludedCategoryRepository
     List<SurveyExcludedCategory>
     findBySurveyOrderByExclusionCategoryIdAsc(Survey survey);
 
+    List<SurveyExcludedCategory>
+    findBySurveyInOrderByExclusionCategoryIdAsc(List<Survey> surveys);
+
     void deleteBySurvey(Survey survey);
 }
