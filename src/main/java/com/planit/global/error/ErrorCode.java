@@ -43,6 +43,7 @@ public enum ErrorCode {
     SCHEDULE_GENERATION_NOT_READY(HttpStatus.CONFLICT, "일정을 생성할 수 있는 설문 상태가 아닙니다."),
     UNSUPPORTED_TRIP_REGION(HttpStatus.CONFLICT, "AI 일정 생성을 지원하지 않는 여행 지역입니다."),
     AI_SCHEDULE_GENERATION_FAILED(HttpStatus.SERVICE_UNAVAILABLE, "AI 일정 생성에 실패했습니다."),
+    REGION_CATALOG_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "여행 지역 목록을 사용할 수 없습니다."),
     CHAT_POLICY_VERSION_NOT_ACTIVE(HttpStatus.CONFLICT, "현재 활성 채팅 운영 정책이 아닙니다."),
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "예상하지 못한 서버 오류가 발생했습니다."),
     SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "서비스를 일시적으로 사용할 수 없습니다."),
