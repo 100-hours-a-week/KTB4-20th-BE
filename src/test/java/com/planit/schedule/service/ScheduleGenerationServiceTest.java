@@ -22,6 +22,7 @@ import com.planit.repository.TripMemberRepository;
 import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
 import com.planit.schedule.dto.SchedulePlaceSelectionResponse;
+import com.planit.schedule.ai.AiRecommendedPlaceMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -56,6 +57,8 @@ class ScheduleGenerationServiceTest {
     private SurveyAnswerRepository surveyAnswerRepository;
     private SurveyExcludedCategoryRepository excludedCategoryRepository;
     private AiTripClient aiTripClient;
+    private AiRecommendedPlaceMapper recommendedPlaceMapper;
+    private SchedulePersistenceService schedulePersistenceService;
     private ScheduleGenerationServiceImpl service;
     private User user;
     private Trip trip;
@@ -73,6 +76,8 @@ class ScheduleGenerationServiceTest {
                 SurveyExcludedCategoryRepository.class
         );
         aiTripClient = mock(AiTripClient.class);
+        recommendedPlaceMapper = mock(AiRecommendedPlaceMapper.class);
+        schedulePersistenceService = mock(SchedulePersistenceService.class);
         service = new ScheduleGenerationServiceImpl(
                 userRepository,
                 tripRepository,
@@ -80,7 +85,9 @@ class ScheduleGenerationServiceTest {
                 surveyRepository,
                 surveyAnswerRepository,
                 excludedCategoryRepository,
-                aiTripClient
+                aiTripClient,
+                recommendedPlaceMapper,
+                schedulePersistenceService
         );
 
         user = mock(User.class);
@@ -156,7 +163,11 @@ class ScheduleGenerationServiceTest {
         assertThat(request.members().getFirst().dealBreakers())
                 .containsExactly("해산물");
         assertThat(response.tripId()).isEqualTo("100");
-        assertThat(response.places()).hasSize(1);
+        assertThat(response.places()).hasSize(6);
+        verify(schedulePersistenceService).save(
+                org.mockito.ArgumentMatchers.eq(TRIP_ID),
+                any()
+        );
     }
 
     @Test
@@ -320,27 +331,29 @@ class ScheduleGenerationServiceTest {
     }
 
     private AiPlaceSelectionResponse aiResponse() {
+        List<AiPlaceSelectionResponse.Place> places = new ArrayList<>();
+        for (int index = 1; index <= 6; index++) {
+            places.add(new AiPlaceSelectionResponse.Place(
+                    "google-place-" + index,
+                    new AiPlaceSelectionResponse.DisplayName(
+                            "장소 " + index,
+                            "ko"
+                    ),
+                    new AiPlaceSelectionResponse.Location(
+                            37.5796 + index * 0.001,
+                            126.9770 + index * 0.001
+                    ),
+                    List.of("historical_landmark", "museum"),
+                    4.6,
+                    4820,
+                    null,
+                    List.of("user_id_1", "user_id_3"),
+                    List.of("HISTORY_CULTURE")
+            ));
+        }
         return new AiPlaceSelectionResponse(
                 200,
-                new AiPlaceSelectionResponse.Data(List.of(
-                        new AiPlaceSelectionResponse.Place(
-                                "google-place-1",
-                                new AiPlaceSelectionResponse.DisplayName(
-                                        "경복궁",
-                                        "ko"
-                                ),
-                                new AiPlaceSelectionResponse.Location(
-                                        37.5796,
-                                        126.9770
-                                ),
-                                List.of("historical_landmark", "museum"),
-                                4.6,
-                                4820,
-                                null,
-                                List.of("user_id_1", "user_id_3"),
-                                List.of("HISTORY_CULTURE")
-                        )
-                ))
+                new AiPlaceSelectionResponse.Data(places)
         );
     }
 }

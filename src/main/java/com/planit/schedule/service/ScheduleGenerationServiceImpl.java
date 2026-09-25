@@ -18,6 +18,8 @@ import com.planit.repository.TripMemberRepository;
 import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
 import com.planit.schedule.dto.SchedulePlaceSelectionResponse;
+import com.planit.schedule.ai.AiRecommendedPlaceMapper;
+import com.planit.schedule.route.RouteCalculationException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,9 +44,11 @@ public class ScheduleGenerationServiceImpl
     private final SurveyAnswerRepository surveyAnswerRepository;
     private final SurveyExcludedCategoryRepository excludedCategoryRepository;
     private final AiTripClient aiTripClient;
+    private final AiRecommendedPlaceMapper recommendedPlaceMapper;
+    private final SchedulePersistenceService schedulePersistenceService;
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public SchedulePlaceSelectionResponse generate(
             String userPublicId,
             Long tripId
@@ -81,6 +85,18 @@ public class ScheduleGenerationServiceImpl
         if (!isValidResponse(response)) {
             throw new BusinessException(
                     ErrorCode.AI_SCHEDULE_GENERATION_FAILED
+            );
+        }
+
+        try {
+            schedulePersistenceService.save(
+                    tripId,
+                    recommendedPlaceMapper.map(response)
+            );
+        } catch (RouteCalculationException exception) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_AI_PLACE_RESULT,
+                    exception
             );
         }
 
@@ -128,7 +144,7 @@ public class ScheduleGenerationServiceImpl
         return response.statusCode() == 200
                 && response.data() != null
                 && response.data().places() != null
-                && !response.data().places().isEmpty()
+                && response.data().places().size() == 6
                 && response.data().places().stream()
                 .allMatch(this::isValidPlace);
     }
