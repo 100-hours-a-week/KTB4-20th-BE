@@ -2,7 +2,7 @@ package com.planit.repository;
 
 import com.planit.domain.ImageFile;
 import com.planit.domain.PreferenceQuestion;
-import com.planit.domain.SubRegion;
+import com.planit.domain.Region;
 import com.planit.domain.Survey;
 import com.planit.domain.SurveyAnswer;
 import com.planit.domain.SurveyExcludedCategory;
@@ -33,7 +33,7 @@ class SurveySummaryRepositoryTest {
     private UserRepository userRepository;
 
     @Autowired
-    private SubRegionRepository subRegionRepository;
+    private RegionRepository regionRepository;
 
     @Autowired
     private TripRepository tripRepository;
@@ -130,10 +130,10 @@ class SurveySummaryRepositoryTest {
 
     private Trip createTrip() {
         LocalDate tripDate = LocalDate.of(2099, 9, 26);
-        SubRegion subRegion = subRegionRepository.findById(1L)
+        Region region = regionRepository.findById(1L)
                 .orElseThrow();
         return tripRepository.save(new Trip(
-                subRegion,
+                region,
                 "설문 테스트",
                 tripDate,
                 (byte) 4,

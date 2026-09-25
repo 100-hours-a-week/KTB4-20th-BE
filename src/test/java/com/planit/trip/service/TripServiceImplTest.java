@@ -2,8 +2,7 @@ package com.planit.trip.service;
 
 import com.planit.auth.token.SecureTokenGenerator;
 import com.planit.auth.token.TokenHasher;
-import com.planit.domain.BroadRegion;
-import com.planit.domain.SubRegion;
+import com.planit.domain.Region;
 import com.planit.domain.Trip;
 import com.planit.domain.TripInvitation;
 import com.planit.domain.TripMember;
@@ -13,7 +12,7 @@ import com.planit.domain.User;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
 import com.planit.image.config.ImageProperties;
-import com.planit.repository.SubRegionRepository;
+import com.planit.repository.RegionRepository;
 import com.planit.repository.TripInvitationRepository;
 import com.planit.repository.TripMemberRepository;
 import com.planit.repository.TripRepository;
@@ -59,7 +58,7 @@ class TripServiceImplTest {
     private static final String INVITATION_TOKEN_HASH = "token-hash";
 
     private UserRepository userRepository;
-    private SubRegionRepository subRegionRepository;
+    private RegionRepository regionRepository;
     private TripRepository tripRepository;
     private TripMemberRepository tripMemberRepository;
     private TripInvitationRepository tripInvitationRepository;
@@ -68,12 +67,12 @@ class TripServiceImplTest {
     private TripListCursorCodec tripListCursorCodec;
     private TripServiceImpl tripService;
     private User user;
-    private SubRegion subRegion;
+    private Region region;
 
     @BeforeEach
     void setUp() {
         userRepository = mock(UserRepository.class);
-        subRegionRepository = mock(SubRegionRepository.class);
+        regionRepository = mock(RegionRepository.class);
         tripRepository = mock(TripRepository.class);
         tripMemberRepository = mock(TripMemberRepository.class);
         tripInvitationRepository = mock(TripInvitationRepository.class);
@@ -82,7 +81,7 @@ class TripServiceImplTest {
         tripListCursorCodec = new TripListCursorCodec();
         tripService = new TripServiceImpl(
                 userRepository,
-                subRegionRepository,
+                regionRepository,
                 tripRepository,
                 tripMemberRepository,
                 tripInvitationRepository,
@@ -95,12 +94,12 @@ class TripServiceImplTest {
         );
 
         user = mock(User.class);
-        subRegion = mock(SubRegion.class);
+        region = mock(Region.class);
 
         when(userRepository.findByPublicIdAndDeletedAtIsNull(USER_PUBLIC_ID))
                 .thenReturn(Optional.of(user));
-        when(subRegionRepository.findById(1L))
-                .thenReturn(Optional.of(subRegion));
+        when(regionRepository.findById(1L))
+                .thenReturn(Optional.of(region));
         when(tripRepository.save(any(Trip.class)))
                 .thenAnswer(invocation -> {
                     Trip trip = invocation.getArgument(0);
@@ -161,17 +160,14 @@ class TripServiceImplTest {
     void retrievesInvitationPreview() {
         Trip trip = trip(1001L);
         Trip conflictingTrip = trip(1002L, trip.getStartDate());
-        BroadRegion broadRegion = mock(BroadRegion.class);
         TripMember host = TripMember.createHost(trip, user);
         User memberUser = mock(User.class);
         TripMember member = TripMember.createMember(trip, memberUser);
         TripMember conflictingMembership =
                 TripMember.createMember(conflictingTrip, user);
 
-        when(subRegion.getId()).thenReturn(123L);
-        when(subRegion.getName()).thenReturn("해운대구");
-        when(subRegion.getBroadRegion()).thenReturn(broadRegion);
-        when(broadRegion.getName()).thenReturn("부산광역시");
+        when(region.getId()).thenReturn(3L);
+        when(region.getName()).thenReturn("부산");
         when(user.getPublicId()).thenReturn(USER_PUBLIC_ID);
         when(user.getUsername()).thenReturn("플랜잇방장");
         when(memberUser.getUsername()).thenReturn("플랜잇멤버");
@@ -201,10 +197,8 @@ class TripServiceImplTest {
                 );
 
         assertThat(response.trip().tripId()).isEqualTo("1001");
-        assertThat(response.trip().region().broadRegionName())
-                .isEqualTo("부산광역시");
-        assertThat(response.trip().region().subRegionName())
-                .isEqualTo("해운대구");
+        assertThat(response.trip().region().regionName())
+                .isEqualTo("부산");
         assertThat(response.trip().memberCount()).isEqualTo(2);
         assertThat(response.inviter().publicId())
                 .isEqualTo(USER_PUBLIC_ID);
@@ -518,17 +512,13 @@ class TripServiceImplTest {
     @Test
     void returnsTripDetailWithActiveMembers() {
         Trip trip = trip(200L);
-        BroadRegion broadRegion = mock(BroadRegion.class);
         User memberUser = mock(User.class);
         TripMember host = TripMember.createHost(trip, user);
         TripMember member = TripMember.createMember(trip, memberUser);
 
-        when(subRegion.getId()).thenReturn(123L);
-        when(subRegion.getCode()).thenReturn("26350");
-        when(subRegion.getName()).thenReturn("해운대구");
-        when(subRegion.getBroadRegion()).thenReturn(broadRegion);
-        when(broadRegion.getCode()).thenReturn("26");
-        when(broadRegion.getName()).thenReturn("부산광역시");
+        when(region.getId()).thenReturn(3L);
+        when(region.getCode()).thenReturn("REGION-BUSAN");
+        when(region.getName()).thenReturn("부산");
         when(user.getPublicId()).thenReturn(USER_PUBLIC_ID);
         when(user.getUsername()).thenReturn("사용자A");
         when(memberUser.getPublicId()).thenReturn(UUID.fromString(
@@ -549,8 +539,8 @@ class TripServiceImplTest {
         );
 
         assertThat(response.tripId()).isEqualTo("200");
-        assertThat(response.region().broadRegionName())
-                .isEqualTo("부산광역시");
+        assertThat(response.region().regionName())
+                .isEqualTo("부산");
         assertThat(response.memberCount()).isEqualTo(2);
         assertThat(response.myRole()).isEqualTo(TripMemberRole.HOST);
         assertThat(response.members())
@@ -921,8 +911,8 @@ class TripServiceImplTest {
     }
 
     @Test
-    void rejectsMissingSubRegion() {
-        when(subRegionRepository.findById(1L)).thenReturn(Optional.empty());
+    void rejectsMissingRegion() {
+        when(regionRepository.findById(1L)).thenReturn(Optional.empty());
 
         assertError(
                 () -> tripService.createTrip(
@@ -974,7 +964,7 @@ class TripServiceImplTest {
 
     private Trip trip(Long id, LocalDate startDate) {
         Trip trip = new Trip(
-                subRegion,
+                region,
                 "제주 여행",
                 startDate,
                 (byte) 4,

@@ -26,10 +26,8 @@ public record TripDetailResponse(
 
     public record Region(
             String regionId,
-            String broadRegionCode,
-            String broadRegionName,
-            String subRegionCode,
-            String subRegionName
+            String regionCode,
+            String regionName
     ) {
     }
 

@@ -3,8 +3,7 @@ package com.planit.schedule.service;
 import com.planit.ai.AiPlaceSelectionRequest;
 import com.planit.ai.AiPlaceSelectionResponse;
 import com.planit.ai.AiTripClient;
-import com.planit.domain.BroadRegion;
-import com.planit.domain.SubRegion;
+import com.planit.domain.Region;
 import com.planit.domain.Survey;
 import com.planit.domain.SurveyAnswer;
 import com.planit.domain.SurveyExcludedCategory;
@@ -94,8 +93,7 @@ class ScheduleGenerationServiceTest {
         trip = mock(Trip.class);
         host = mock(TripMember.class);
         hostSurvey = mock(Survey.class);
-        SubRegion region = mock(SubRegion.class);
-        BroadRegion broadRegion = mock(BroadRegion.class);
+        Region region = mock(Region.class);
 
         when(user.getPublicId()).thenReturn(USER_ID);
         when(userRepository.findByPublicIdAndDeletedAtIsNull(USER_ID))
@@ -106,9 +104,8 @@ class ScheduleGenerationServiceTest {
         when(trip.getStartDate()).thenReturn(LocalDate.of(2026, 10, 1));
         when(trip.getSurveyDeadlineAt())
                 .thenReturn(LocalDateTime.now().plusDays(1));
-        when(trip.getSubRegion()).thenReturn(region);
-        when(region.getBroadRegion()).thenReturn(broadRegion);
-        when(broadRegion.getCode()).thenReturn("BR-SEOUL");
+        when(trip.getRegion()).thenReturn(region);
+        when(region.getCode()).thenReturn("REGION-SEOUL");
         when(host.getRole()).thenReturn(TripMemberRole.HOST);
         when(host.getActiveSlot()).thenReturn((byte) 1);
         when(host.getUser()).thenReturn(user);
@@ -235,9 +232,7 @@ class ScheduleGenerationServiceTest {
 
     @Test
     void rejectsUnsupportedRegion() {
-        when(trip.getSubRegion().getBroadRegion().getCode())
-                .thenReturn("BR-DAEGU");
-        when(trip.getSubRegion().getName()).thenReturn("중구");
+        when(trip.getRegion().getCode()).thenReturn("REGION-DAEGU");
 
         assertError(ErrorCode.UNSUPPORTED_TRIP_REGION);
 

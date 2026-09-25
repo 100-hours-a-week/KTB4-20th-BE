@@ -3,7 +3,7 @@ package com.planit.schedule.service;
 import com.planit.ai.AiPlaceSelectionRequest;
 import com.planit.ai.AiPlaceSelectionResponse;
 import com.planit.ai.AiTripClient;
-import com.planit.domain.SubRegion;
+import com.planit.domain.Region;
 import com.planit.domain.Survey;
 import com.planit.domain.Trip;
 import com.planit.domain.TripMember;
@@ -64,7 +64,7 @@ public class ScheduleGenerationServiceImpl
         validateSurveyState(trip, host, activeMembers, submittedSurveys);
 
         AiPlaceSelectionRequest request = new AiPlaceSelectionRequest(
-                resolveAiRegion(trip.getSubRegion()),
+                resolveAiRegion(trip.getRegion()),
                 trip.getStartDate(),
                 trip.getStartDate(),
                 submittedSurveys.stream()
@@ -187,18 +187,16 @@ public class ScheduleGenerationServiceImpl
         }
     }
 
-    private String resolveAiRegion(SubRegion region) {
-        return switch (region.getBroadRegion().getCode()) {
-            case "BR-SEOUL" -> "서울";
-            case "BR-BUSAN" -> "부산";
-            case "BR-JEJU" -> "제주";
-            default -> switch (region.getName()) {
-                case "경주시" -> "경주";
-                case "전주시" -> "전주";
-                default -> throw new BusinessException(
-                        ErrorCode.UNSUPPORTED_TRIP_REGION
-                );
-            };
+    private String resolveAiRegion(Region region) {
+        return switch (region.getCode()) {
+            case "REGION-SEOUL" -> "서울";
+            case "REGION-GYEONGJU" -> "경주";
+            case "REGION-BUSAN" -> "부산";
+            case "REGION-JEONJU" -> "전주";
+            case "REGION-JEJU" -> "제주";
+            default -> throw new BusinessException(
+                    ErrorCode.UNSUPPORTED_TRIP_REGION
+            );
         };
     }
 

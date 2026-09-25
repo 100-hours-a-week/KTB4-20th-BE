@@ -24,7 +24,7 @@ public interface RegionalChatRoomRepository extends JpaRepository<RegionalChatRo
                        WHERE trip_member.user_id = :userId
                          AND trip_member.left_at IS NULL
                          AND trip.deleted_at IS NULL
-                         AND trip.sub_region_id = room.region_id
+                         AND trip.region_id = room.region_id
                          AND :today BETWEEN trip.start_date AND trip.end_date
                    ) AS relatedToMyTripValue,
                    EXISTS (

@@ -82,7 +82,7 @@ public class SchedulePersistenceService {
             for (RecommendedPlace recommendation : recommendations) {
                 Place place = placeRepository
                         .findByRegion_IdAndGooglePlaceId(
-                                trip.getSubRegion().getId(),
+                                trip.getRegion().getId(),
                                 recommendation.googlePlaceId()
                         )
                         .map(existing -> {
@@ -90,7 +90,7 @@ public class SchedulePersistenceService {
                             return existing;
                         })
                         .orElseGet(() -> placeRepository.save(
-                                new Place(trip.getSubRegion(), recommendation, now)
+                                new Place(trip.getRegion(), recommendation, now)
                         ));
                 recommendationByPlaceId.put(place.getId(), recommendation);
                 routePlaces.add(new RoutePlace(

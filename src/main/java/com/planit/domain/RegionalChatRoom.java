@@ -17,7 +17,7 @@ public class RegionalChatRoom {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "region_id", nullable = false)
-    private SubRegion region;
+    private Region region;
 
     @Column(name = "name", nullable = false, length = 30)
     private String name;
@@ -29,7 +29,7 @@ public class RegionalChatRoom {
         return id;
     }
 
-    public SubRegion getRegion() {
+    public Region getRegion() {
         return region;
     }
 
