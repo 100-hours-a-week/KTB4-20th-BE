@@ -32,11 +32,10 @@ public class RegionalChatRoomController {
 
     @GetMapping
     public ApiResponse<RegionalChatRoomListResponse> getRegionalChatRooms(
-            Authentication authentication,
-            @RequestParam(required = false) String cursor
+            Authentication authentication
     ) {
         RegionalChatRoomListResponse response = regionalChatRoomListService
-                .getRegionalChatRooms(authentication.getName(), cursor);
+                .getRegionalChatRooms(authentication.getName());
         return ApiResponse.success(SUCCESS_CODE, SUCCESS_MESSAGE, response);
     }
 

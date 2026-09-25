@@ -4,5 +4,5 @@ import com.planit.chat.dto.RegionalChatRoomListResponse;
 
 public interface RegionalChatRoomListService {
 
-    RegionalChatRoomListResponse getRegionalChatRooms(String userPublicId, String cursor);
+    RegionalChatRoomListResponse getRegionalChatRooms(String userPublicId);
 }
