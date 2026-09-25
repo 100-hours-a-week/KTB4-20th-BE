@@ -20,10 +20,9 @@ class RegionServiceTest {
     @Test
     void returnsRegionsInRepositoryOrder() {
         RegionRepository repository = mock(RegionRepository.class);
-        when(repository.findAllByOrderByIdAsc()).thenReturn(List.of(
-                region(1L, "REGION-SEOUL", "서울", "37.566500", "126.978000"),
-                region(2L, "REGION-GYEONGJU", "경주", "35.856200", "129.224700")
-        ));
+        Region seoul = region(1L, "REGION-SEOUL", "서울", "37.566500", "126.978000");
+        Region gyeongju = region(2L, "REGION-GYEONGJU", "경주", "35.856200", "129.224700");
+        when(repository.findAllByOrderByIdAsc()).thenReturn(List.of(seoul, gyeongju));
         RegionService service = new RegionService(repository);
 
         RegionListResponse response = service.getRegions();
