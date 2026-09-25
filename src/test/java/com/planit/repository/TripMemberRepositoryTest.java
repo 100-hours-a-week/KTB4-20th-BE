@@ -59,6 +59,35 @@ class TripMemberRepositoryTest {
     }
 
     @Test
+    void findsOverlappingTripExceptInvitationTrip() {
+        User user = createUser();
+        Trip invitationTrip = createTrip("부산 여행", TRIP_DATE);
+        Trip overlappingTrip = createTrip("경주 여행", TRIP_DATE);
+        Trip differentDateTrip = createTrip(
+                "제주 여행",
+                TRIP_DATE.plusDays(1)
+        );
+        TripMember overlappingMembership =
+                TripMember.createMember(overlappingTrip, user);
+
+        tripMemberRepository.saveAll(List.of(
+                TripMember.createMember(invitationTrip, user),
+                overlappingMembership,
+                TripMember.createMember(differentDateTrip, user)
+        ));
+
+        List<TripMember> result =
+                tripMemberRepository.findActiveTripsOverlappingExcept(
+                        user,
+                        TRIP_DATE,
+                        TRIP_DATE,
+                        invitationTrip.getId()
+                );
+
+        assertThat(result).containsExactly(overlappingMembership);
+    }
+
+    @Test
     void excludesMembershipThatUserLeft() {
         User user = createUser();
         Trip trip = createTrip();

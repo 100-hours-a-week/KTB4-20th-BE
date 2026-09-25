@@ -23,6 +23,7 @@ import com.planit.trip.dto.TripCreateResponse;
 import com.planit.trip.dto.TripDetailResponse;
 import com.planit.trip.dto.TripJoinRequest;
 import com.planit.trip.dto.TripJoinResponse;
+import com.planit.trip.dto.TripInvitationPreviewResponse;
 import com.planit.trip.dto.TripListResponse;
 import com.planit.trip.pagination.TripListCursorCodec;
 import com.planit.trip.pagination.TripListCursorCodec.Cursor;
@@ -32,6 +33,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.net.URI;
 import java.util.List;
@@ -153,6 +155,175 @@ class TripServiceImplTest {
                 .isEqualTo(INVITATION_TOKEN_HASH);
         assertThat(response.invitationToken())
                 .isEqualTo(INVITATION_TOKEN);
+    }
+
+    @Test
+    void retrievesInvitationPreview() {
+        Trip trip = trip(1001L);
+        Trip conflictingTrip = trip(1002L, trip.getStartDate());
+        BroadRegion broadRegion = mock(BroadRegion.class);
+        TripMember host = TripMember.createHost(trip, user);
+        User memberUser = mock(User.class);
+        TripMember member = TripMember.createMember(trip, memberUser);
+        TripMember conflictingMembership =
+                TripMember.createMember(conflictingTrip, user);
+
+        when(subRegion.getId()).thenReturn(123L);
+        when(subRegion.getName()).thenReturn("해운대구");
+        when(subRegion.getBroadRegion()).thenReturn(broadRegion);
+        when(broadRegion.getName()).thenReturn("부산광역시");
+        when(user.getPublicId()).thenReturn(USER_PUBLIC_ID);
+        when(user.getUsername()).thenReturn("플랜잇방장");
+        when(memberUser.getUsername()).thenReturn("플랜잇멤버");
+        when(tripInvitationRepository.findByTokenHash(
+                INVITATION_TOKEN_HASH
+        )).thenReturn(Optional.of(new TripInvitation(
+                trip,
+                INVITATION_TOKEN_HASH
+        )));
+        when(tripMemberRepository.findActiveMembersByTrip(trip))
+                .thenReturn(List.of(host, member));
+        when(tripMemberRepository.existsByTripAndUserAndLeftAtIsNull(
+                trip,
+                user
+        )).thenReturn(true);
+        when(tripMemberRepository.findActiveTripsOverlappingExcept(
+                user,
+                trip.getStartDate(),
+                trip.getEndDate(),
+                trip.getId()
+        )).thenReturn(List.of(conflictingMembership));
+
+        TripInvitationPreviewResponse response =
+                tripService.getInvitationPreview(
+                        USER_PUBLIC_ID.toString(),
+                        INVITATION_TOKEN
+                );
+
+        assertThat(response.trip().tripId()).isEqualTo("1001");
+        assertThat(response.trip().region().broadRegionName())
+                .isEqualTo("부산광역시");
+        assertThat(response.trip().region().subRegionName())
+                .isEqualTo("해운대구");
+        assertThat(response.trip().memberCount()).isEqualTo(2);
+        assertThat(response.inviter().publicId())
+                .isEqualTo(USER_PUBLIC_ID);
+        assertThat(response.inviter().userName())
+                .isEqualTo("플랜잇방장");
+        assertThat(response.members())
+                .extracting(TripInvitationPreviewResponse.Member::userName)
+                .containsExactly("플랜잇방장", "플랜잇멤버");
+        assertThat(response.alreadyJoined()).isTrue();
+        assertThat(response.conflictingTrip().tripId())
+                .isEqualTo("1002");
+    }
+
+    @Test
+    void rejectsUnknownInvitation() {
+        when(tripInvitationRepository.findByTokenHash(
+                INVITATION_TOKEN_HASH
+        )).thenReturn(Optional.empty());
+
+        assertError(
+                () -> tripService.getInvitationPreview(
+                        null,
+                        INVITATION_TOKEN
+                ),
+                ErrorCode.INVITATION_NOT_FOUND
+        );
+
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    void requiresAuthenticationAfterValidInvitationCheck() {
+        Trip trip = trip(1001L);
+        when(tripInvitationRepository.findByTokenHash(
+                INVITATION_TOKEN_HASH
+        )).thenReturn(Optional.of(new TripInvitation(
+                trip,
+                INVITATION_TOKEN_HASH
+        )));
+
+        assertError(
+                () -> tripService.getInvitationPreview(
+                        null,
+                        INVITATION_TOKEN
+                ),
+                ErrorCode.AUTHENTICATION_REQUIRED
+        );
+
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    void rejectsPreviewForDeletedTrip() {
+        Trip trip = trip(1001L);
+        ReflectionTestUtils.setField(
+                trip,
+                "deletedAt",
+                LocalDateTime.now(SEOUL_ZONE)
+        );
+        when(tripInvitationRepository.findByTokenHash(
+                INVITATION_TOKEN_HASH
+        )).thenReturn(Optional.of(new TripInvitation(
+                trip,
+                INVITATION_TOKEN_HASH
+        )));
+
+        assertError(
+                () -> tripService.getInvitationPreview(
+                        null,
+                        INVITATION_TOKEN
+                ),
+                ErrorCode.INVITATION_TRIP_DELETED
+        );
+    }
+
+    @Test
+    void rejectsExpiredInvitation() {
+        Trip trip = trip(
+                1001L,
+                LocalDate.now(SEOUL_ZONE).minusDays(1)
+        );
+        when(tripInvitationRepository.findByTokenHash(
+                INVITATION_TOKEN_HASH
+        )).thenReturn(Optional.of(new TripInvitation(
+                trip,
+                INVITATION_TOKEN_HASH
+        )));
+
+        assertError(
+                () -> tripService.getInvitationPreview(
+                        null,
+                        INVITATION_TOKEN
+                ),
+                ErrorCode.INVITATION_EXPIRED
+        );
+    }
+
+    @Test
+    void rejectsInvitationAfterSurveyDeadline() {
+        Trip trip = trip(1001L);
+        ReflectionTestUtils.setField(
+                trip,
+                "surveyDeadlineAt",
+                LocalDateTime.now(SEOUL_ZONE).minusMinutes(1)
+        );
+        when(tripInvitationRepository.findByTokenHash(
+                INVITATION_TOKEN_HASH
+        )).thenReturn(Optional.of(new TripInvitation(
+                trip,
+                INVITATION_TOKEN_HASH
+        )));
+
+        assertError(
+                () -> tripService.getInvitationPreview(
+                        null,
+                        INVITATION_TOKEN
+                ),
+                ErrorCode.SURVEY_CLOSED
+        );
     }
 
     @Test
