@@ -4,6 +4,7 @@ import com.planit.global.security.CustomAccessDeniedHandler;
 import com.planit.global.security.CustomAuthenticationEntryPoint;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -32,6 +33,10 @@ public class SecurityConfig {
                                 SessionCreationPolicy.STATELESS
                         ))
                 .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/invitations/**"
+                        ).permitAll()
                         .requestMatchers(
                                 "/api/auth/oauth/authorize",
                                 "/api/auth/oauth/callback",

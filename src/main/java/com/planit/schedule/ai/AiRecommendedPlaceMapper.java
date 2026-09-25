@@ -1,7 +1,9 @@
 package com.planit.schedule.ai;
 
+import com.planit.ai.AiPlaceSelectionResponse;
 import com.planit.schedule.route.PlaceCategoryGroup;
 import com.planit.schedule.route.RouteCalculationException;
+import org.springframework.stereotype.Component;
 
 import java.util.HashSet;
 import java.util.List;
@@ -10,9 +12,31 @@ import java.util.Set;
 
 import static com.planit.schedule.route.RouteCalculationException.Reason.INVALID_PLACE_RESULT;
 
+@Component
 public final class AiRecommendedPlaceMapper {
 
     private static final int REQUIRED_PLACE_COUNT = 6;
+
+    public List<RecommendedPlace> map(AiPlaceSelectionResponse response) {
+        if (response == null) {
+            throw invalid("AI 추천 장소 응답은 성공 상태와 장소 6개를 포함해야 합니다.");
+        }
+        AiPlaceRecommendationResponse converted =
+                new AiPlaceRecommendationResponse(
+                        response.statusCode(),
+                        response.data() == null
+                                ? null
+                                : new AiPlaceRecommendationResponse.Data(
+                                        response.data().places() == null
+                                                ? null
+                                                : response.data().places()
+                                                .stream()
+                                                .map(this::convert)
+                                                .toList()
+                                )
+                );
+        return map(converted);
+    }
 
     public List<RecommendedPlace> map(
             AiPlaceRecommendationResponse response
@@ -75,6 +99,40 @@ public final class AiRecommendedPlaceMapper {
                 summary,
                 safeList(place.selectedFor()),
                 matchedPreferences
+        );
+    }
+
+    private AiPlaceRecommendationResponse.Place convert(
+            AiPlaceSelectionResponse.Place place
+    ) {
+        if (place == null) {
+            return null;
+        }
+        return new AiPlaceRecommendationResponse.Place(
+                place.id(),
+                place.displayName() == null
+                        ? null
+                        : new AiPlaceRecommendationResponse.DisplayName(
+                                place.displayName().text(),
+                                place.displayName().languageCode()
+                        ),
+                place.location() == null
+                        ? null
+                        : new AiPlaceRecommendationResponse.Location(
+                                place.location().latitude(),
+                                place.location().longitude()
+                        ),
+                place.types(),
+                place.rating(),
+                (long) place.userRatingCount(),
+                place.editorialSummary() == null
+                        ? null
+                        : new AiPlaceRecommendationResponse.EditorialSummary(
+                                place.editorialSummary().text(),
+                                place.editorialSummary().languageCode()
+                        ),
+                place.selectedFor(),
+                place.matchedPreferences()
         );
     }
 

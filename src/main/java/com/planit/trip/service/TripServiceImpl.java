@@ -16,6 +16,7 @@ import com.planit.trip.dto.TripCreateResponse;
 import com.planit.trip.dto.TripDetailResponse;
 import com.planit.trip.dto.TripJoinRequest;
 import com.planit.trip.dto.TripJoinResponse;
+import com.planit.trip.dto.TripInvitationPreviewResponse;
 import com.planit.trip.dto.TripListResponse;
 import com.planit.trip.pagination.TripListCursorCodec;
 import com.planit.trip.pagination.TripListCursorCodec.Cursor;
@@ -129,6 +130,102 @@ public class TripServiceImpl implements TripService {
 
         return new TripJoinResponse(
                 trip.getId().toString()
+        );
+    }
+
+    @Override
+    public TripInvitationPreviewResponse getInvitationPreview(
+            String userPublicId,
+            String invitationToken
+    ) {
+        String tokenHash = tokenHasher.sha256(invitationToken);
+        TripInvitation invitation = tripInvitationRepository
+                .findByTokenHash(tokenHash)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.INVITATION_NOT_FOUND
+                ));
+        Trip trip = invitation.getTrip();
+
+        if (trip.getDeletedAt() != null) {
+            throw new BusinessException(
+                    ErrorCode.INVITATION_TRIP_DELETED
+            );
+        }
+
+        LocalDate today = LocalDate.now(SEOUL_ZONE);
+        if (trip.getEndDate().isBefore(today)) {
+            throw new BusinessException(ErrorCode.INVITATION_EXPIRED);
+        }
+
+        LocalDateTime now = LocalDateTime.now(SEOUL_ZONE);
+        if (!trip.getSurveyDeadlineAt().isAfter(now)) {
+            throw new BusinessException(ErrorCode.SURVEY_CLOSED);
+        }
+
+        if (userPublicId == null) {
+            throw new BusinessException(
+                    ErrorCode.AUTHENTICATION_REQUIRED
+            );
+        }
+        User user = findActiveUser(userPublicId);
+
+        List<TripMember> members =
+                tripMemberRepository.findActiveMembersByTrip(trip);
+        TripMember host = members.stream()
+                .filter(member -> member.getRole() == TripMemberRole.HOST)
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.INTERNAL_SERVER_ERROR
+                ));
+        SubRegion subRegion = trip.getSubRegion();
+        List<TripInvitationPreviewResponse.Member> memberResponses =
+                members.stream()
+                        .map(member ->
+                                new TripInvitationPreviewResponse.Member(
+                                        member.getUser().getUsername(),
+                                        imageProperties.defaultProfileUrl()
+                                                .toString()
+                                ))
+                        .toList();
+        boolean alreadyJoined = tripMemberRepository
+                .existsByTripAndUserAndLeftAtIsNull(trip, user);
+        TripInvitationPreviewResponse.ConflictingTrip conflictingTrip =
+                tripMemberRepository.findActiveTripsOverlappingExcept(
+                                user,
+                                trip.getStartDate(),
+                                trip.getEndDate(),
+                                trip.getId()
+                        ).stream()
+                        .findFirst()
+                        .map(member -> new TripInvitationPreviewResponse
+                                .ConflictingTrip(
+                                        member.getTrip().getId().toString(),
+                                        member.getTrip().getName()
+                                ))
+                        .orElse(null);
+
+        return new TripInvitationPreviewResponse(
+                new TripInvitationPreviewResponse.Trip(
+                        trip.getId().toString(),
+                        trip.getName(),
+                        new TripInvitationPreviewResponse.Region(
+                                subRegion.getId().toString(),
+                                subRegion.getBroadRegion().getName(),
+                                subRegion.getName()
+                        ),
+                        trip.getStartDate(),
+                        trip.getEndDate(),
+                        members.size(),
+                        trip.getCapacity()
+                ),
+                new TripInvitationPreviewResponse.Inviter(
+                        host.getUser().getPublicId(),
+                        host.getUser().getUsername(),
+                        imageProperties.defaultProfileUrl().toString()
+                ),
+                memberResponses,
+                alreadyJoined,
+                conflictingTrip
         );
     }
 
