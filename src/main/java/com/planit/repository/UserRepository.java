@@ -2,6 +2,11 @@ package com.planit.repository;
 
 import com.planit.domain.User;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import jakarta.persistence.LockModeType;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -9,6 +14,17 @@ import java.util.UUID;
 public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByPublicIdAndDeletedAtIsNull(UUID publicId);
-
+  
     boolean existsByPublicIdAndDeletedAtIsNull(UUID publicId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            SELECT userEntity
+            FROM User userEntity
+            WHERE userEntity.publicId = :publicId
+              AND userEntity.deletedAt IS NULL
+            """)
+    Optional<User> findActiveByPublicIdForUpdate(@Param("publicId") UUID publicId);
+           
+
 }

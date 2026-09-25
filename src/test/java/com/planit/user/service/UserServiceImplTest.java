@@ -8,6 +8,7 @@ import com.planit.domain.RefreshToken;
 import com.planit.domain.User;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
+import com.planit.image.config.ImageProperties;
 import com.planit.repository.OAuthAccountRepository;
 import com.planit.repository.RefreshTokenRepository;
 import com.planit.repository.UserRepository;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClientException;
 
+import java.net.URI;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -62,7 +64,7 @@ class UserServiceImplTest {
                 oauthAccountRepository,
                 kakaoOAuthClient,
                 withdrawalTransactionService,
-                DEFAULT_PROFILE_IMAGE_URL
+                new ImageProperties(URI.create(DEFAULT_PROFILE_IMAGE_URL))
         );
     }
 
@@ -231,7 +233,7 @@ class UserServiceImplTest {
                 oauthAccountRepository,
                 kakaoOAuthClient,
                 failedTransaction,
-                DEFAULT_PROFILE_IMAGE_URL
+                new ImageProperties(URI.create(DEFAULT_PROFILE_IMAGE_URL))
         );
         when(userRepository.findByPublicIdAndDeletedAtIsNull(
                 USER_PUBLIC_ID

@@ -6,10 +6,11 @@ import com.planit.domain.OAuthProvider;
 import com.planit.domain.User;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
+import com.planit.image.config.ImageProperties;
 import com.planit.repository.OAuthAccountRepository;
 import com.planit.repository.UserRepository;
 import com.planit.user.dto.CurrentUserResponse;
-import org.springframework.beans.factory.annotation.Value;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClientException;
@@ -18,6 +19,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Service
+@RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
@@ -25,23 +27,7 @@ public class UserServiceImpl implements UserService {
     private final KakaoOAuthClient kakaoOAuthClient;
     private final WithdrawalTransactionService
             withdrawalTransactionService;
-    private final String defaultProfileImageUrl;
-
-    public UserServiceImpl(
-            UserRepository userRepository,
-            OAuthAccountRepository oauthAccountRepository,
-            KakaoOAuthClient kakaoOAuthClient,
-            WithdrawalTransactionService withdrawalTransactionService,
-            @Value("${planit.image.default-profile-url}")
-            String defaultProfileImageUrl
-    ) {
-        this.userRepository = userRepository;
-        this.oauthAccountRepository = oauthAccountRepository;
-        this.kakaoOAuthClient = kakaoOAuthClient;
-        this.withdrawalTransactionService =
-                withdrawalTransactionService;
-        this.defaultProfileImageUrl = defaultProfileImageUrl;
-    }
+    private final ImageProperties imageProperties;
 
     @Override
     @Transactional(readOnly = true)
@@ -58,7 +44,7 @@ public class UserServiceImpl implements UserService {
         return new CurrentUserResponse(
                 user.getPublicId(),
                 user.getUsername(),
-                defaultProfileImageUrl
+                imageProperties.defaultProfileUrl().toString()
         );
     }
 

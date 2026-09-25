@@ -14,4 +14,9 @@ public interface ChatPolicyConsentRepository
             User user,
             ChatPolicyVersion chatPolicyVersion
     );
+
+    boolean existsByUserAndChatPolicyVersion(
+            User user,
+            ChatPolicyVersion chatPolicyVersion
+    );
 }

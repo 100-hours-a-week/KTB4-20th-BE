@@ -19,6 +19,11 @@ spring:
     open-in-view: false
 
 planit:
+  ai:
+    base-url: ${AI_BASE_URL:http://localhost:8000}
+    internal-token: ${AI_INTERNAL_API_KEY}
+    connect-timeout: 3s
+    read-timeout: 30s
   image:
     default-profile-url: ${DEFAULT_PROFILE_IMAGE_URL:http://localhost:8080/images/default-profile.svg}
   auth:
@@ -44,3 +49,22 @@ planit:
       token-uri: https://kauth.kakao.com/oauth/token
       user-info-uri: https://kapi.kakao.com/v2/user/me
       unlink-uri: https://kapi.kakao.com/v1/user/unlink
+
+server:
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      base-path: /api
+      discovery:
+        enabled: false
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      show-components: never
+  health:
+    db:
+      enabled: true
