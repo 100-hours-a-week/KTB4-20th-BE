@@ -9,6 +9,10 @@ import com.planit.global.security.SecurityErrorResponseWriter;
 import com.planit.user.controller.UserController;
 import com.planit.user.dto.CurrentUserResponse;
 import com.planit.user.service.UserService;
+import com.planit.trip.controller.TripInvitationController;
+import com.planit.trip.service.TripService;
+import com.planit.global.error.BusinessException;
+import com.planit.global.error.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -26,6 +30,7 @@ import java.net.URI;
 import java.time.Duration;
 
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
@@ -36,7 +41,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(controllers = {
         com.planit.auth.controller.AuthController.class,
-        UserController.class
+        UserController.class,
+        TripInvitationController.class
 })
 @Import({
         SecurityConfig.class,
@@ -63,6 +69,9 @@ class SecurityConfigTest {
     private UserService userService;
 
     @MockitoBean
+    private TripService tripService;
+
+    @MockitoBean
     private JwtDecoder jwtDecoder;
 
     @Test
@@ -71,6 +80,25 @@ class SecurityConfigTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code")
                         .value("AUTHENTICATION_REQUIRED"));
+    }
+
+    @Test
+    void allowsInvitationValidationBeforeAuthentication() throws Exception {
+        String invitationToken = "a".repeat(43);
+        when(tripService.getInvitationPreview(null, invitationToken))
+                .thenThrow(new BusinessException(
+                        ErrorCode.INVITATION_NOT_FOUND
+                ));
+
+        mockMvc.perform(get(
+                        "/api/invitations/{invitationToken}",
+                        invitationToken
+                ))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code")
+                        .value("INVITATION_NOT_FOUND"));
+
+        verify(tripService).getInvitationPreview(null, invitationToken);
     }
 
     @Test
