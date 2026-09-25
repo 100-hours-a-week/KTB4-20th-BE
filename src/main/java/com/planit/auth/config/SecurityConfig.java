@@ -33,6 +33,7 @@ public class SecurityConfig {
                                 SessionCreationPolicy.STATELESS
                         ))
                 .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers(HttpMethod.GET, "/api/health").permitAll()
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/invitations/**"
