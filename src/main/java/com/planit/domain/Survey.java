@@ -50,6 +50,10 @@ public class Survey {
         return id;
     }
 
+    public TripMember getTripMember() {
+        return tripMember;
+    }
+
     public LocalDateTime getSubmittedAt() {
         return submittedAt;
     }

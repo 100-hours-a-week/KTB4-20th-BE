@@ -12,5 +12,10 @@ public interface SurveyAnswerRepository
     List<SurveyAnswer>
     findBySurveyOrderByPreferenceQuestionDisplayOrderAsc(Survey survey);
 
+    List<SurveyAnswer>
+    findBySurveyInOrderByPreferenceQuestionDisplayOrderAsc(
+            List<Survey> surveys
+    );
+
     void deleteBySurvey(Survey survey);
 }

@@ -22,6 +22,7 @@ import com.planit.survey.dto.SurveyAnswerRequest;
 import com.planit.survey.dto.SurveyAnswerResponse;
 import com.planit.survey.dto.SurveyResponse;
 import com.planit.survey.dto.SurveySaveRequest;
+import com.planit.survey.dto.SurveySummaryResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,8 +31,10 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -64,6 +67,60 @@ public class SurveyServiceImpl implements SurveyService {
                 .filter(survey -> survey.getSubmittedAt() != null)
                 .map(survey -> submittedResponse(tripId, survey))
                 .orElseGet(() -> draftResponse(tripId, questions));
+    }
+
+    @Override
+    public SurveySummaryResponse getSurveySummary(
+            String userPublicId,
+            Long tripId
+    ) {
+        TripMember currentMember = findActiveMember(userPublicId, tripId);
+        Trip trip = currentMember.getTrip();
+        List<TripMember> activeMembers =
+                tripMemberRepository.findActiveMembersByTrip(trip);
+        List<Survey> submittedSurveys = surveyRepository
+                .findByTripMemberInAndSubmittedAtIsNotNull(activeMembers);
+
+        Set<UUID> submittedUserIds = submittedSurveys.stream()
+                .map(Survey::getTripMember)
+                .map(TripMember::getUser)
+                .map(User::getPublicId)
+                .collect(Collectors.toSet());
+
+        int activeMemberCount = activeMembers.size();
+        int submittedCount = submittedSurveys.size();
+        int progressPercent = activeMemberCount == 0
+                ? 0
+                : (int) Math.round(
+                        submittedCount * 100.0 / activeMemberCount
+                );
+        LocalDateTime deadlineAt = trip.getSurveyDeadlineAt();
+
+        return new SurveySummaryResponse(
+                trip.getId().toString(),
+                deadlineAt.atZone(SEOUL_ZONE).toOffsetDateTime(),
+                activeMemberCount,
+                submittedCount,
+                progressPercent,
+                activeMemberCount > 0
+                        && submittedCount == activeMemberCount,
+                submittedUserIds.contains(
+                        currentMember.getUser().getPublicId()
+                ),
+                !LocalDateTime.now(SEOUL_ZONE).isBefore(deadlineAt),
+                activeMembers.stream()
+                        .map(member ->
+                                new SurveySummaryResponse.MemberSubmission(
+                                        member.getUser().getPublicId(),
+                                        submittedUserIds.contains(
+                                                member.getUser().getPublicId()
+                                        )
+                                )
+                        )
+                        .toList(),
+                summarizePreferences(submittedSurveys),
+                summarizeExcludedCategories(submittedSurveys)
+        );
     }
 
     @Override
@@ -165,6 +222,76 @@ public class SurveyServiceImpl implements SurveyService {
         } catch (NumberFormatException exception) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, exception);
         }
+    }
+
+    private List<SurveySummaryResponse.CategoryAverage>
+    summarizePreferences(List<Survey> surveys) {
+        if (surveys.isEmpty()) {
+            return List.of();
+        }
+
+        Map<String, Double> averageByCategory =
+                surveyAnswerRepository
+                        .findBySurveyInOrderByPreferenceQuestionDisplayOrderAsc(
+                                surveys
+                        )
+                        .stream()
+                        .collect(Collectors.groupingBy(
+                                answer -> answer.getPreferenceQuestion()
+                                        .getCategoryCode(),
+                                LinkedHashMap::new,
+                                Collectors.averagingDouble(
+                                        SurveyAnswer::getScore
+                                )
+                        ));
+
+        return averageByCategory.entrySet().stream()
+                .map(entry -> categoryPreference(
+                        entry.getKey(),
+                        entry.getValue()
+                ))
+                .toList();
+    }
+
+    private SurveySummaryResponse.CategoryAverage categoryPreference(
+            String categoryCode,
+            double averageScore
+    ) {
+        double roundedAverage = Math.round(averageScore * 10.0) / 10.0;
+        int preferencePercent = (int) Math.round(
+                (averageScore - 1.0) / 4.0 * 100.0
+        );
+
+        return new SurveySummaryResponse.CategoryAverage(
+                categoryCode,
+                roundedAverage,
+                preferencePercent
+        );
+    }
+
+    private List<SurveySummaryResponse.ExcludedCategory>
+    summarizeExcludedCategories(List<Survey> surveys) {
+        if (surveys.isEmpty()) {
+            return List.of();
+        }
+
+        Map<String, SurveySummaryResponse.ExcludedCategory> categoriesByCode =
+                new LinkedHashMap<>();
+        surveyExcludedCategoryRepository
+                .findBySurveyInOrderByExclusionCategoryIdAsc(surveys)
+                .forEach(excluded -> {
+                    SurveyExclusionCategory category =
+                            excluded.getExclusionCategory();
+                    categoriesByCode.putIfAbsent(
+                            category.getCode(),
+                            new SurveySummaryResponse.ExcludedCategory(
+                                    category.getCode(),
+                                    category.getName()
+                            )
+                    );
+                });
+
+        return List.copyOf(categoriesByCode.values());
     }
 
     private List<Long> parseIds(List<String> ids) {
