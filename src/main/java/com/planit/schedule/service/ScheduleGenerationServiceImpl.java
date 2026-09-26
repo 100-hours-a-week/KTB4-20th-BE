@@ -36,6 +36,7 @@ public class ScheduleGenerationServiceImpl
         implements ScheduleGenerationService {
 
     private static final ZoneId SEOUL_ZONE = ZoneId.of("Asia/Seoul");
+    private static final int REQUIRED_PLACE_MIN_COUNT = 5;
 
     private final UserRepository userRepository;
     private final TripRepository tripRepository;
@@ -144,7 +145,7 @@ public class ScheduleGenerationServiceImpl
         return response.statusCode() == 200
                 && response.data() != null
                 && response.data().places() != null
-                && response.data().places().size() == 6
+                && response.data().places().size() >= REQUIRED_PLACE_MIN_COUNT
                 && response.data().places().stream()
                 .allMatch(this::isValidPlace);
     }

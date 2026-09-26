@@ -270,6 +270,19 @@ class ScheduleGenerationServiceTest {
     }
 
     @Test
+    void acceptsFivePlacesWhenAiFallsShortOfSix() {
+        when(aiTripClient.selectPlaces(any()))
+                .thenReturn(aiResponse(5));
+
+        SchedulePlaceSelectionResponse response = service.generate(
+                USER_ID.toString(),
+                TRIP_ID
+        );
+
+        assertThat(response.places()).hasSize(5);
+    }
+
+    @Test
     void rejectsAiPlaceWithoutRequiredData() {
         AiPlaceSelectionResponse.Place invalidPlace =
                 new AiPlaceSelectionResponse.Place(
@@ -326,8 +339,12 @@ class ScheduleGenerationServiceTest {
     }
 
     private AiPlaceSelectionResponse aiResponse() {
+        return aiResponse(6);
+    }
+
+    private AiPlaceSelectionResponse aiResponse(int placeCount) {
         List<AiPlaceSelectionResponse.Place> places = new ArrayList<>();
-        for (int index = 1; index <= 6; index++) {
+        for (int index = 1; index <= placeCount; index++) {
             places.add(new AiPlaceSelectionResponse.Place(
                     "google-place-" + index,
                     new AiPlaceSelectionResponse.DisplayName(
