@@ -2,7 +2,6 @@ package com.planit.chat.service;
 
 import com.planit.chat.dto.RegionalChatRoomJoinResponse;
 import com.planit.chat.dto.RegionalChatRoomLeaveResponse;
-import com.planit.chat.event.RegionalChatRoomMembershipChangedEvent;
 import com.planit.domain.ChatPolicyStatus;
 import com.planit.domain.ChatPolicyVersion;
 import com.planit.domain.RegionalChatRoom;
@@ -17,7 +16,6 @@ import com.planit.repository.RegionalChatRoomRepository;
 import com.planit.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -41,7 +39,6 @@ class RegionalChatRoomMembershipServiceImplTest {
     private RegionalChatRoomMemberRepository memberRepository;
     private ChatPolicyVersionRepository policyVersionRepository;
     private ChatPolicyConsentRepository policyConsentRepository;
-    private ApplicationEventPublisher eventPublisher;
     private RegionalChatRoomMembershipServiceImpl service;
     private User user;
     private RegionalChatRoom room;
@@ -54,14 +51,12 @@ class RegionalChatRoomMembershipServiceImplTest {
         memberRepository = mock(RegionalChatRoomMemberRepository.class);
         policyVersionRepository = mock(ChatPolicyVersionRepository.class);
         policyConsentRepository = mock(ChatPolicyConsentRepository.class);
-        eventPublisher = mock(ApplicationEventPublisher.class);
         service = new RegionalChatRoomMembershipServiceImpl(
                 userRepository,
                 roomRepository,
                 memberRepository,
                 policyVersionRepository,
-                policyConsentRepository,
-                eventPublisher
+                policyConsentRepository
         );
 
         user = mock(User.class);
@@ -92,7 +87,6 @@ class RegionalChatRoomMembershipServiceImplTest {
         assertThat(response.roomId()).isEqualTo("3001");
         assertThat(response.joinedAt()).isNotNull();
         verify(memberRepository).save(any(RegionalChatRoomMember.class));
-        verify(eventPublisher).publishEvent(any(RegionalChatRoomMembershipChangedEvent.class));
     }
 
     @Test
@@ -108,7 +102,6 @@ class RegionalChatRoomMembershipServiceImplTest {
 
         assertThat(response.joinedAt()).isNotNull();
         verify(memberRepository, never()).save(any());
-        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test
@@ -122,7 +115,6 @@ class RegionalChatRoomMembershipServiceImplTest {
 
         assertThat(membership.isActive()).isTrue();
         verify(memberRepository, never()).save(any());
-        verify(eventPublisher).publishEvent(any(RegionalChatRoomMembershipChangedEvent.class));
     }
 
     @Test
@@ -151,7 +143,6 @@ class RegionalChatRoomMembershipServiceImplTest {
 
         assertThat(membership.isActive()).isFalse();
         assertThat(response.leftAt()).isNotNull();
-        verify(eventPublisher).publishEvent(any(RegionalChatRoomMembershipChangedEvent.class));
     }
 
     @Test
@@ -168,7 +159,6 @@ class RegionalChatRoomMembershipServiceImplTest {
         );
 
         assertThat(response.leftAt()).isEqualTo(originalLeftAt.toInstant(java.time.ZoneOffset.UTC));
-        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test

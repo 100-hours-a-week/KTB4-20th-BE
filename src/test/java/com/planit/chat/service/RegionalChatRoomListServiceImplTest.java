@@ -1,8 +1,6 @@
 package com.planit.chat.service;
 
 import com.planit.chat.dto.RegionalChatRoomListResponse;
-import com.planit.chat.pagination.RegionalChatRoomCursorStore;
-import com.planit.chat.pagination.RegionalChatRoomCursorStore.CursorPage;
 import com.planit.chat.presence.RegionalChatRoomPresenceRegistry;
 import com.planit.domain.User;
 import com.planit.repository.RegionalChatRoomRepository;
@@ -15,13 +13,11 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.LongStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class RegionalChatRoomListServiceImplTest {
@@ -31,7 +27,6 @@ class RegionalChatRoomListServiceImplTest {
     private UserRepository userRepository;
     private RegionalChatRoomRepository roomRepository;
     private RegionalChatRoomPresenceRegistry presenceRegistry;
-    private RegionalChatRoomCursorStore cursorStore;
     private RegionalChatRoomListServiceImpl service;
 
     @BeforeEach
@@ -39,9 +34,8 @@ class RegionalChatRoomListServiceImplTest {
         userRepository = mock(UserRepository.class);
         roomRepository = mock(RegionalChatRoomRepository.class);
         presenceRegistry = mock(RegionalChatRoomPresenceRegistry.class);
-        cursorStore = mock(RegionalChatRoomCursorStore.class);
         service = new RegionalChatRoomListServiceImpl(
-                userRepository, roomRepository, presenceRegistry, cursorStore
+                userRepository, roomRepository, presenceRegistry
         );
 
         User user = mock(User.class);
@@ -69,59 +63,28 @@ class RegionalChatRoomListServiceImplTest {
         when(presenceRegistry.getActiveUserCount(2L)).thenReturn(1L);
         when(presenceRegistry.getActiveUserCount(1L)).thenReturn(1L);
 
-        RegionalChatRoomListResponse response = service
-                .getRegionalChatRooms(USER_PUBLIC_ID, null);
+        RegionalChatRoomListResponse response = service.getRegionalChatRooms(USER_PUBLIC_ID);
 
         assertThat(response.items())
                 .extracting(RegionalChatRoomListResponse.RegionalChatRoomItemResponse::roomId)
                 .containsExactly("5", "1", "2", "3", "4", "6", "7");
-        assertThat(response.page().hasNext()).isFalse();
-        assertThat(response.page().nextCursor()).isNull();
     }
 
     @Test
-    void returnsTwentyRoomsAndIssuesCursorOnInitialRequest() {
-        List<RegionalChatRoomListProjection> rooms = LongStream.rangeClosed(1, 21)
-                .mapToObj(id -> projection(id, "지역 " + id, false, false, 0, false))
-                .toList();
+    void returnsEveryRoomInOneResponse() {
+        List<RegionalChatRoomListProjection> rooms = List.of(
+                projection(1, "서울", false, false, 0, false),
+                projection(2, "경주", false, false, 0, false),
+                projection(3, "부산", false, false, 0, false),
+                projection(4, "전주", false, false, 0, false),
+                projection(5, "제주", false, false, 0, false)
+        );
         when(roomRepository.findListEntries(eq(77L), any(LocalDate.class)))
                 .thenReturn(rooms);
-        when(cursorStore.createSnapshot(eq(USER_PUBLIC_ID), any(), eq(20)))
-                .thenReturn("next-cursor");
 
-        RegionalChatRoomListResponse response = service
-                .getRegionalChatRooms(USER_PUBLIC_ID, null);
+        RegionalChatRoomListResponse response = service.getRegionalChatRooms(USER_PUBLIC_ID);
 
-        assertThat(response.items()).hasSize(20);
-        assertThat(response.page().hasNext()).isTrue();
-        assertThat(response.page().nextCursor()).isEqualTo("next-cursor");
-        verify(cursorStore).invalidateUserSnapshots(USER_PUBLIC_ID);
-    }
-
-    @Test
-    void returnsTenRoomsAfterCursor() {
-        List<RegionalChatRoomListProjection> rooms = LongStream.rangeClosed(1, 22)
-                .mapToObj(id -> projection(
-                        id, "지역 %02d".formatted(id), false, false, 0, false
-                ))
-                .toList();
-        when(roomRepository.findListEntries(eq(77L), any(LocalDate.class)))
-                .thenReturn(rooms);
-        when(cursorStore.resolve("cursor", USER_PUBLIC_ID, 10))
-                .thenReturn(new CursorPage(
-                        LongStream.rangeClosed(6, 15).boxed().toList(),
-                        "next-cursor",
-                        true
-                ));
-
-        RegionalChatRoomListResponse response = service
-                .getRegionalChatRooms(USER_PUBLIC_ID, "cursor");
-
-        assertThat(response.items()).hasSize(10);
-        assertThat(response.items().getFirst().roomId()).isEqualTo("6");
-        assertThat(response.items().getLast().roomId()).isEqualTo("15");
-        assertThat(response.page().hasNext()).isTrue();
-        assertThat(response.page().nextCursor()).isEqualTo("next-cursor");
+        assertThat(response.items()).hasSize(5);
     }
 
     private RegionalChatRoomListProjection projection(

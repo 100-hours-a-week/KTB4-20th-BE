@@ -3,8 +3,7 @@ package com.planit.chat.dto;
 import java.util.List;
 
 public record RegionalChatRoomListResponse(
-        List<RegionalChatRoomItemResponse> items,
-        CursorPageResponse page
+        List<RegionalChatRoomItemResponse> items
 ) {
 
     public RegionalChatRoomListResponse {
@@ -20,12 +19,6 @@ public record RegionalChatRoomListResponse(
             boolean relatedToMyTrip,
             boolean joined,
             boolean canJoin
-    ) {
-    }
-
-    public record CursorPageResponse(
-            String nextCursor,
-            boolean hasNext
     ) {
     }
 }

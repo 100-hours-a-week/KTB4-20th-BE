@@ -52,6 +52,7 @@ public class Place {
     public String getName() { return name; }
     public String getCategoryName() { return categoryName; }
     public String getAddress() { return address; }
+    public String getRoadAddress() { return roadAddress; }
     public BigDecimal getLongitude() { return longitude; }
     public BigDecimal getLatitude() { return latitude; }
 }
