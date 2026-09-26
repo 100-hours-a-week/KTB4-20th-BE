@@ -27,4 +27,8 @@ public class ScheduleVisit {
     }
     public Long getId() { return id; }
     public Place getPlace() { return place; }
+    public short getVisitOrder() { return visitOrder; }
+    public String getPlaceNameSnapshot() { return placeNameSnapshot; }
+    public String getAddressSnapshot() { return addressSnapshot; }
+    public String getSelectionReason() { return selectionReason; }
 }

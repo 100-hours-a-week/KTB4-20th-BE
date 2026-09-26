@@ -1,6 +1,6 @@
 package com.planit.schedule.service;
 
-import com.planit.domain.SubRegion;
+import com.planit.domain.Region;
 import com.planit.domain.Trip;
 import com.planit.global.error.BusinessException;
 import com.planit.repository.TripRepository;
@@ -64,9 +64,9 @@ class SchedulePersistenceServiceTest {
                 legRepository
         );
         trip = mock(Trip.class);
-        SubRegion region = mock(SubRegion.class);
+        Region region = mock(Region.class);
         when(region.getId()).thenReturn(10L);
-        when(trip.getSubRegion()).thenReturn(region);
+        when(trip.getRegion()).thenReturn(region);
         when(trip.getStartDate()).thenReturn(LocalDate.of(2026, 10, 1));
         when(tripRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(trip));
 

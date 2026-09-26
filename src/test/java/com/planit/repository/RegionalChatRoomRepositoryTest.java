@@ -15,19 +15,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 class RegionalChatRoomRepositoryTest {
 
     @Autowired
-    private BroadRegionRepository broadRegionRepository;
-
-    @Autowired
-    private SubRegionRepository subRegionRepository;
+    private RegionRepository regionRepository;
 
     @Autowired
     private RegionalChatRoomRepository regionalChatRoomRepository;
 
     @Test
     void mapsEverySeededRegionTable() {
-        assertThat(broadRegionRepository.count()).isEqualTo(17);
-        assertThat(subRegionRepository.count()).isEqualTo(229);
-        assertThat(regionalChatRoomRepository.count()).isEqualTo(229);
+        assertThat(regionRepository.count()).isEqualTo(5);
+        assertThat(regionalChatRoomRepository.count()).isEqualTo(5);
     }
 
     @Test
@@ -37,9 +33,8 @@ class RegionalChatRoomRepositoryTest {
 
         assertThat(room.getId()).isEqualTo(1L);
         assertThat(room.getRegion().getId()).isEqualTo(1L);
-        assertThat(room.getRegion().getName()).isEqualTo("강남구");
-        assertThat(room.getRegion().getBroadRegion().getName()).isEqualTo("서울특별시");
-        assertThat(room.getName()).isEqualTo("서울특별시 강남구");
+        assertThat(room.getRegion().getName()).isEqualTo("서울");
+        assertThat(room.getName()).isEqualTo("서울");
     }
 
     @Test
@@ -49,7 +44,7 @@ class RegionalChatRoomRepositoryTest {
                 LocalDate.of(2026, 9, 20)
         );
 
-        assertThat(rooms).hasSize(229);
+        assertThat(rooms).hasSize(5);
         assertThat(rooms).allSatisfy(room -> {
             assertThat(room.getRelatedToMyTrip()).isFalse();
             assertThat(room.getJoined()).isFalse();

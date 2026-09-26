@@ -6,7 +6,6 @@ import com.planit.chat.dto.ChatMessageHistoryResponse.ChatMessageItemResponse;
 import com.planit.chat.dto.ChatMessageHistoryResponse.ChatMessagePageResponse;
 import com.planit.chat.dto.ChatMessageHistoryResponse.ChatSenderResponse;
 import com.planit.chat.service.ChatMessageHistoryService;
-import com.planit.chat.dto.RegionalChatRoomListResponse.CursorPageResponse;
 import com.planit.chat.dto.RegionalChatRoomListResponse.RegionalChatRoomItemResponse;
 import com.planit.chat.dto.RegionalChatRoomJoinResponse;
 import com.planit.chat.dto.RegionalChatRoomLeaveResponse;
@@ -97,25 +96,21 @@ class RegionalChatRoomControllerTest {
                 List.of(new RegionalChatRoomItemResponse(
                         "3001", "123", "부산광역시 해운대구",
                         128, 24, true, false, true
-                )),
-                new CursorPageResponse("next-cursor", true)
+                ))
         );
-        when(service.getRegionalChatRooms(USER_PUBLIC_ID, "cursor"))
+        when(service.getRegionalChatRooms(USER_PUBLIC_ID))
                 .thenReturn(response);
 
         mockMvc.perform(get("/api/regional-chat-rooms")
-                        .param("cursor", "cursor")
                         .principal(new TestingAuthenticationToken(USER_PUBLIC_ID, null)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("REGIONAL_CHAT_ROOMS_RETRIEVED"))
                 .andExpect(jsonPath("$.message").value("지역 채팅방 목록을 조회했습니다."))
                 .andExpect(jsonPath("$.data.items[0].roomId").value("3001"))
                 .andExpect(jsonPath("$.data.items[0].activeUserCount").value(24))
-                .andExpect(jsonPath("$.data.items[0].relatedToMyTrip").value(true))
-                .andExpect(jsonPath("$.data.page.nextCursor").value("next-cursor"))
-                .andExpect(jsonPath("$.data.page.hasNext").value(true));
+                .andExpect(jsonPath("$.data.items[0].relatedToMyTrip").value(true));
 
-        verify(service).getRegionalChatRooms(USER_PUBLIC_ID, "cursor");
+        verify(service).getRegionalChatRooms(USER_PUBLIC_ID);
     }
 
     @Test

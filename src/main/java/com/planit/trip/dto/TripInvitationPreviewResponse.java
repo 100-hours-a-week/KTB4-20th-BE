@@ -29,8 +29,7 @@ public record TripInvitationPreviewResponse(
 
     public record Region(
             String regionId,
-            String broadRegionName,
-            String subRegionName
+            String regionName
     ) {
     }
 

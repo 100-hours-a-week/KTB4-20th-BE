@@ -6,7 +6,7 @@ import com.planit.domain.*;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
 import com.planit.image.config.ImageProperties;
-import com.planit.repository.SubRegionRepository;
+import com.planit.repository.RegionRepository;
 import com.planit.repository.TripInvitationRepository;
 import com.planit.repository.TripMemberRepository;
 import com.planit.repository.TripRepository;
@@ -43,7 +43,7 @@ public class TripServiceImpl implements TripService {
     private static final ZoneId SEOUL_ZONE = ZoneId.of("Asia/Seoul");
 
     private final UserRepository userRepository;
-    private final SubRegionRepository subRegionRepository;
+    private final RegionRepository regionRepository;
     private final TripRepository tripRepository;
     private final TripMemberRepository tripMemberRepository;
     private final TripInvitationRepository tripInvitationRepository;
@@ -61,7 +61,7 @@ public class TripServiceImpl implements TripService {
             TripCreateRequest request
     ) {
         User user = findActiveUser(userPublicId);
-        SubRegion subRegion = findSubRegion(request.subRegionId());
+        Region region = findRegion(request.regionId());
 
         LocalDate today = LocalDate.now(SEOUL_ZONE);
 
@@ -75,7 +75,7 @@ public class TripServiceImpl implements TripService {
         );
 
         Trip trip = new Trip(
-                subRegion,
+                region,
                 request.name(),
                 request.startDate(),
                 request.capacity().byteValue(),
@@ -177,7 +177,7 @@ public class TripServiceImpl implements TripService {
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.INTERNAL_SERVER_ERROR
                 ));
-        SubRegion subRegion = trip.getSubRegion();
+        Region region = trip.getRegion();
         List<TripInvitationPreviewResponse.Member> memberResponses =
                 members.stream()
                         .map(member ->
@@ -209,9 +209,8 @@ public class TripServiceImpl implements TripService {
                         trip.getId().toString(),
                         trip.getName(),
                         new TripInvitationPreviewResponse.Region(
-                                subRegion.getId().toString(),
-                                subRegion.getBroadRegion().getName(),
-                                subRegion.getName()
+                                region.getId().toString(),
+                                region.getName()
                         ),
                         trip.getStartDate(),
                         trip.getEndDate(),
@@ -240,8 +239,7 @@ public class TripServiceImpl implements TripService {
         List<TripMember> activeMembers =
                 tripMemberRepository.findActiveMembersByTrip(trip);
 
-        SubRegion subRegion = trip.getSubRegion();
-        BroadRegion broadRegion = subRegion.getBroadRegion();
+        Region region = trip.getRegion();
         List<TripDetailResponse.Member> members = activeMembers.stream()
                 .map(member -> new TripDetailResponse.Member(
                         member.getUser().getPublicId(),
@@ -255,11 +253,9 @@ public class TripServiceImpl implements TripService {
                 trip.getId().toString(),
                 trip.getName(),
                 new TripDetailResponse.Region(
-                        subRegion.getId().toString(),
-                        broadRegion.getCode(),
-                        broadRegion.getName(),
-                        subRegion.getCode(),
-                        subRegion.getName()
+                        region.getId().toString(),
+                        region.getCode(),
+                        region.getName()
                 ),
                 trip.getStartDate(),
                 trip.getEndDate(),
@@ -541,9 +537,9 @@ public class TripServiceImpl implements TripService {
                 );
     }
 
-    private SubRegion findSubRegion(Long subRegionId) {
-        return subRegionRepository
-                .findById(subRegionId)
+    private Region findRegion(Long regionId) {
+        return regionRepository
+                .findById(regionId)
                 .orElseThrow(() ->
                         new BusinessException(
                                 ErrorCode.RESOURCE_NOT_FOUND

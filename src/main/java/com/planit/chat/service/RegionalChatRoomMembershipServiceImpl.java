@@ -2,7 +2,6 @@ package com.planit.chat.service;
 
 import com.planit.chat.dto.RegionalChatRoomJoinResponse;
 import com.planit.chat.dto.RegionalChatRoomLeaveResponse;
-import com.planit.chat.event.RegionalChatRoomMembershipChangedEvent;
 import com.planit.domain.ChatPolicyStatus;
 import com.planit.domain.ChatPolicyVersion;
 import com.planit.domain.RegionalChatRoom;
@@ -16,7 +15,6 @@ import com.planit.repository.RegionalChatRoomMemberRepository;
 import com.planit.repository.RegionalChatRoomRepository;
 import com.planit.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,7 +32,6 @@ public class RegionalChatRoomMembershipServiceImpl
     private final RegionalChatRoomMemberRepository memberRepository;
     private final ChatPolicyVersionRepository chatPolicyVersionRepository;
     private final ChatPolicyConsentRepository chatPolicyConsentRepository;
-    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     public RegionalChatRoomJoinResponse join(String userPublicId, Long roomId) {
@@ -45,18 +42,11 @@ public class RegionalChatRoomMembershipServiceImpl
         RegionalChatRoomMember membership = memberRepository
                 .findByUserAndRegionalChatRoom(user, room)
                 .orElse(null);
-        boolean membershipChanged = false;
 
         if (membership == null) {
             membership = memberRepository.save(new RegionalChatRoomMember(user, room));
-            membershipChanged = true;
         } else if (!membership.isActive()) {
             membership.rejoin();
-            membershipChanged = true;
-        }
-
-        if (membershipChanged) {
-            publishMembershipChanged(userPublicId);
         }
 
         return new RegionalChatRoomJoinResponse(
@@ -75,11 +65,7 @@ public class RegionalChatRoomMembershipServiceImpl
                         ErrorCode.REGIONAL_CHAT_MEMBER_REQUIRED
                 ));
 
-        boolean wasActive = membership.isActive();
         membership.leave();
-        if (wasActive) {
-            publishMembershipChanged(userPublicId);
-        }
 
         return new RegionalChatRoomLeaveResponse(
                 room.getId().toString(),
@@ -115,9 +101,5 @@ public class RegionalChatRoomMembershipServiceImpl
         )) {
             throw new BusinessException(ErrorCode.CHAT_POLICY_CONSENT_REQUIRED);
         }
-    }
-
-    private void publishMembershipChanged(String userPublicId) {
-        eventPublisher.publishEvent(new RegionalChatRoomMembershipChangedEvent(userPublicId));
     }
 }

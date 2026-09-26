@@ -19,7 +19,7 @@ public record TripCreateRequest(
 
         @NotNull
         @Positive
-        Long subRegionId,
+        Long regionId,
 
         @NotNull
         LocalDate startDate,

@@ -51,9 +51,8 @@ class TripInvitationControllerTest {
                         "1001",
                         "부산 맛집 여행",
                         new TripInvitationPreviewResponse.Region(
-                                "123",
-                                "부산광역시",
-                                "해운대구"
+                                "3",
+                                "부산"
                         ),
                         LocalDate.of(2026, 9, 12),
                         LocalDate.of(2026, 9, 14),
@@ -89,7 +88,9 @@ class TripInvitationControllerTest {
                 .andExpect(jsonPath("$.data.trip.tripId")
                         .value("1001"))
                 .andExpect(jsonPath("$.data.trip.region.regionId")
-                        .value("123"))
+                        .value("3"))
+                .andExpect(jsonPath("$.data.trip.region.regionName")
+                        .value("부산"))
                 .andExpect(jsonPath("$.data.inviter.userName")
                         .value("플랜잇방장"))
                 .andExpect(jsonPath("$.data.members[0].userName")

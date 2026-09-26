@@ -75,7 +75,7 @@ class TripControllerTest {
                         .content("""
                                 {
                                   "name": "제주 여행",
-                                  "subRegionId": 1,
+                                  "regionId": 1,
                                   "startDate": "2026-10-01",
                                   "capacity": 4,
                                   "surveyDeadlineDate": "2026-09-30"
@@ -179,11 +179,9 @@ class TripControllerTest {
                         "1001",
                         "부산 맛집 여행",
                         new TripDetailResponse.Region(
-                                "123",
-                                "26",
-                                "부산광역시",
-                                "26350",
-                                "해운대구"
+                                "3",
+                                "REGION-BUSAN",
+                                "부산"
                         ),
                         LocalDate.of(2026, 9, 12),
                         LocalDate.of(2026, 9, 14),
@@ -288,7 +286,7 @@ class TripControllerTest {
                         .content("""
                                 {
                                   "name": "부산 여행",
-                                  "subRegionId": 1,
+                                  "regionId": 1,
                                   "startDate": "2026-10-01"
                                 }
                                 """))
@@ -315,7 +313,7 @@ class TripControllerTest {
                         .content("""
                                 {
                                   "name": "제주여행1",
-                                  "subRegionId": 1,
+                                  "regionId": 1,
                                   "startDate": "2026-10-01",
                                   "capacity": 4
                                 }

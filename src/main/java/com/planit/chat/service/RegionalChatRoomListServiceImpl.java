@@ -1,10 +1,7 @@
 package com.planit.chat.service;
 
 import com.planit.chat.dto.RegionalChatRoomListResponse;
-import com.planit.chat.dto.RegionalChatRoomListResponse.CursorPageResponse;
 import com.planit.chat.dto.RegionalChatRoomListResponse.RegionalChatRoomItemResponse;
-import com.planit.chat.pagination.RegionalChatRoomCursorStore;
-import com.planit.chat.pagination.RegionalChatRoomCursorStore.CursorPage;
 import com.planit.chat.presence.RegionalChatRoomPresenceRegistry;
 import com.planit.domain.User;
 import com.planit.global.error.BusinessException;
@@ -20,19 +17,13 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 import java.util.UUID;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class RegionalChatRoomListServiceImpl implements RegionalChatRoomListService {
 
-    private static final int INITIAL_PAGE_SIZE = 20;
-    private static final int NEXT_PAGE_SIZE = 10;
     private static final ZoneId SEOUL_ZONE_ID = ZoneId.of("Asia/Seoul");
 
     private static final Comparator<RoomListEntry> ROOM_ORDER = Comparator
@@ -46,73 +37,19 @@ public class RegionalChatRoomListServiceImpl implements RegionalChatRoomListServ
     private final UserRepository userRepository;
     private final RegionalChatRoomRepository regionalChatRoomRepository;
     private final RegionalChatRoomPresenceRegistry presenceRegistry;
-    private final RegionalChatRoomCursorStore cursorStore;
 
     @Override
-    public RegionalChatRoomListResponse getRegionalChatRooms(
-            String userPublicId,
-            String cursor
-    ) {
+    public RegionalChatRoomListResponse getRegionalChatRooms(String userPublicId) {
         User user = findActiveUser(userPublicId);
-        List<RoomListEntry> currentRooms = regionalChatRoomRepository
+        List<RegionalChatRoomItemResponse> rooms = regionalChatRoomRepository
                 .findListEntries(user.getId(), LocalDate.now(SEOUL_ZONE_ID))
                 .stream()
                 .map(this::toEntry)
+                .sorted(ROOM_ORDER)
+                .map(this::toResponse)
                 .toList();
 
-        if (cursor == null) {
-            return firstPage(userPublicId, currentRooms);
-        }
-        return nextPage(userPublicId, cursor, currentRooms);
-    }
-
-    private RegionalChatRoomListResponse firstPage(
-            String userPublicId,
-            List<RoomListEntry> currentRooms
-    ) {
-        cursorStore.invalidateUserSnapshots(userPublicId);
-        List<RoomListEntry> orderedRooms = currentRooms.stream().sorted(ROOM_ORDER).toList();
-        boolean hasNext = orderedRooms.size() > INITIAL_PAGE_SIZE;
-        List<RoomListEntry> pageRooms = orderedRooms.stream()
-                .limit(INITIAL_PAGE_SIZE)
-                .toList();
-        String nextCursor = hasNext
-                ? cursorStore.createSnapshot(
-                        userPublicId,
-                        orderedRooms.stream().map(RoomListEntry::roomId).toList(),
-                        INITIAL_PAGE_SIZE
-                )
-                : null;
-
-        return toListResponse(pageRooms, nextCursor, hasNext);
-    }
-
-    private RegionalChatRoomListResponse nextPage(
-            String userPublicId,
-            String cursor,
-            List<RoomListEntry> currentRooms
-    ) {
-        CursorPage cursorPage = cursorStore.resolve(cursor, userPublicId, NEXT_PAGE_SIZE);
-        Map<Long, RoomListEntry> roomsById = currentRooms.stream()
-                .collect(Collectors.toMap(RoomListEntry::roomId, Function.identity()));
-        List<RoomListEntry> pageRooms = cursorPage.roomIds().stream()
-                .map(roomsById::get)
-                .filter(Objects::nonNull)
-                .toList();
-
-        return toListResponse(pageRooms, cursorPage.nextCursor(), cursorPage.hasNext());
-    }
-
-    private RegionalChatRoomListResponse toListResponse(
-            List<RoomListEntry> pageRooms,
-            String nextCursor,
-            boolean hasNext
-    ) {
-
-        return new RegionalChatRoomListResponse(
-                pageRooms.stream().map(this::toResponse).toList(),
-                new CursorPageResponse(nextCursor, hasNext)
-        );
+        return new RegionalChatRoomListResponse(rooms);
     }
 
     private User findActiveUser(String userPublicId) {

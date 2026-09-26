@@ -1,7 +1,7 @@
 package com.planit.repository;
 
 import com.planit.domain.ImageFile;
-import com.planit.domain.SubRegion;
+import com.planit.domain.Region;
 import com.planit.domain.Trip;
 import com.planit.domain.TripMember;
 import com.planit.domain.User;
@@ -35,7 +35,7 @@ class TripMemberRepositoryTest {
     private UserRepository userRepository;
 
     @Autowired
-    private SubRegionRepository subRegionRepository;
+    private RegionRepository regionRepository;
 
     @Autowired
     private TripRepository tripRepository;
@@ -397,11 +397,11 @@ class TripMemberRepositoryTest {
     }
 
     private Trip createTrip(String name, LocalDate tripDate) {
-        SubRegion subRegion = subRegionRepository.findById(1L)
+        Region region = regionRepository.findById(1L)
                 .orElseThrow();
 
         return tripRepository.save(new Trip(
-                subRegion,
+                region,
                 name,
                 tripDate,
                 (byte) 4,

@@ -1,4 +1,9 @@
 package com.planit.schedule.repository;
 import com.planit.schedule.domain.ScheduleVisit;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
-public interface ScheduleVisitRepository extends JpaRepository<ScheduleVisit, Long> {}
+import java.util.List;
+public interface ScheduleVisitRepository extends JpaRepository<ScheduleVisit, Long> {
+    @EntityGraph(attributePaths = "place")
+    List<ScheduleVisit> findByDayIdOrderByVisitOrderAsc(Long dayId);
+}
