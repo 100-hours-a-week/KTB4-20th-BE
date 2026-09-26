@@ -111,6 +111,17 @@ class SchedulePersistenceServiceTest {
     }
 
     @Test
+    void savesOneDayFiveVisitsAndFourLegsWhenAiFallsShortOfSix() {
+        GeneratedScheduleResult result = service.save(1L, recommendations(5));
+
+        assertThat(result.placeCount()).isEqualTo(5);
+        assertThat(result.legCount()).isEqualTo(4);
+        verify(placeRepository, times(5)).save(any(Place.class));
+        verify(visitRepository, times(5)).save(any(ScheduleVisit.class));
+        verify(legRepository, times(4)).save(any(ScheduleLeg.class));
+    }
+
+    @Test
     void rejectsTripThatAlreadyHasActiveSchedule() {
         when(scheduleRepository.existsByTripIdAndActiveConfirmedSlot(
                 1L,
@@ -132,7 +143,11 @@ class SchedulePersistenceServiceTest {
     }
 
     private List<RecommendedPlace> recommendations() {
-        return IntStream.rangeClosed(1, 6)
+        return recommendations(6);
+    }
+
+    private List<RecommendedPlace> recommendations(int count) {
+        return IntStream.rangeClosed(1, count)
                 .mapToObj(index -> new RecommendedPlace(
                         "google-" + index,
                         "장소 " + index,
