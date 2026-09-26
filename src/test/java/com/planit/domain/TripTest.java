@@ -11,7 +11,7 @@ class TripTest {
 
     @Test
     void createsTrip() {
-        SubRegion subRegion = new SubRegion();
+        Region region = new Region();
         LocalDate startDate = LocalDate.of(2026, 9, 23);
 
         LocalDateTime surveyDeadlineAt = LocalDateTime.of(
@@ -25,14 +25,14 @@ class TripTest {
         );
 
         Trip trip = new Trip(
-                subRegion,
+                region,
                 "부산 맛집 여행",
                 startDate,
                 (byte) 4,
                 surveyDeadlineAt
         );
 
-        assertThat(trip.getSubRegion()).isSameAs(subRegion);
+        assertThat(trip.getRegion()).isSameAs(region);
         assertThat(trip.getName()).isEqualTo("부산 맛집 여행");
         assertThat(trip.getStartDate()).isEqualTo(startDate);
         assertThat(trip.getEndDate()).isEqualTo(startDate);

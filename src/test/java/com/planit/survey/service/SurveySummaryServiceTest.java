@@ -1,7 +1,7 @@
 package com.planit.survey.service;
 
 import com.planit.domain.PreferenceQuestion;
-import com.planit.domain.SubRegion;
+import com.planit.domain.Region;
 import com.planit.domain.Survey;
 import com.planit.domain.SurveyAnswer;
 import com.planit.domain.SurveyExcludedCategory;
@@ -178,7 +178,7 @@ class SurveySummaryServiceTest {
 
     private void givenTrip(LocalDateTime deadlineAt) {
         trip = new Trip(
-                mock(SubRegion.class),
+                mock(Region.class),
                 "테스트 여행",
                 LocalDate.of(2099, 9, 26),
                 (byte) 4,

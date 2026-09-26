@@ -1,6 +1,6 @@
 package com.planit.schedule.domain;
 
-import com.planit.domain.SubRegion;
+import com.planit.domain.Region;
 import com.planit.schedule.ai.RecommendedPlace;
 import jakarta.persistence.*;
 
@@ -14,7 +14,7 @@ public class Place {
     private Long id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "region_id", nullable = false)
-    private SubRegion region;
+    private Region region;
     @Column(name = "google_place_id", nullable = false, length = 100)
     private String googlePlaceId;
     @Column(nullable = false, length = 200)
@@ -32,7 +32,7 @@ public class Place {
 
     protected Place() {}
 
-    public Place(SubRegion region, RecommendedPlace source, LocalDateTime now) {
+    public Place(Region region, RecommendedPlace source, LocalDateTime now) {
         this.region = region;
         this.googlePlaceId = source.googlePlaceId();
         update(source, now);

@@ -22,8 +22,8 @@ public class Trip {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "sub_region_id", nullable = false)
-    private SubRegion subRegion;
+    @JoinColumn(name = "region_id", nullable = false)
+    private Region region;
 
     @Column(name = "name", nullable = false, length = 12)
     private String name;
@@ -50,13 +50,13 @@ public class Trip {
     }
 
     public Trip(
-            SubRegion subRegion,
+            Region region,
             String name,
             LocalDate startDate,
             byte capacity,
             LocalDateTime surveyDeadlineAt
     ) {
-        this.subRegion = subRegion;
+        this.region = region;
         this.name = name;
         this.startDate = startDate;
         this.endDate = startDate;
@@ -69,8 +69,8 @@ public class Trip {
         return id;
     }
 
-    public SubRegion getSubRegion() {
-        return subRegion;
+    public Region getRegion() {
+        return region;
     }
 
     public String getName() {

@@ -79,7 +79,7 @@ class TripMemberTest {
 
     private Trip createTrip() {
         return new Trip(
-                new SubRegion(),
+                new Region(),
                 "부산 맛집 여행",
                 LocalDate.of(2026, 9, 23),
                 (byte) 4,

@@ -114,7 +114,7 @@ class TripCreateRequestTest {
     }
 
     @Test
-    void rejectsMissingSubRegionId() {
+    void rejectsMissingRegionId() {
         TripCreateRequest request = new TripCreateRequest(
                 "제주 여행",
                 null,
@@ -123,11 +123,11 @@ class TripCreateRequestTest {
                 SURVEY_DEADLINE_DATE
         );
 
-        assertInvalidField(request, "subRegionId");
+        assertInvalidField(request, "regionId");
     }
 
     @Test
-    void rejectsNonPositiveSubRegionId() {
+    void rejectsNonPositiveRegionId() {
         TripCreateRequest request = new TripCreateRequest(
                 "제주 여행",
                 0L,
@@ -136,7 +136,7 @@ class TripCreateRequestTest {
                 SURVEY_DEADLINE_DATE
         );
 
-        assertInvalidField(request, "subRegionId");
+        assertInvalidField(request, "regionId");
     }
 
     @Test
