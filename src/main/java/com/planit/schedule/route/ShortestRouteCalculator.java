@@ -11,11 +11,12 @@ import static com.planit.schedule.route.RouteCalculationException.Reason.ROUTE_N
 
 public final class ShortestRouteCalculator {
 
-    private static final int REQUIRED_PLACE_COUNT = 6;
+    private static final int REQUIRED_PLACE_MIN_COUNT = 5;
     private static final double EARTH_RADIUS_METERS = 6_371_000.0;
 
     public RoutePlan calculate(List<RoutePlace> places) {
         validate(places);
+        int placeCount = places.size();
 
         List<RoutePlace> orderedInput = places.stream()
                 .sorted(Comparator.comparingLong(RoutePlace::placeId))
@@ -23,8 +24,9 @@ public final class ShortestRouteCalculator {
         SearchResult searchResult = new SearchResult();
         search(
                 orderedInput,
-                new boolean[REQUIRED_PLACE_COUNT],
-                new ArrayList<>(REQUIRED_PLACE_COUNT),
+                placeCount,
+                new boolean[placeCount],
+                new ArrayList<>(placeCount),
                 searchResult
         );
 
@@ -40,11 +42,12 @@ public final class ShortestRouteCalculator {
 
     private void search(
             List<RoutePlace> places,
+            int targetCount,
             boolean[] used,
             List<RoutePlace> route,
             SearchResult result
     ) {
-        if (route.size() == REQUIRED_PLACE_COUNT) {
+        if (route.size() == targetCount) {
             long distance = totalDistance(route);
             if (distance < result.bestDistance) {
                 result.bestDistance = distance;
@@ -65,7 +68,7 @@ public final class ShortestRouteCalculator {
 
             used[index] = true;
             route.add(candidate);
-            search(places, used, route, result);
+            search(places, targetCount, used, route, result);
             route.remove(route.size() - 1);
             used[index] = false;
         }
@@ -93,7 +96,7 @@ public final class ShortestRouteCalculator {
     }
 
     private RoutePlan toPlan(List<RoutePlace> route) {
-        List<RouteLeg> legs = new ArrayList<>(REQUIRED_PLACE_COUNT - 1);
+        List<RouteLeg> legs = new ArrayList<>(route.size() - 1);
         long totalDistance = 0;
 
         for (int index = 0; index < route.size() - 1; index++) {
@@ -144,8 +147,8 @@ public final class ShortestRouteCalculator {
     }
 
     private void validate(List<RoutePlace> places) {
-        if (places == null || places.size() != REQUIRED_PLACE_COUNT) {
-            throw invalid("장소는 정확히 6개여야 합니다.");
+        if (places == null || places.size() < REQUIRED_PLACE_MIN_COUNT) {
+            throw invalid("장소는 5개 이상이어야 합니다.");
         }
 
         Set<Long> placeIds = new HashSet<>();

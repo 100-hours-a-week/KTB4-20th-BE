@@ -116,7 +116,7 @@ class ShortestRouteCalculatorTest {
     }
 
     @Test
-    void rejectsAnythingOtherThanSixPlaces() {
+    void rejectsFewerThanFivePlaces() {
         assertThatThrownBy(() -> calculator.calculate(List.of(
                 place(1, 0, 0, SHOPPING)
         )))
@@ -125,6 +125,27 @@ class ShortestRouteCalculatorTest {
                         exception -> assertThat(exception.getReason())
                                 .isEqualTo(INVALID_PLACE_RESULT)
                 );
+    }
+
+    @Test
+    void findsShortestOpenRouteAndBuildsFourLegsForFivePlaces() {
+        List<RoutePlace> places = List.of(
+                place(3, 0, 2, ACTIVITY),
+                place(2, 0, 1, RESTAURANT),
+                place(5, 0, 4, SHOPPING),
+                place(1, 0, 0, TOURISM_CULTURE),
+                place(4, 0, 3, CAFE_DESSERT)
+        );
+
+        RoutePlan plan = calculator.calculate(places);
+
+        assertThat(plan.places())
+                .extracting(RoutePlace::placeId)
+                .containsExactly(1L, 2L, 3L, 4L, 5L);
+        assertThat(plan.legs()).hasSize(4);
+        assertThat(plan.legs())
+                .extracting(RouteLeg::order)
+                .containsExactly(1, 2, 3, 4);
     }
 
     @Test

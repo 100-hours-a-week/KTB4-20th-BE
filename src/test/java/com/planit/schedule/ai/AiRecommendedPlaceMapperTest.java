@@ -78,7 +78,7 @@ class AiRecommendedPlaceMapperTest {
     }
 
     @Test
-    void rejectsNonSuccessResponseAndAnythingOtherThanSixPlaces() {
+    void rejectsNonSuccessResponseAndFewerThanFivePlaces() {
         assertInvalid(new AiPlaceRecommendationResponse(
                 500,
                 new AiPlaceRecommendationResponse.Data(List.of())
@@ -89,6 +89,96 @@ class AiRecommendedPlaceMapperTest {
                 List.of("museum"),
                 List.of("HISTORY_CULTURE")
         ))));
+    }
+
+    @Test
+    void mapsFivePlacesWhenAiFallsShortOfSix() {
+        List<AiPlaceRecommendationResponse.Place> places = IntStream
+                .rangeClosed(1, 5)
+                .mapToObj(index -> place(
+                        "place-" + index,
+                        "장소 " + index,
+                        List.of("historical_landmark"),
+                        List.of("HISTORY_CULTURE")
+                ))
+                .toList();
+
+        List<RecommendedPlace> result = mapper.map(response(places));
+
+        assertThat(result).hasSize(5);
+    }
+
+    @Test
+    void classifiesCompoundMatchedPreferenceAsRest() {
+        AiPlaceRecommendationResponse.Place place = place(
+                "place-1",
+                "경주타워",
+                List.of("point_of_interest"),
+                List.of("NATURE_HEALING")
+        );
+
+        List<RecommendedPlace> result = mapper.map(response(List.of(
+                place,
+                place("place-2", "장소2", List.of("historical_landmark"), List.of("HISTORY_CULTURE")),
+                place("place-3", "장소3", List.of("historical_landmark"), List.of("HISTORY_CULTURE")),
+                place("place-4", "장소4", List.of("historical_landmark"), List.of("HISTORY_CULTURE")),
+                place("place-5", "장소5", List.of("historical_landmark"), List.of("HISTORY_CULTURE"))
+        )));
+
+        assertThat(result.getFirst().categoryGroup())
+                .isEqualTo(PlaceCategoryGroup.REST);
+    }
+
+    @Test
+    void prefersAiBucketOverTypeWhenSpaIsGroupedAsShopping() {
+        // AI는 "spa" 타입을 CONVENIENCE_SHOPPING 버킷으로 분류해서 준다.
+        // types만 보면 "spa"가 REST 안전망에 걸리지만, matched_preferences를 우선해야 한다.
+        AiPlaceRecommendationResponse.Place place = place(
+                "place-1",
+                "경주 스파",
+                List.of("spa"),
+                List.of("CONVENIENCE_SHOPPING")
+        );
+
+        List<RecommendedPlace> result = mapper.map(response(List.of(
+                place,
+                place("place-2", "장소2", List.of("historical_landmark"), List.of("HISTORY_CULTURE")),
+                place("place-3", "장소3", List.of("historical_landmark"), List.of("HISTORY_CULTURE")),
+                place("place-4", "장소4", List.of("historical_landmark"), List.of("HISTORY_CULTURE")),
+                place("place-5", "장소5", List.of("historical_landmark"), List.of("HISTORY_CULTURE"))
+        )));
+
+        assertThat(result.getFirst().categoryGroup())
+                .isEqualTo(PlaceCategoryGroup.SHOPPING);
+    }
+
+    @Test
+    void splitsFoodBucketIntoCafeAndRestaurantByType() {
+        AiPlaceRecommendationResponse.Place cafe = place(
+                "place-1",
+                "황남 옥수수빵",
+                List.of("bakery"),
+                List.of("FOOD")
+        );
+        AiPlaceRecommendationResponse.Place restaurant = place(
+                "place-2",
+                "경주역 맛집",
+                List.of("seafood_restaurant"),
+                List.of("FOOD")
+        );
+
+        List<RecommendedPlace> result = mapper.map(response(List.of(
+                cafe,
+                restaurant,
+                place("place-3", "장소3", List.of("historical_landmark"), List.of("HISTORY_CULTURE")),
+                place("place-4", "장소4", List.of("historical_landmark"), List.of("HISTORY_CULTURE")),
+                place("place-5", "장소5", List.of("historical_landmark"), List.of("HISTORY_CULTURE"))
+        )));
+
+        assertThat(result.get(0).categoryGroup())
+                .isEqualTo(PlaceCategoryGroup.CAFE_DESSERT);
+        assertThat(result.get(1).categoryGroup())
+                .isEqualTo(PlaceCategoryGroup.RESTAURANT);
     }
 
     @Test

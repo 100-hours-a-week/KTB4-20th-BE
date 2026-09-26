@@ -15,11 +15,11 @@ import static com.planit.schedule.route.RouteCalculationException.Reason.INVALID
 @Component
 public final class AiRecommendedPlaceMapper {
 
-    private static final int REQUIRED_PLACE_COUNT = 6;
+    private static final int REQUIRED_PLACE_MIN_COUNT = 5;
 
     public List<RecommendedPlace> map(AiPlaceSelectionResponse response) {
         if (response == null) {
-            throw invalid("AI 추천 장소 응답은 성공 상태와 장소 6개를 포함해야 합니다.");
+            throw invalid("AI 추천 장소 응답은 성공 상태와 장소 5개 이상을 포함해야 합니다.");
         }
         AiPlaceRecommendationResponse converted =
                 new AiPlaceRecommendationResponse(
@@ -45,8 +45,8 @@ public final class AiRecommendedPlaceMapper {
                 || response.statusCode() != 200
                 || response.data() == null
                 || response.data().places() == null
-                || response.data().places().size() != REQUIRED_PLACE_COUNT) {
-            throw invalid("AI 추천 장소 응답은 성공 상태와 장소 6개를 포함해야 합니다.");
+                || response.data().places().size() < REQUIRED_PLACE_MIN_COUNT) {
+            throw invalid("AI 추천 장소 응답은 성공 상태와 장소 5개 이상을 포함해야 합니다.");
         }
 
         Set<String> googlePlaceIds = new HashSet<>();
@@ -141,6 +141,37 @@ public final class AiRecommendedPlaceMapper {
             List<String> matchedPreferences
     ) {
         Set<String> normalizedTypes = normalize(types);
+
+        // AI는 Google 장소 타입을 이미 5개 버킷(HISTORY_CULTURE, NATURE_HEALING, ACTIVITY,
+        // CONVENIENCE_SHOPPING, FOOD)으로 분류해서 matched_preferences로 준다. types는 93개 이상의
+        // 세부 태그라 우리가 아는 몇 개만 정확히 일치시킬 수 있어서, AI의 분류(matched_preferences)를
+        // 먼저 신뢰하고 types는 FOOD 버킷 안에서 카페·베이커리 구분과 최후 안전망 용도로만 쓴다.
+        // matched_preferences는 "NATURE_HEALING"처럼 여러 단어를 합친 값을 줄 수 있어서
+        // 정확히 일치하는 원소만 찾는 containsAny 대신 부분 일치로 확인한다.
+        Set<String> preferences = normalize(matchedPreferences);
+        if (containsAnyPart(preferences, "history_culture", "tourism_culture")) {
+            return PlaceCategoryGroup.TOURISM_CULTURE;
+        }
+        if (containsAnyPart(preferences, "activity", "experience_activity")) {
+            return PlaceCategoryGroup.ACTIVITY;
+        }
+        if (containsAnyPart(preferences, "food", "restaurant")) {
+            // FOOD 버킷은 음식점과 카페·베이커리를 함께 묶어서 주므로, 세부 구분은 원본 타입으로 한다.
+            return containsAny(normalizedTypes, "cafe", "bakery")
+                    ? PlaceCategoryGroup.CAFE_DESSERT
+                    : PlaceCategoryGroup.RESTAURANT;
+        }
+        if (containsAnyPart(preferences, "cafe_dessert")) {
+            return PlaceCategoryGroup.CAFE_DESSERT;
+        }
+        if (containsAnyPart(preferences, "shopping")) {
+            return PlaceCategoryGroup.SHOPPING;
+        }
+        if (containsAnyPart(preferences, "rest", "healing")) {
+            return PlaceCategoryGroup.REST;
+        }
+
+        // matched_preferences로 분류가 안 되면 원본 타입으로 마지막으로 시도한다.
         if (containsAny(normalizedTypes,
                 "restaurant", "food", "meal_takeaway", "meal_delivery")) {
             return PlaceCategoryGroup.RESTAURANT;
@@ -151,26 +182,6 @@ public final class AiRecommendedPlaceMapper {
         if (containsAny(normalizedTypes,
                 "shopping_mall", "store", "market")) {
             return PlaceCategoryGroup.SHOPPING;
-        }
-
-        Set<String> preferences = normalize(matchedPreferences);
-        if (containsAny(preferences, "history_culture", "tourism_culture")) {
-            return PlaceCategoryGroup.TOURISM_CULTURE;
-        }
-        if (containsAny(preferences, "activity", "experience_activity")) {
-            return PlaceCategoryGroup.ACTIVITY;
-        }
-        if (containsAny(preferences, "food", "restaurant")) {
-            return PlaceCategoryGroup.RESTAURANT;
-        }
-        if (containsAny(preferences, "cafe_dessert")) {
-            return PlaceCategoryGroup.CAFE_DESSERT;
-        }
-        if (containsAny(preferences, "shopping")) {
-            return PlaceCategoryGroup.SHOPPING;
-        }
-        if (containsAny(preferences, "rest", "healing")) {
-            return PlaceCategoryGroup.REST;
         }
         if (containsAny(normalizedTypes,
                 "historical_landmark", "museum", "tourist_attraction")) {
@@ -197,6 +208,17 @@ public final class AiRecommendedPlaceMapper {
         for (String candidate : candidates) {
             if (values.contains(candidate)) {
                 return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean containsAnyPart(Set<String> values, String... candidates) {
+        for (String value : values) {
+            for (String candidate : candidates) {
+                if (value.contains(candidate)) {
+                    return true;
+                }
             }
         }
         return false;
