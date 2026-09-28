@@ -297,7 +297,7 @@ class TripServiceImplTest {
     }
 
     @Test
-    void rejectsInvitationAfterSurveyDeadline() {
+    void allowsInvitationPreviewAfterSurveyDeadline() {
         Trip trip = trip(1001L);
         ReflectionTestUtils.setField(
                 trip,
@@ -311,13 +311,33 @@ class TripServiceImplTest {
                 INVITATION_TOKEN_HASH
         )));
 
+        // 마감으로 막히지 않고 유효한 링크로 판단되어 로그인 확인까지 진행된다.
         assertError(
                 () -> tripService.getInvitationPreview(
                         null,
                         INVITATION_TOKEN
                 ),
-                ErrorCode.SURVEY_CLOSED
+                ErrorCode.AUTHENTICATION_REQUIRED
         );
+    }
+
+    @Test
+    void joinsTripAfterSurveyDeadline() {
+        Trip invitedTrip = trip(200L);
+        ReflectionTestUtils.setField(
+                invitedTrip,
+                "surveyDeadlineAt",
+                LocalDateTime.now(SEOUL_ZONE).minusMinutes(1)
+        );
+        stubInvitation(invitedTrip);
+
+        TripJoinResponse response = tripService.joinTrip(
+                USER_PUBLIC_ID.toString(),
+                new TripJoinRequest(INVITATION_TOKEN)
+        );
+
+        assertThat(response.tripId()).isEqualTo("200");
+        verify(tripMemberRepository).save(any(TripMember.class));
     }
 
     @Test
