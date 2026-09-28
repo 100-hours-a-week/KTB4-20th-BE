@@ -8,6 +8,7 @@ import com.planit.trip.dto.TripCreateResponse;
 import com.planit.trip.dto.TripDetailResponse;
 import com.planit.trip.dto.TripJoinRequest;
 import com.planit.trip.dto.TripJoinResponse;
+import com.planit.trip.dto.TripLeaveResponse;
 import com.planit.trip.dto.TripListResponse;
 import com.planit.trip.service.TripService;
 import java.util.stream.Stream;
@@ -234,12 +235,20 @@ class TripControllerTest {
 
     @Test
     void leavesTrip() throws Exception {
+        when(tripService.leaveTrip(USER_PUBLIC_ID, 1001L))
+                .thenReturn(new TripLeaveResponse(false, "2002"));
+
         mockMvc.perform(delete("/api/trips/{tripId}/members/me", 1001L)
                         .principal(new TestingAuthenticationToken(
                                 USER_PUBLIC_ID,
                                 null
                         )))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("TRIP_MEMBERSHIP_ENDED"))
+                .andExpect(jsonPath("$.message")
+                        .value("여행방에서 나갔습니다."))
+                .andExpect(jsonPath("$.data.tripDeleted").value(false))
+                .andExpect(jsonPath("$.data.newHostMemberId").value("2002"));
 
         verify(tripService).leaveTrip(USER_PUBLIC_ID, 1001L);
     }

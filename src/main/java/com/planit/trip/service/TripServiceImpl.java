@@ -11,12 +11,14 @@ import com.planit.repository.TripInvitationRepository;
 import com.planit.repository.TripMemberRepository;
 import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
+import com.planit.schedule.service.SchedulePersistenceService;
 import com.planit.trip.dto.TripCreateRequest;
 import com.planit.trip.dto.TripCreateResponse;
 import com.planit.trip.dto.TripDetailResponse;
 import com.planit.trip.dto.TripJoinRequest;
 import com.planit.trip.dto.TripJoinResponse;
 import com.planit.trip.dto.TripInvitationPreviewResponse;
+import com.planit.trip.dto.TripLeaveResponse;
 import com.planit.trip.dto.TripListResponse;
 import com.planit.trip.pagination.TripListCursorCodec;
 import com.planit.trip.pagination.TripListCursorCodec.Cursor;
@@ -51,6 +53,7 @@ public class TripServiceImpl implements TripService {
     private final TokenHasher tokenHasher;
     private final TripListCursorCodec tripListCursorCodec;
     private final ImageProperties imageProperties;
+    private final SchedulePersistenceService schedulePersistenceService;
 
     private static final int MAX_TRIP_LIST_SIZE = 10;
 
@@ -274,33 +277,79 @@ public class TripServiceImpl implements TripService {
 
     @Override
     @Transactional
-    public void leaveTrip(
+    public TripLeaveResponse leaveTrip(
             String userPublicId,
             Long tripId
     ) {
         User user = findActiveUser(userPublicId);
         Trip trip = findActiveTripForUpdate(tripId);
         TripMember currentMember = findActiveMember(trip, user);
-        LocalDateTime leftAt = LocalDateTime.now(SEOUL_ZONE);
 
-        if (currentMember.getRole() == TripMemberRole.HOST) {
-            TripMember nextHost = tripMemberRepository
-                    .findActiveMembersByTrip(trip)
-                    .stream()
-                    .filter(member -> member.getRole()
-                            == TripMemberRole.MEMBER)
-                    .findFirst()
-                    .orElseThrow(() -> new BusinessException(
-                            ErrorCode.HOST_CANNOT_LEAVE_ALONE
-                    ));
-
-            currentMember.leave(leftAt);
-            tripMemberRepository.flush();
-            nextHost.promoteToHost();
-            return;
+        LocalDate today = LocalDate.now(SEOUL_ZONE);
+        if (!today.isBefore(trip.getStartDate())) {
+            throw new BusinessException(ErrorCode.TRIP_LEAVE_NOT_ALLOWED);
         }
 
+        LocalDateTime leftAt = LocalDateTime.now(SEOUL_ZONE);
+        return performLeave(trip, currentMember, leftAt);
+    }
+
+    @Override
+    @Transactional
+    public void leaveAllTripsForWithdrawal(
+            User user,
+            LocalDateTime leftAt
+    ) {
+        List<TripMember> memberships = tripMemberRepository
+                .findByUserAndActiveSlotAndLeftAtIsNull(user, (byte) 1);
+
+        for (TripMember member : memberships) {
+            Trip trip = tripRepository
+                    .findByIdForUpdate(member.getTrip().getId())
+                    .orElse(null);
+            if (trip == null || trip.getDeletedAt() != null) {
+                continue;
+            }
+
+            performLeave(trip, member, leftAt);
+        }
+    }
+
+    /**
+     * 나가기(직접 나가기·회원 탈퇴 공통)를 처리한다.
+     * 나간 뒤 활성 멤버가 1명 이하로 남으면(한 번이라도 2명 이상이었던 방 포함) 여행방을 소프트
+     * 삭제하고 남은 멤버십도 종료하며, 후보·확정 일정을 함께 정리한다.
+     * 그렇지 않고 방장이 나갔다면 가장 먼저 참가한 멤버에게 방장을 이전한다.
+     */
+    private TripLeaveResponse performLeave(
+            Trip trip,
+            TripMember currentMember,
+            LocalDateTime leftAt
+    ) {
+        List<TripMember> remainingMembers = tripMemberRepository
+                .findActiveMembersByTrip(trip)
+                .stream()
+                .filter(member -> member != currentMember)
+                .toList();
+
         currentMember.leave(leftAt);
+
+        if (remainingMembers.size() <= 1) {
+            remainingMembers.forEach(member -> member.leave(leftAt));
+            trip.delete(leftAt);
+            schedulePersistenceService.deleteAllForTrip(trip.getId());
+            return new TripLeaveResponse(true, null);
+        }
+
+        if (currentMember.getRole() == TripMemberRole.HOST) {
+            // findActiveMembersByTrip은 joinedAt 오름차순이라, 첫 원소가 가장 먼저 참가한 멤버다.
+            TripMember nextHost = remainingMembers.get(0);
+            tripMemberRepository.flush();
+            nextHost.promoteToHost();
+            return new TripLeaveResponse(false, nextHost.getId().toString());
+        }
+
+        return new TripLeaveResponse(false, null);
     }
 
     @Override

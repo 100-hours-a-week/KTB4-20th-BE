@@ -22,6 +22,12 @@ public interface TripMemberRepository
 
     long countByTripAndLeftAtIsNull(Trip trip);
 
+    /** 회원 탈퇴 시, 이 사용자가 활성 멤버로 남아있는 모든 여행방을 정리하기 위해 씁니다. */
+    List<TripMember> findByUserAndActiveSlotAndLeftAtIsNull(
+            User user,
+            Byte activeSlot
+    );
+
     Optional<TripMember> findByTripAndUserAndLeftAtIsNull(
             Trip trip,
             User user
