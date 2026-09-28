@@ -40,4 +40,9 @@ public interface TripService {
             String userPublicId,
             Long tripId
     );
+
+    TripCreateResponse getInvitation(
+            String userPublicId,
+            Long tripId
+    );
 }

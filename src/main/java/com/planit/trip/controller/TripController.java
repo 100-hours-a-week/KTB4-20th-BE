@@ -27,6 +27,8 @@ public class TripController {
     private static final String LIST_SUCCESS_MESSAGE = "참여 중인 여행방 목록을 조회했습니다.";
     private static final String DETAIL_SUCCESS_CODE = "TRIP_RETRIEVED";
     private static final String DETAIL_SUCCESS_MESSAGE = "여행방을 조회했습니다.";
+    private static final String INVITATION_SUCCESS_CODE = "TRIP_INVITATION_RETRIEVED";
+    private static final String INVITATION_SUCCESS_MESSAGE = "초대 링크를 조회했습니다.";
 
     private final TripService tripService;
 
@@ -97,6 +99,23 @@ public class TripController {
         return ApiResponse.success(
                 DETAIL_SUCCESS_CODE,
                 DETAIL_SUCCESS_MESSAGE,
+                response
+        );
+    }
+
+    @GetMapping("/{tripId}/invitation")
+    public ApiResponse<TripCreateResponse> getInvitation(
+            Authentication authentication,
+            @PathVariable Long tripId
+    ) {
+        TripCreateResponse response = tripService.getInvitation(
+                authentication.getName(),
+                tripId
+        );
+
+        return ApiResponse.success(
+                INVITATION_SUCCESS_CODE,
+                INVITATION_SUCCESS_MESSAGE,
                 response
         );
     }

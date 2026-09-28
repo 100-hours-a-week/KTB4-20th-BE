@@ -1,6 +1,6 @@
 package com.planit.trip.service;
 
-import com.planit.auth.token.SecureTokenGenerator;
+import com.planit.auth.config.AuthProperties;
 import com.planit.auth.token.TokenHasher;
 import com.planit.domain.Region;
 import com.planit.domain.Trip;
@@ -56,13 +56,14 @@ class TripServiceImplTest {
     );
     private static final String INVITATION_TOKEN = "a".repeat(43);
     private static final String INVITATION_TOKEN_HASH = "token-hash";
+    private static final String INVITATION_SECRET = "test-secret";
 
+    private AuthProperties authProperties;
     private UserRepository userRepository;
     private RegionRepository regionRepository;
     private TripRepository tripRepository;
     private TripMemberRepository tripMemberRepository;
     private TripInvitationRepository tripInvitationRepository;
-    private SecureTokenGenerator secureTokenGenerator;
     private TokenHasher tokenHasher;
     private TripListCursorCodec tripListCursorCodec;
     private TripServiceImpl tripService;
@@ -71,21 +72,24 @@ class TripServiceImplTest {
 
     @BeforeEach
     void setUp() {
+        authProperties = mock(AuthProperties.class);
+        AuthProperties.Jwt jwt = mock(AuthProperties.Jwt.class);
+        when(authProperties.jwt()).thenReturn(jwt);
+        when(jwt.secretBase64()).thenReturn(INVITATION_SECRET);
         userRepository = mock(UserRepository.class);
         regionRepository = mock(RegionRepository.class);
         tripRepository = mock(TripRepository.class);
         tripMemberRepository = mock(TripMemberRepository.class);
         tripInvitationRepository = mock(TripInvitationRepository.class);
-        secureTokenGenerator = mock(SecureTokenGenerator.class);
         tokenHasher = mock(TokenHasher.class);
         tripListCursorCodec = new TripListCursorCodec();
         tripService = new TripServiceImpl(
+                authProperties,
                 userRepository,
                 regionRepository,
                 tripRepository,
                 tripMemberRepository,
                 tripInvitationRepository,
-                secureTokenGenerator,
                 tokenHasher,
                 tripListCursorCodec,
                 new ImageProperties(URI.create(
@@ -108,8 +112,9 @@ class TripServiceImplTest {
                 });
         when(tripMemberRepository.save(any(TripMember.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-        when(secureTokenGenerator.generate())
-                .thenReturn(INVITATION_TOKEN);
+        // 여행방 번호 100의 계산 결과 앞 43자가 INVITATION_TOKEN이 되도록 맞춘다.
+        when(tokenHasher.sha256(invitationSource(100L)))
+                .thenReturn("a".repeat(64));
         when(tokenHasher.sha256(INVITATION_TOKEN))
                 .thenReturn(INVITATION_TOKEN_HASH);
         when(tripInvitationRepository.save(any(TripInvitation.class)))
@@ -702,6 +707,91 @@ class TripServiceImplTest {
     }
 
     @Test
+    void returnsSameInvitationTokenForHost() {
+        Trip trip = trip(100L);
+        TripMember host = TripMember.createHost(trip, user);
+        when(tripRepository.findByIdForUpdate(100L))
+                .thenReturn(Optional.of(trip));
+        when(tripMemberRepository.findByTripAndUserAndLeftAtIsNull(
+                trip,
+                user
+        )).thenReturn(Optional.of(host));
+        when(tripInvitationRepository.findByTokenHash(
+                INVITATION_TOKEN_HASH
+        )).thenReturn(Optional.of(new TripInvitation(
+                trip,
+                INVITATION_TOKEN_HASH
+        )));
+
+        TripCreateResponse first = tripService.getInvitation(
+                USER_PUBLIC_ID.toString(),
+                100L
+        );
+        TripCreateResponse second = tripService.getInvitation(
+                USER_PUBLIC_ID.toString(),
+                100L
+        );
+
+        assertThat(first.tripId()).isEqualTo("100");
+        assertThat(first.invitationToken()).isEqualTo(INVITATION_TOKEN);
+        assertThat(second.invitationToken())
+                .isEqualTo(first.invitationToken());
+        verify(tripInvitationRepository, never())
+                .save(any(TripInvitation.class));
+    }
+
+    @Test
+    void savesInvitationHashForTripCreatedBeforeFixedToken() {
+        Trip trip = trip(100L);
+        TripMember host = TripMember.createHost(trip, user);
+        when(tripRepository.findByIdForUpdate(100L))
+                .thenReturn(Optional.of(trip));
+        when(tripMemberRepository.findByTripAndUserAndLeftAtIsNull(
+                trip,
+                user
+        )).thenReturn(Optional.of(host));
+        when(tripInvitationRepository.findByTokenHash(
+                INVITATION_TOKEN_HASH
+        )).thenReturn(Optional.empty());
+
+        TripCreateResponse response = tripService.getInvitation(
+                USER_PUBLIC_ID.toString(),
+                100L
+        );
+
+        assertThat(response.invitationToken()).isEqualTo(INVITATION_TOKEN);
+        ArgumentCaptor<TripInvitation> invitationCaptor =
+                ArgumentCaptor.forClass(TripInvitation.class);
+        verify(tripInvitationRepository).save(invitationCaptor.capture());
+        assertThat(invitationCaptor.getValue().getTrip()).isSameAs(trip);
+        assertThat(invitationCaptor.getValue().getTokenHash())
+                .isEqualTo(INVITATION_TOKEN_HASH);
+    }
+
+    @Test
+    void rejectsInvitationRequestFromMember() {
+        Trip trip = trip(100L);
+        TripMember member = TripMember.createMember(trip, user);
+        when(tripRepository.findByIdForUpdate(100L))
+                .thenReturn(Optional.of(trip));
+        when(tripMemberRepository.findByTripAndUserAndLeftAtIsNull(
+                trip,
+                user
+        )).thenReturn(Optional.of(member));
+
+        assertError(
+                () -> tripService.getInvitation(
+                        USER_PUBLIC_ID.toString(),
+                        100L
+                ),
+                ErrorCode.ACCESS_DENIED
+        );
+
+        verify(tripInvitationRepository, never())
+                .save(any(TripInvitation.class));
+    }
+
+    @Test
     void rejectsLeavingTripForNonMember() {
         Trip trip = trip(200L);
         when(tripRepository.findByIdForUpdate(200L))
@@ -983,6 +1073,10 @@ class TripServiceImplTest {
         )));
         when(tripRepository.findByIdForUpdate(trip.getId()))
                 .thenReturn(Optional.of(trip));
+    }
+
+    private String invitationSource(Long tripId) {
+        return INVITATION_SECRET + ":trip-invitation:" + tripId;
     }
 
     private void assertError(Runnable action, ErrorCode errorCode) {
