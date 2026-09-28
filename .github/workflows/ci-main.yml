@@ -155,7 +155,7 @@ jobs:
                   ;;
                 *)
                   echo "- Result: $STATUS" >> "$GITHUB_STEP_SUMMARY"
-                  echo "::error::Deployment failed ($STATUS). Inspect SSM command: $COMMAND_ID. Rollback is manual."
+                  echo "::error::Deployment failed ($STATUS). Inspect SSM command: $COMMAND_ID. Inspect SSM output for rollback status."
                   exit 1
                   ;;
               esac
