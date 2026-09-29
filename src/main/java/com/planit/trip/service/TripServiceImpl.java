@@ -1,6 +1,6 @@
 package com.planit.trip.service;
 
-import com.planit.auth.token.SecureTokenGenerator;
+import com.planit.auth.config.AuthProperties;
 import com.planit.auth.token.TokenHasher;
 import com.planit.domain.*;
 import com.planit.global.error.BusinessException;
@@ -43,13 +43,13 @@ import java.util.stream.Collectors;
 public class TripServiceImpl implements TripService {
 
     private static final ZoneId SEOUL_ZONE = ZoneId.of("Asia/Seoul");
-
+    private final AuthProperties authProperties;
     private final UserRepository userRepository;
     private final RegionRepository regionRepository;
     private final TripRepository tripRepository;
     private final TripMemberRepository tripMemberRepository;
     private final TripInvitationRepository tripInvitationRepository;
-    private final SecureTokenGenerator secureTokenGenerator;
+
     private final TokenHasher tokenHasher;
     private final TripListCursorCodec tripListCursorCodec;
     private final ImageProperties imageProperties;
@@ -91,7 +91,7 @@ public class TripServiceImpl implements TripService {
         TripMember host = TripMember.createHost(savedTrip, user);
         tripMemberRepository.save(host);
 
-        String invitationToken = secureTokenGenerator.generate();
+        String invitationToken = generateInvitationToken(savedTrip.getId());
 
         String invitationTokenHash = tokenHasher.sha256(invitationToken);
 
@@ -372,6 +372,42 @@ public class TripServiceImpl implements TripService {
         }
 
         return new TripLeaveResponse(false, null);
+    }
+
+    @Override
+    @Transactional
+    public TripCreateResponse getInvitation(
+            String userPublicId,
+            Long tripId
+    ) {
+        User user = findActiveUser(userPublicId);
+        Trip trip = findActiveTripForUpdate(tripId);
+        TripMember currentMember = findActiveMember(trip, user);
+
+        if (currentMember.getRole() != TripMemberRole.HOST) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
+
+        String invitationToken = generateInvitationToken(trip.getId());
+        String invitationTokenHash = tokenHasher.sha256(invitationToken);
+
+        if (tripInvitationRepository.findByTokenHash(invitationTokenHash).isEmpty()) {
+            tripInvitationRepository.save(
+                    new TripInvitation(trip, invitationTokenHash)
+            );
+        }
+
+        return new TripCreateResponse(
+                trip.getId().toString(),
+                invitationToken
+        );
+    }
+
+    private String generateInvitationToken(Long tripId) {
+        return tokenHasher
+                .sha256(authProperties.jwt().secretBase64()
+                        + ":trip-invitation:" + tripId)
+                .substring(0, 43);
     }
 
     @Override

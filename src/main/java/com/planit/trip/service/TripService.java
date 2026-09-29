@@ -45,6 +45,11 @@ public interface TripService {
             Long tripId
     );
 
+    TripCreateResponse getInvitation(
+            String userPublicId,
+            Long tripId
+    );
+
     /** 회원 탈퇴 시, 이 사용자가 활성 멤버로 남아있는 모든 여행방에서 나가게 한다. */
     void leaveAllTripsForWithdrawal(
             User user,
