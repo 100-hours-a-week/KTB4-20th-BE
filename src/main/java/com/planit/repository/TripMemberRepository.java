@@ -47,6 +47,24 @@ public interface TripMemberRepository
             @Param("trip") Trip trip
     );
 
+    /**
+     * 여행방 상세 화면처럼, 탈퇴한 사용자의 멤버십도 "탈퇴한 사용자"로 표시하기 위해 남겨둬야
+     * 하는 화면에서 쓴다. findActiveMembersByTrip과 달리 memberUser.deletedAt을 걸러내지
+     * 않는다.
+     */
+    @Query("""
+            SELECT tm
+            FROM TripMember tm
+            JOIN FETCH tm.user memberUser
+            WHERE tm.trip = :trip
+              AND tm.activeSlot = 1
+              AND tm.leftAt IS NULL
+            ORDER BY tm.joinedAt ASC, tm.id ASC
+            """)
+    List<TripMember> findActiveMembersByTripIncludingWithdrawn(
+            @Param("trip") Trip trip
+    );
+
     @Query("""
             SELECT COUNT(tm)
             FROM TripMember tm

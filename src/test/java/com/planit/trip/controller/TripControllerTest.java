@@ -197,6 +197,7 @@ class TripControllerTest {
                         ),
                         List.of(
                                 new TripDetailResponse.Member(
+                                        "2001",
                                         java.util.UUID.fromString(
                                                 USER_PUBLIC_ID
                                         ),
@@ -205,6 +206,7 @@ class TripControllerTest {
                                         TripMemberRole.HOST
                                 ),
                                 new TripDetailResponse.Member(
+                                        "2002",
                                         java.util.UUID.fromString(
                                                 "01991f6e-7300-7b21-a3cc-1436db3df95f"
                                         ),

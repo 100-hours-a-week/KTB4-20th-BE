@@ -520,6 +520,8 @@ class TripServiceImplTest {
         User memberUser = mock(User.class);
         TripMember host = TripMember.createHost(trip, user);
         TripMember member = TripMember.createMember(trip, memberUser);
+        ReflectionTestUtils.setField(host, "id", 2001L);
+        ReflectionTestUtils.setField(member, "id", 2002L);
 
         when(region.getId()).thenReturn(3L);
         when(region.getCode()).thenReturn("REGION-BUSAN");
@@ -535,7 +537,7 @@ class TripServiceImplTest {
                 trip,
                 user
         )).thenReturn(Optional.of(host));
-        when(tripMemberRepository.findActiveMembersByTrip(trip))
+        when(tripMemberRepository.findActiveMembersByTripIncludingWithdrawn(trip))
                 .thenReturn(List.of(host, member));
 
         TripDetailResponse response = tripService.getTripDetail(
@@ -554,6 +556,45 @@ class TripServiceImplTest {
         assertThat(response.members())
                 .extracting(TripDetailResponse.Member::profileImageUrl)
                 .containsOnly("https://example.com/default-profile.png");
+    }
+
+    @Test
+    void showsWithdrawnUserPlaceholderInTripDetail() {
+        Trip trip = trip(200L);
+        User withdrawnUser = mock(User.class);
+        TripMember host = TripMember.createHost(trip, user);
+        TripMember withdrawnMember = TripMember.createMember(trip, withdrawnUser);
+        ReflectionTestUtils.setField(host, "id", 2001L);
+        ReflectionTestUtils.setField(withdrawnMember, "id", 2002L);
+
+        when(region.getId()).thenReturn(3L);
+        when(region.getCode()).thenReturn("REGION-BUSAN");
+        when(region.getName()).thenReturn("부산");
+        when(user.getPublicId()).thenReturn(USER_PUBLIC_ID);
+        when(user.getUsername()).thenReturn("사용자A");
+        when(withdrawnUser.getUsername()).thenReturn("사용자B");
+        when(withdrawnUser.getDeletedAt())
+                .thenReturn(LocalDateTime.now(SEOUL_ZONE));
+        when(tripRepository.findById(200L)).thenReturn(Optional.of(trip));
+        when(tripMemberRepository.findByTripAndUserAndLeftAtIsNull(
+                trip,
+                user
+        )).thenReturn(Optional.of(host));
+        when(tripMemberRepository.findActiveMembersByTripIncludingWithdrawn(trip))
+                .thenReturn(List.of(host, withdrawnMember));
+
+        TripDetailResponse response = tripService.getTripDetail(
+                USER_PUBLIC_ID.toString(),
+                200L
+        );
+
+        assertThat(response.memberCount()).isEqualTo(2);
+        assertThat(response.members())
+                .extracting(TripDetailResponse.Member::userName)
+                .containsExactly("사용자A", "탈퇴한 사용자");
+        assertThat(response.members())
+                .extracting(TripDetailResponse.Member::userPublicId)
+                .containsExactly(USER_PUBLIC_ID, null);
     }
 
     @Test
@@ -840,6 +881,99 @@ class TripServiceImplTest {
         assertThat(soloHost.getLeftAt()).isEqualTo(withdrawnAt);
         assertThat(soloTrip.getDeletedAt()).isEqualTo(withdrawnAt);
         verify(schedulePersistenceService).deleteAllForTrip(300L);
+    }
+
+    @Test
+    void withdrawalKeepsMembershipAliveWhenSoleActiveTripAlreadyEnded() {
+        // 이미 끝난 여행에 혼자 남아있던 방장이 탈퇴해도, 완료된 여행 기록은 삭제하지 않고
+        // 멤버십도 종료 처리하지 않는다(화면에서는 User.deletedAt 기준으로 "탈퇴한 사용자"로
+        // 표시된다).
+        LocalDate endedStartDate = LocalDate.now(SEOUL_ZONE).minusDays(3);
+        Trip endedTrip = trip(200L, endedStartDate);
+        TripMember soloHost = TripMember.createHost(endedTrip, user);
+        LocalDateTime withdrawnAt = LocalDateTime.now(SEOUL_ZONE);
+
+        when(tripMemberRepository.findByUserAndActiveSlotAndLeftAtIsNull(
+                user,
+                (byte) 1
+        )).thenReturn(List.of(soloHost));
+        when(tripRepository.findByIdForUpdate(200L))
+                .thenReturn(Optional.of(endedTrip));
+        when(tripMemberRepository.findActiveMembersByTrip(endedTrip))
+                .thenReturn(List.of(soloHost));
+
+        tripService.leaveAllTripsForWithdrawal(user, withdrawnAt);
+
+        assertThat(soloHost.getLeftAt()).isNull();
+        assertThat(soloHost.getActiveSlot()).isEqualTo((byte) 1);
+        assertThat(soloHost.getHostSlot()).isEqualTo((byte) 1);
+        assertThat(endedTrip.getDeletedAt()).isNull();
+        verifyNoInteractions(schedulePersistenceService);
+    }
+
+    @Test
+    void withdrawalTransfersHostWithoutDeletingTripInProgress() {
+        // 진행 중인(오늘 시작하는) 여행에서 방장이 탈퇴하면, 남은 인원이 1명이어도 방을
+        // 삭제하지 않고 그 멤버에게 방장을 이전한다. 탈퇴한 방장의 멤버십 자체는 남는다.
+        LocalDate todayStartDate = LocalDate.now(SEOUL_ZONE);
+        Trip inProgressTrip = trip(200L, todayStartDate);
+        TripMember host = TripMember.createHost(inProgressTrip, user);
+        TripMember remainingMember = TripMember.createMember(
+                inProgressTrip,
+                mock(User.class)
+        );
+        ReflectionTestUtils.setField(remainingMember, "id", 2002L);
+        LocalDateTime withdrawnAt = LocalDateTime.now(SEOUL_ZONE);
+
+        when(tripMemberRepository.findByUserAndActiveSlotAndLeftAtIsNull(
+                user,
+                (byte) 1
+        )).thenReturn(List.of(host));
+        when(tripRepository.findByIdForUpdate(200L))
+                .thenReturn(Optional.of(inProgressTrip));
+        when(tripMemberRepository.findActiveMembersByTrip(inProgressTrip))
+                .thenReturn(List.of(host, remainingMember));
+
+        tripService.leaveAllTripsForWithdrawal(user, withdrawnAt);
+
+        assertThat(host.getLeftAt()).isNull();
+        assertThat(host.getActiveSlot()).isEqualTo((byte) 1);
+        assertThat(host.getHostSlot()).isNull();
+        assertThat(host.getRole()).isEqualTo(TripMemberRole.HOST);
+        assertThat(remainingMember.getRole()).isEqualTo(TripMemberRole.HOST);
+        assertThat(remainingMember.getHostSlot()).isEqualTo((byte) 1);
+        assertThat(inProgressTrip.getDeletedAt()).isNull();
+        verifyNoInteractions(schedulePersistenceService);
+    }
+
+    @Test
+    void withdrawalPreservesOtherMembersHistoryWhenNonHostLeavesEndedTrip() {
+        // 이미 끝난 여행에서 방장이 아닌 멤버가 탈퇴해도, 방장의 완료된 여행 기록은
+        // 본인 의사와 무관하게 사라지지 않는다. 탈퇴한 멤버 본인의 멤버십도 그대로 남는다.
+        LocalDate endedStartDate = LocalDate.now(SEOUL_ZONE).minusDays(10);
+        Trip endedTrip = trip(200L, endedStartDate);
+        TripMember host = TripMember.createHost(endedTrip, mock(User.class));
+        TripMember withdrawingMember = TripMember.createMember(endedTrip, user);
+        LocalDateTime withdrawnAt = LocalDateTime.now(SEOUL_ZONE);
+
+        when(tripMemberRepository.findByUserAndActiveSlotAndLeftAtIsNull(
+                user,
+                (byte) 1
+        )).thenReturn(List.of(withdrawingMember));
+        when(tripRepository.findByIdForUpdate(200L))
+                .thenReturn(Optional.of(endedTrip));
+        when(tripMemberRepository.findActiveMembersByTrip(endedTrip))
+                .thenReturn(List.of(host, withdrawingMember));
+
+        tripService.leaveAllTripsForWithdrawal(user, withdrawnAt);
+
+        assertThat(withdrawingMember.getLeftAt()).isNull();
+        assertThat(withdrawingMember.getActiveSlot()).isEqualTo((byte) 1);
+        assertThat(host.getLeftAt()).isNull();
+        assertThat(host.getActiveSlot()).isEqualTo((byte) 1);
+        assertThat(host.getHostSlot()).isEqualTo((byte) 1);
+        assertThat(endedTrip.getDeletedAt()).isNull();
+        verifyNoInteractions(schedulePersistenceService);
     }
 
     @Test

@@ -56,6 +56,7 @@ public class TripServiceImpl implements TripService {
     private final SchedulePersistenceService schedulePersistenceService;
 
     private static final int MAX_TRIP_LIST_SIZE = 10;
+    private static final String WITHDRAWN_USER_NAME = "탈퇴한 사용자";
 
     @Override
     @Transactional
@@ -239,17 +240,12 @@ public class TripServiceImpl implements TripService {
         User user = findActiveUser(userPublicId);
         Trip trip = findActiveTrip(tripId);
         TripMember currentMember = findActiveMember(trip, user);
-        List<TripMember> activeMembers =
-                tripMemberRepository.findActiveMembersByTrip(trip);
+        List<TripMember> activeMembers = tripMemberRepository
+                .findActiveMembersByTripIncludingWithdrawn(trip);
 
         Region region = trip.getRegion();
         List<TripDetailResponse.Member> members = activeMembers.stream()
-                .map(member -> new TripDetailResponse.Member(
-                        member.getUser().getPublicId(),
-                        member.getUser().getUsername(),
-                        imageProperties.defaultProfileUrl().toString(),
-                        member.getRole()
-                ))
+                .map(this::toMemberResponse)
                 .toList();
 
         return new TripDetailResponse(
@@ -291,7 +287,8 @@ public class TripServiceImpl implements TripService {
         }
 
         LocalDateTime leftAt = LocalDateTime.now(SEOUL_ZONE);
-        return performLeave(trip, currentMember, leftAt);
+        // leaveTrip은 위에서 이미 여행 시작 전임을 확인했으므로 자동 삭제 규칙이 항상 적용된다.
+        return performLeave(trip, currentMember, leftAt, true);
     }
 
     @Override
@@ -302,6 +299,7 @@ public class TripServiceImpl implements TripService {
     ) {
         List<TripMember> memberships = tripMemberRepository
                 .findByUserAndActiveSlotAndLeftAtIsNull(user, (byte) 1);
+        LocalDate today = LocalDate.now(SEOUL_ZONE);
 
         for (TripMember member : memberships) {
             Trip trip = tripRepository
@@ -311,20 +309,30 @@ public class TripServiceImpl implements TripService {
                 continue;
             }
 
-            performLeave(trip, member, leftAt);
+            // 탈퇴는 날짜와 무관하게 항상 처리하되, 이미 시작했거나 끝난 여행이면 자동 삭제
+            // 규칙은 건너뛰어 다른 멤버의 완료된 여행 기록이 사라지지 않게 한다.
+            boolean allowAutoDelete = today.isBefore(trip.getStartDate());
+            performLeave(trip, member, leftAt, allowAutoDelete);
         }
     }
 
     /**
      * 나가기(직접 나가기·회원 탈퇴 공통)를 처리한다.
-     * 나간 뒤 활성 멤버가 1명 이하로 남으면(한 번이라도 2명 이상이었던 방 포함) 여행방을 소프트
-     * 삭제하고 남은 멤버십도 종료하며, 후보·확정 일정을 함께 정리한다.
-     * 그렇지 않고 방장이 나갔다면 가장 먼저 참가한 멤버에게 방장을 이전한다.
+     * allowAutoDelete가 true이고 나간 뒤 활성 멤버가 1명 이하로 남으면(한 번이라도 2명
+     * 이상이었던 방 포함) 여행방을 소프트 삭제하고 남은 멤버십도 종료하며, 후보·확정
+     * 일정을 함께 정리한다.
+     * allowAutoDelete가 false면(탈퇴 시점에 여행이 이미 시작했거나 끝난 경우) 방과 기록을
+     * 그대로 보존한다: 멤버십 자체는 종료 처리하지 않고, 방장이었다면 host 슬롯만 내려놓고
+     * 남은 멤버가 있으면 그 멤버에게 위임한다. 탈퇴한 사용자는 User.deletedAt을 기준으로
+     * 화면에서 "탈퇴한 사용자"로 표시된다(getTripDetail 참고).
+     * allowAutoDelete가 true이고 2명 이상 남았는데 방장이 나갔다면, 가장 먼저 참가한
+     * 멤버에게 방장을 이전한다.
      */
     private TripLeaveResponse performLeave(
             Trip trip,
             TripMember currentMember,
-            LocalDateTime leftAt
+            LocalDateTime leftAt,
+            boolean allowAutoDelete
     ) {
         List<TripMember> remainingMembers = tripMemberRepository
                 .findActiveMembersByTrip(trip)
@@ -332,14 +340,28 @@ public class TripServiceImpl implements TripService {
                 .filter(member -> member != currentMember)
                 .toList();
 
-        currentMember.leave(leftAt);
-
-        if (remainingMembers.size() <= 1) {
+        if (allowAutoDelete && remainingMembers.size() <= 1) {
+            currentMember.leave(leftAt);
             remainingMembers.forEach(member -> member.leave(leftAt));
             trip.delete(leftAt);
             schedulePersistenceService.deleteAllForTrip(trip.getId());
             return new TripLeaveResponse(true, null);
         }
+
+        if (!allowAutoDelete) {
+            if (currentMember.getRole() == TripMemberRole.HOST
+                    && !remainingMembers.isEmpty()) {
+                currentMember.demoteFromHost();
+                tripMemberRepository.flush();
+                // findActiveMembersByTrip은 joinedAt 오름차순이라, 첫 원소가 가장 먼저 참가한 멤버다.
+                TripMember nextHost = remainingMembers.get(0);
+                nextHost.promoteToHost();
+                return new TripLeaveResponse(false, nextHost.getId().toString());
+            }
+            return new TripLeaveResponse(false, null);
+        }
+
+        currentMember.leave(leftAt);
 
         if (currentMember.getRole() == TripMemberRole.HOST) {
             // findActiveMembersByTrip은 joinedAt 오름차순이라, 첫 원소가 가장 먼저 참가한 멤버다.
@@ -490,6 +512,17 @@ public class TripServiceImpl implements TripService {
         if (size < 1 || size > MAX_TRIP_LIST_SIZE) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST);
         }
+    }
+
+    private TripDetailResponse.Member toMemberResponse(TripMember member) {
+        boolean withdrawn = member.getUser().getDeletedAt() != null;
+        return new TripDetailResponse.Member(
+                member.getId().toString(),
+                withdrawn ? null : member.getUser().getPublicId(),
+                withdrawn ? WITHDRAWN_USER_NAME : member.getUser().getUsername(),
+                imageProperties.defaultProfileUrl().toString(),
+                member.getRole()
+        );
     }
 
     private Trip findActiveTrip(Long tripId) {
