@@ -12,6 +12,7 @@ import com.planit.image.config.ImageProperties;
 import com.planit.repository.OAuthAccountRepository;
 import com.planit.repository.RefreshTokenRepository;
 import com.planit.repository.UserRepository;
+import com.planit.trip.service.TripService;
 import com.planit.user.dto.CurrentUserResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -44,6 +45,7 @@ class UserServiceImplTest {
     private OAuthAccountRepository oauthAccountRepository;
     private RefreshTokenRepository refreshTokenRepository;
     private KakaoOAuthClient kakaoOAuthClient;
+    private TripService tripService;
     private WithdrawalTransactionService withdrawalTransactionService;
     private UserService userService;
 
@@ -53,11 +55,13 @@ class UserServiceImplTest {
         oauthAccountRepository = mock(OAuthAccountRepository.class);
         refreshTokenRepository = mock(RefreshTokenRepository.class);
         kakaoOAuthClient = mock(KakaoOAuthClient.class);
+        tripService = mock(TripService.class);
         withdrawalTransactionService =
                 new WithdrawalTransactionService(
                         userRepository,
                         oauthAccountRepository,
-                        refreshTokenRepository
+                        refreshTokenRepository,
+                        tripService
                 );
         userService = new UserServiceImpl(
                 userRepository,
@@ -164,6 +168,10 @@ class UserServiceImplTest {
 
         verify(kakaoOAuthClient).unlink("123456789");
         verify(oauthAccountRepository).delete(oauthAccount);
+        verify(tripService).leaveAllTripsForWithdrawal(
+                org.mockito.ArgumentMatchers.eq(user),
+                any(LocalDateTime.class)
+        );
         assertThat(user.getDeletedAt()).isNotNull();
         assertThat(firstToken.getRevokedAt()).isNotNull();
         assertThat(secondToken.getRevokedAt()).isNotNull();

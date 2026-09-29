@@ -150,4 +150,27 @@ public class SchedulePersistenceService {
             throw new BusinessException(INVALID_AI_PLACE_RESULT, exception);
         }
     }
+
+    /**
+     * 여행방이 자동 삭제될 때(나가기·탈퇴로 마지막 한 명만 남는 경우) 후보·확정 일정과
+     * 하위 Day·방문 장소·이동 구간을 함께 정리한다.
+     */
+    @Transactional
+    public void deleteAllForTrip(Long tripId) {
+        List<Schedule> schedules = scheduleRepository.findByTripId(tripId);
+        for (Schedule schedule : schedules) {
+            List<ScheduleDay> days = dayRepository
+                    .findByScheduleIdOrderByDayNumberAsc(schedule.getId());
+            for (ScheduleDay day : days) {
+                legRepository.deleteAll(
+                        legRepository.findByDayIdOrderByLegOrderAsc(day.getId())
+                );
+                visitRepository.deleteAll(
+                        visitRepository.findByDayIdOrderByVisitOrderAsc(day.getId())
+                );
+            }
+            dayRepository.deleteAll(days);
+        }
+        scheduleRepository.deleteAll(schedules);
+    }
 }

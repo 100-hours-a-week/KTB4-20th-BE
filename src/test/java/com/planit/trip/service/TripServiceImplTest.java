@@ -1,6 +1,6 @@
 package com.planit.trip.service;
 
-import com.planit.auth.token.SecureTokenGenerator;
+import com.planit.auth.config.AuthProperties;
 import com.planit.auth.token.TokenHasher;
 import com.planit.domain.Region;
 import com.planit.domain.Trip;
@@ -17,12 +17,14 @@ import com.planit.repository.TripInvitationRepository;
 import com.planit.repository.TripMemberRepository;
 import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
+import com.planit.schedule.service.SchedulePersistenceService;
 import com.planit.trip.dto.TripCreateRequest;
 import com.planit.trip.dto.TripCreateResponse;
 import com.planit.trip.dto.TripDetailResponse;
 import com.planit.trip.dto.TripJoinRequest;
 import com.planit.trip.dto.TripJoinResponse;
 import com.planit.trip.dto.TripInvitationPreviewResponse;
+import com.planit.trip.dto.TripLeaveResponse;
 import com.planit.trip.dto.TripListResponse;
 import com.planit.trip.pagination.TripListCursorCodec;
 import com.planit.trip.pagination.TripListCursorCodec.Cursor;
@@ -56,41 +58,48 @@ class TripServiceImplTest {
     );
     private static final String INVITATION_TOKEN = "a".repeat(43);
     private static final String INVITATION_TOKEN_HASH = "token-hash";
+    private static final String INVITATION_SECRET = "test-secret";
 
+    private AuthProperties authProperties;
     private UserRepository userRepository;
     private RegionRepository regionRepository;
     private TripRepository tripRepository;
     private TripMemberRepository tripMemberRepository;
     private TripInvitationRepository tripInvitationRepository;
-    private SecureTokenGenerator secureTokenGenerator;
     private TokenHasher tokenHasher;
     private TripListCursorCodec tripListCursorCodec;
+    private SchedulePersistenceService schedulePersistenceService;
     private TripServiceImpl tripService;
     private User user;
     private Region region;
 
     @BeforeEach
     void setUp() {
+        authProperties = mock(AuthProperties.class);
+        AuthProperties.Jwt jwt = mock(AuthProperties.Jwt.class);
+        when(authProperties.jwt()).thenReturn(jwt);
+        when(jwt.secretBase64()).thenReturn(INVITATION_SECRET);
         userRepository = mock(UserRepository.class);
         regionRepository = mock(RegionRepository.class);
         tripRepository = mock(TripRepository.class);
         tripMemberRepository = mock(TripMemberRepository.class);
         tripInvitationRepository = mock(TripInvitationRepository.class);
-        secureTokenGenerator = mock(SecureTokenGenerator.class);
         tokenHasher = mock(TokenHasher.class);
         tripListCursorCodec = new TripListCursorCodec();
+        schedulePersistenceService = mock(SchedulePersistenceService.class);
         tripService = new TripServiceImpl(
+                authProperties,
                 userRepository,
                 regionRepository,
                 tripRepository,
                 tripMemberRepository,
                 tripInvitationRepository,
-                secureTokenGenerator,
                 tokenHasher,
                 tripListCursorCodec,
                 new ImageProperties(URI.create(
                         "https://example.com/default-profile.png"
-                ))
+                )),
+                schedulePersistenceService
         );
 
         user = mock(User.class);
@@ -108,8 +117,9 @@ class TripServiceImplTest {
                 });
         when(tripMemberRepository.save(any(TripMember.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-        when(secureTokenGenerator.generate())
-                .thenReturn(INVITATION_TOKEN);
+        // 여행방 번호 100의 계산 결과 앞 43자가 INVITATION_TOKEN이 되도록 맞춘다.
+        when(tokenHasher.sha256(invitationSource(100L)))
+                .thenReturn("a".repeat(64));
         when(tokenHasher.sha256(INVITATION_TOKEN))
                 .thenReturn(INVITATION_TOKEN_HASH);
         when(tripInvitationRepository.save(any(TripInvitation.class)))
@@ -297,7 +307,7 @@ class TripServiceImplTest {
     }
 
     @Test
-    void rejectsInvitationAfterSurveyDeadline() {
+    void allowsInvitationPreviewAfterSurveyDeadline() {
         Trip trip = trip(1001L);
         ReflectionTestUtils.setField(
                 trip,
@@ -311,13 +321,33 @@ class TripServiceImplTest {
                 INVITATION_TOKEN_HASH
         )));
 
+        // 마감으로 막히지 않고 유효한 링크로 판단되어 로그인 확인까지 진행된다.
         assertError(
                 () -> tripService.getInvitationPreview(
                         null,
                         INVITATION_TOKEN
                 ),
-                ErrorCode.SURVEY_CLOSED
+                ErrorCode.AUTHENTICATION_REQUIRED
         );
+    }
+
+    @Test
+    void joinsTripAfterSurveyDeadline() {
+        Trip invitedTrip = trip(200L);
+        ReflectionTestUtils.setField(
+                invitedTrip,
+                "surveyDeadlineAt",
+                LocalDateTime.now(SEOUL_ZONE).minusMinutes(1)
+        );
+        stubInvitation(invitedTrip);
+
+        TripJoinResponse response = tripService.joinTrip(
+                USER_PUBLIC_ID.toString(),
+                new TripJoinRequest(INVITATION_TOKEN)
+        );
+
+        assertThat(response.tripId()).isEqualTo("200");
+        verify(tripMemberRepository).save(any(TripMember.class));
     }
 
     @Test
@@ -515,6 +545,8 @@ class TripServiceImplTest {
         User memberUser = mock(User.class);
         TripMember host = TripMember.createHost(trip, user);
         TripMember member = TripMember.createMember(trip, memberUser);
+        ReflectionTestUtils.setField(host, "id", 2001L);
+        ReflectionTestUtils.setField(member, "id", 2002L);
 
         when(region.getId()).thenReturn(3L);
         when(region.getCode()).thenReturn("REGION-BUSAN");
@@ -530,7 +562,7 @@ class TripServiceImplTest {
                 trip,
                 user
         )).thenReturn(Optional.of(host));
-        when(tripMemberRepository.findActiveMembersByTrip(trip))
+        when(tripMemberRepository.findActiveMembersByTripIncludingWithdrawn(trip))
                 .thenReturn(List.of(host, member));
 
         TripDetailResponse response = tripService.getTripDetail(
@@ -549,6 +581,45 @@ class TripServiceImplTest {
         assertThat(response.members())
                 .extracting(TripDetailResponse.Member::profileImageUrl)
                 .containsOnly("https://example.com/default-profile.png");
+    }
+
+    @Test
+    void showsWithdrawnUserPlaceholderInTripDetail() {
+        Trip trip = trip(200L);
+        User withdrawnUser = mock(User.class);
+        TripMember host = TripMember.createHost(trip, user);
+        TripMember withdrawnMember = TripMember.createMember(trip, withdrawnUser);
+        ReflectionTestUtils.setField(host, "id", 2001L);
+        ReflectionTestUtils.setField(withdrawnMember, "id", 2002L);
+
+        when(region.getId()).thenReturn(3L);
+        when(region.getCode()).thenReturn("REGION-BUSAN");
+        when(region.getName()).thenReturn("부산");
+        when(user.getPublicId()).thenReturn(USER_PUBLIC_ID);
+        when(user.getUsername()).thenReturn("사용자A");
+        when(withdrawnUser.getUsername()).thenReturn("사용자B");
+        when(withdrawnUser.getDeletedAt())
+                .thenReturn(LocalDateTime.now(SEOUL_ZONE));
+        when(tripRepository.findById(200L)).thenReturn(Optional.of(trip));
+        when(tripMemberRepository.findByTripAndUserAndLeftAtIsNull(
+                trip,
+                user
+        )).thenReturn(Optional.of(host));
+        when(tripMemberRepository.findActiveMembersByTripIncludingWithdrawn(trip))
+                .thenReturn(List.of(host, withdrawnMember));
+
+        TripDetailResponse response = tripService.getTripDetail(
+                USER_PUBLIC_ID.toString(),
+                200L
+        );
+
+        assertThat(response.memberCount()).isEqualTo(2);
+        assertThat(response.members())
+                .extracting(TripDetailResponse.Member::userName)
+                .containsExactly("사용자A", "탈퇴한 사용자");
+        assertThat(response.members())
+                .extracting(TripDetailResponse.Member::userPublicId)
+                .containsExactly(USER_PUBLIC_ID, null);
     }
 
     @Test
@@ -626,26 +697,34 @@ class TripServiceImplTest {
     }
 
     @Test
-    void leavesTripAsMember() {
+    void leavesTripAsMemberWhenThreeOrMoreActiveMembersRemain() {
         Trip trip = trip(200L);
-        TripMember member = TripMember.createMember(trip, user);
+        TripMember host = TripMember.createHost(trip, user);
+        TripMember member = TripMember.createMember(trip, mock(User.class));
+        TripMember otherMember = TripMember.createMember(trip, mock(User.class));
         when(tripRepository.findByIdForUpdate(200L))
                 .thenReturn(Optional.of(trip));
         when(tripMemberRepository.findByTripAndUserAndLeftAtIsNull(
                 trip,
                 user
         )).thenReturn(Optional.of(member));
+        when(tripMemberRepository.findActiveMembersByTrip(trip))
+                .thenReturn(List.of(host, member, otherMember));
 
-        tripService.leaveTrip(USER_PUBLIC_ID.toString(), 200L);
+        TripLeaveResponse response =
+                tripService.leaveTrip(USER_PUBLIC_ID.toString(), 200L);
 
         assertThat(member.getActiveSlot()).isEqualTo((byte) 0);
         assertThat(member.getLeftAt()).isNotNull();
-        verify(tripRepository).findByIdForUpdate(200L);
-        verify(tripMemberRepository, never()).findActiveMembersByTrip(trip);
+        assertThat(trip.getDeletedAt()).isNull();
+        assertThat(response.tripDeleted()).isFalse();
+        assertThat(response.newHostMemberId()).isNull();
+        verify(tripMemberRepository, never()).flush();
+        verifyNoInteractions(schedulePersistenceService);
     }
 
     @Test
-    void rejectsLeavingWhenHostIsAlone() {
+    void deletesTripWhenHostLeavesAlone() {
         Trip trip = trip(200L);
         TripMember host = TripMember.createHost(trip, user);
         when(tripRepository.findByIdForUpdate(200L))
@@ -657,27 +736,25 @@ class TripServiceImplTest {
         when(tripMemberRepository.findActiveMembersByTrip(trip))
                 .thenReturn(List.of(host));
 
-        assertError(
-                () -> tripService.leaveTrip(
-                        USER_PUBLIC_ID.toString(),
-                        200L
-                ),
-                ErrorCode.HOST_CANNOT_LEAVE_ALONE
-        );
+        TripLeaveResponse response =
+                tripService.leaveTrip(USER_PUBLIC_ID.toString(), 200L);
 
-        assertThat(host.getActiveSlot()).isEqualTo((byte) 1);
-        assertThat(host.getLeftAt()).isNull();
+        assertThat(host.getActiveSlot()).isEqualTo((byte) 0);
+        assertThat(host.getLeftAt()).isNotNull();
+        assertThat(trip.getDeletedAt()).isNotNull();
+        assertThat(response.tripDeleted()).isTrue();
+        assertThat(response.newHostMemberId()).isNull();
+        verify(tripMemberRepository, never()).flush();
+        verify(schedulePersistenceService).deleteAllForTrip(200L);
     }
 
     @Test
-    void transfersHostRoleToFirstJoinedMember() {
+    void deletesTripAndEndsRemainingMembershipWhenLeavingDropsToOneMember() {
+        // 방장이 나가서 1명만 남으면, 한 번이라도 2명 이상이었던 방이므로 방 전체를 삭제하고
+        // 남은 멤버십도 함께 종료한다.
         Trip trip = trip(200L);
         TripMember host = TripMember.createHost(trip, user);
-        TripMember nextHost = TripMember.createMember(
-                trip,
-                mock(User.class)
-        );
-        TripMember otherMember = TripMember.createMember(
+        TripMember remainingMember = TripMember.createMember(
                 trip,
                 mock(User.class)
         );
@@ -688,17 +765,325 @@ class TripServiceImplTest {
                 user
         )).thenReturn(Optional.of(host));
         when(tripMemberRepository.findActiveMembersByTrip(trip))
-                .thenReturn(List.of(host, nextHost, otherMember));
+                .thenReturn(List.of(host, remainingMember));
 
-        tripService.leaveTrip(USER_PUBLIC_ID.toString(), 200L);
+        TripLeaveResponse response =
+                tripService.leaveTrip(USER_PUBLIC_ID.toString(), 200L);
+
+        assertThat(host.getActiveSlot()).isEqualTo((byte) 0);
+        assertThat(remainingMember.getActiveSlot()).isEqualTo((byte) 0);
+        assertThat(remainingMember.getLeftAt()).isNotNull();
+        assertThat(trip.getDeletedAt()).isNotNull();
+        assertThat(response.tripDeleted()).isTrue();
+        assertThat(response.newHostMemberId()).isNull();
+        verify(schedulePersistenceService).deleteAllForTrip(200L);
+    }
+
+    @Test
+    void deletesTripWhenNonHostMemberLeavesDropsToOneMember() {
+        // 방장이 아닌 멤버가 나가도, 남는 인원이 1명뿐이면 방 전체가 삭제된다.
+        Trip trip = trip(200L);
+        TripMember host = TripMember.createHost(trip, mock(User.class));
+        TripMember leavingMember = TripMember.createMember(trip, user);
+        when(tripRepository.findByIdForUpdate(200L))
+                .thenReturn(Optional.of(trip));
+        when(tripMemberRepository.findByTripAndUserAndLeftAtIsNull(
+                trip,
+                user
+        )).thenReturn(Optional.of(leavingMember));
+        when(tripMemberRepository.findActiveMembersByTrip(trip))
+                .thenReturn(List.of(host, leavingMember));
+
+        TripLeaveResponse response =
+                tripService.leaveTrip(USER_PUBLIC_ID.toString(), 200L);
+
+        assertThat(leavingMember.getActiveSlot()).isEqualTo((byte) 0);
+        assertThat(host.getActiveSlot()).isEqualTo((byte) 0);
+        assertThat(host.getLeftAt()).isNotNull();
+        assertThat(trip.getDeletedAt()).isNotNull();
+        assertThat(response.tripDeleted()).isTrue();
+        verify(schedulePersistenceService).deleteAllForTrip(200L);
+    }
+
+    @Test
+    void transfersHostRoleToEarliestJoinedMember() {
+        Trip trip = trip(200L);
+        TripMember host = TripMember.createHost(trip, user);
+        TripMember earlierMember = TripMember.createMember(
+                trip,
+                mock(User.class)
+        );
+        TripMember laterMember = TripMember.createMember(
+                trip,
+                mock(User.class)
+        );
+        ReflectionTestUtils.setField(earlierMember, "id", 2001L);
+        when(tripRepository.findByIdForUpdate(200L))
+                .thenReturn(Optional.of(trip));
+        when(tripMemberRepository.findByTripAndUserAndLeftAtIsNull(
+                trip,
+                user
+        )).thenReturn(Optional.of(host));
+        // findActiveMembersByTrip은 joinedAt 오름차순이라, 목록의 첫 번째가 가장 먼저 참가한 멤버다.
+        when(tripMemberRepository.findActiveMembersByTrip(trip))
+                .thenReturn(List.of(host, earlierMember, laterMember));
+
+        TripLeaveResponse response =
+                tripService.leaveTrip(USER_PUBLIC_ID.toString(), 200L);
 
         assertThat(host.getActiveSlot()).isEqualTo((byte) 0);
         assertThat(host.getHostSlot()).isNull();
         assertThat(host.getLeftAt()).isNotNull();
-        assertThat(nextHost.getRole()).isEqualTo(TripMemberRole.HOST);
-        assertThat(nextHost.getHostSlot()).isEqualTo((byte) 1);
-        assertThat(otherMember.getRole()).isEqualTo(TripMemberRole.MEMBER);
+        assertThat(earlierMember.getRole()).isEqualTo(TripMemberRole.HOST);
+        assertThat(earlierMember.getHostSlot()).isEqualTo((byte) 1);
+        assertThat(laterMember.getRole()).isEqualTo(TripMemberRole.MEMBER);
+        assertThat(trip.getDeletedAt()).isNull();
+        assertThat(response.tripDeleted()).isFalse();
+        assertThat(response.newHostMemberId()).isEqualTo("2001");
         verify(tripMemberRepository).flush();
+        verifyNoInteractions(schedulePersistenceService);
+    }
+
+    @Test
+    void rejectsLeavingTripThatAlreadyStarted() {
+        Trip trip = trip(200L, LocalDate.now(SEOUL_ZONE));
+        TripMember host = TripMember.createHost(trip, user);
+        when(tripRepository.findByIdForUpdate(200L))
+                .thenReturn(Optional.of(trip));
+        when(tripMemberRepository.findByTripAndUserAndLeftAtIsNull(
+                trip,
+                user
+        )).thenReturn(Optional.of(host));
+
+        assertError(
+                () -> tripService.leaveTrip(USER_PUBLIC_ID.toString(), 200L),
+                ErrorCode.TRIP_LEAVE_NOT_ALLOWED
+        );
+
+        verify(tripMemberRepository, never()).findActiveMembersByTrip(trip);
+    }
+
+    @Test
+    void withdrawalTransfersHostAndDeletesSoloTripAcrossMultipleTrips() {
+        // 탈퇴하는 사용자가 방장으로 있는 여행방 두 곳: 하나는 다른 멤버가 2명 있어 위임되고,
+        // 다른 하나는 혼자라서 삭제된다. 날짜 제한은 탈퇴 정리에는 적용되지 않는다.
+        Trip tripWithOtherMembers = trip(200L);
+        TripMember hostOfFirstTrip = TripMember.createHost(tripWithOtherMembers, user);
+        TripMember nextHost = TripMember.createMember(
+                tripWithOtherMembers,
+                mock(User.class)
+        );
+        TripMember otherMember = TripMember.createMember(
+                tripWithOtherMembers,
+                mock(User.class)
+        );
+        ReflectionTestUtils.setField(nextHost, "id", 2001L);
+
+        Trip soloTrip = trip(300L);
+        TripMember soloHost = TripMember.createHost(soloTrip, user);
+
+        LocalDateTime withdrawnAt = LocalDateTime.now(SEOUL_ZONE);
+
+        when(tripMemberRepository.findByUserAndActiveSlotAndLeftAtIsNull(
+                user,
+                (byte) 1
+        )).thenReturn(List.of(hostOfFirstTrip, soloHost));
+        when(tripRepository.findByIdForUpdate(200L))
+                .thenReturn(Optional.of(tripWithOtherMembers));
+        when(tripRepository.findByIdForUpdate(300L))
+                .thenReturn(Optional.of(soloTrip));
+        when(tripMemberRepository.findActiveMembersByTrip(tripWithOtherMembers))
+                .thenReturn(List.of(hostOfFirstTrip, nextHost, otherMember));
+        when(tripMemberRepository.findActiveMembersByTrip(soloTrip))
+                .thenReturn(List.of(soloHost));
+
+        tripService.leaveAllTripsForWithdrawal(user, withdrawnAt);
+
+        assertThat(hostOfFirstTrip.getLeftAt()).isEqualTo(withdrawnAt);
+        assertThat(nextHost.getRole()).isEqualTo(TripMemberRole.HOST);
+        assertThat(tripWithOtherMembers.getDeletedAt()).isNull();
+
+        assertThat(soloHost.getLeftAt()).isEqualTo(withdrawnAt);
+        assertThat(soloTrip.getDeletedAt()).isEqualTo(withdrawnAt);
+        verify(schedulePersistenceService).deleteAllForTrip(300L);
+    }
+
+    @Test
+    void withdrawalKeepsMembershipAliveWhenSoleActiveTripAlreadyEnded() {
+        // 이미 끝난 여행에 혼자 남아있던 방장이 탈퇴해도, 완료된 여행 기록은 삭제하지 않고
+        // 멤버십도 종료 처리하지 않는다(화면에서는 User.deletedAt 기준으로 "탈퇴한 사용자"로
+        // 표시된다).
+        LocalDate endedStartDate = LocalDate.now(SEOUL_ZONE).minusDays(3);
+        Trip endedTrip = trip(200L, endedStartDate);
+        TripMember soloHost = TripMember.createHost(endedTrip, user);
+        LocalDateTime withdrawnAt = LocalDateTime.now(SEOUL_ZONE);
+
+        when(tripMemberRepository.findByUserAndActiveSlotAndLeftAtIsNull(
+                user,
+                (byte) 1
+        )).thenReturn(List.of(soloHost));
+        when(tripRepository.findByIdForUpdate(200L))
+                .thenReturn(Optional.of(endedTrip));
+        when(tripMemberRepository.findActiveMembersByTrip(endedTrip))
+                .thenReturn(List.of(soloHost));
+
+        tripService.leaveAllTripsForWithdrawal(user, withdrawnAt);
+
+        assertThat(soloHost.getLeftAt()).isNull();
+        assertThat(soloHost.getActiveSlot()).isEqualTo((byte) 1);
+        assertThat(soloHost.getHostSlot()).isEqualTo((byte) 1);
+        assertThat(endedTrip.getDeletedAt()).isNull();
+        verifyNoInteractions(schedulePersistenceService);
+    }
+
+    @Test
+    void withdrawalTransfersHostWithoutDeletingTripInProgress() {
+        // 진행 중인(오늘 시작하는) 여행에서 방장이 탈퇴하면, 남은 인원이 1명이어도 방을
+        // 삭제하지 않고 그 멤버에게 방장을 이전한다. 탈퇴한 방장의 멤버십 자체는 남는다.
+        LocalDate todayStartDate = LocalDate.now(SEOUL_ZONE);
+        Trip inProgressTrip = trip(200L, todayStartDate);
+        TripMember host = TripMember.createHost(inProgressTrip, user);
+        TripMember remainingMember = TripMember.createMember(
+                inProgressTrip,
+                mock(User.class)
+        );
+        ReflectionTestUtils.setField(remainingMember, "id", 2002L);
+        LocalDateTime withdrawnAt = LocalDateTime.now(SEOUL_ZONE);
+
+        when(tripMemberRepository.findByUserAndActiveSlotAndLeftAtIsNull(
+                user,
+                (byte) 1
+        )).thenReturn(List.of(host));
+        when(tripRepository.findByIdForUpdate(200L))
+                .thenReturn(Optional.of(inProgressTrip));
+        when(tripMemberRepository.findActiveMembersByTrip(inProgressTrip))
+                .thenReturn(List.of(host, remainingMember));
+
+        tripService.leaveAllTripsForWithdrawal(user, withdrawnAt);
+
+        assertThat(host.getLeftAt()).isNull();
+        assertThat(host.getActiveSlot()).isEqualTo((byte) 1);
+        assertThat(host.getHostSlot()).isNull();
+        assertThat(host.getRole()).isEqualTo(TripMemberRole.HOST);
+        assertThat(remainingMember.getRole()).isEqualTo(TripMemberRole.HOST);
+        assertThat(remainingMember.getHostSlot()).isEqualTo((byte) 1);
+        assertThat(inProgressTrip.getDeletedAt()).isNull();
+        verifyNoInteractions(schedulePersistenceService);
+    }
+
+    @Test
+    void withdrawalPreservesOtherMembersHistoryWhenNonHostLeavesEndedTrip() {
+        // 이미 끝난 여행에서 방장이 아닌 멤버가 탈퇴해도, 방장의 완료된 여행 기록은
+        // 본인 의사와 무관하게 사라지지 않는다. 탈퇴한 멤버 본인의 멤버십도 그대로 남는다.
+        LocalDate endedStartDate = LocalDate.now(SEOUL_ZONE).minusDays(10);
+        Trip endedTrip = trip(200L, endedStartDate);
+        TripMember host = TripMember.createHost(endedTrip, mock(User.class));
+        TripMember withdrawingMember = TripMember.createMember(endedTrip, user);
+        LocalDateTime withdrawnAt = LocalDateTime.now(SEOUL_ZONE);
+
+        when(tripMemberRepository.findByUserAndActiveSlotAndLeftAtIsNull(
+                user,
+                (byte) 1
+        )).thenReturn(List.of(withdrawingMember));
+        when(tripRepository.findByIdForUpdate(200L))
+                .thenReturn(Optional.of(endedTrip));
+        when(tripMemberRepository.findActiveMembersByTrip(endedTrip))
+                .thenReturn(List.of(host, withdrawingMember));
+
+        tripService.leaveAllTripsForWithdrawal(user, withdrawnAt);
+
+        assertThat(withdrawingMember.getLeftAt()).isNull();
+        assertThat(withdrawingMember.getActiveSlot()).isEqualTo((byte) 1);
+        assertThat(host.getLeftAt()).isNull();
+        assertThat(host.getActiveSlot()).isEqualTo((byte) 1);
+        assertThat(host.getHostSlot()).isEqualTo((byte) 1);
+        assertThat(endedTrip.getDeletedAt()).isNull();
+        verifyNoInteractions(schedulePersistenceService);
+    }
+
+    @Test
+    void returnsSameInvitationTokenForHost() {
+        Trip trip = trip(100L);
+        TripMember host = TripMember.createHost(trip, user);
+        when(tripRepository.findByIdForUpdate(100L))
+                .thenReturn(Optional.of(trip));
+        when(tripMemberRepository.findByTripAndUserAndLeftAtIsNull(
+                trip,
+                user
+        )).thenReturn(Optional.of(host));
+        when(tripInvitationRepository.findByTokenHash(
+                INVITATION_TOKEN_HASH
+        )).thenReturn(Optional.of(new TripInvitation(
+                trip,
+                INVITATION_TOKEN_HASH
+        )));
+
+        TripCreateResponse first = tripService.getInvitation(
+                USER_PUBLIC_ID.toString(),
+                100L
+        );
+        TripCreateResponse second = tripService.getInvitation(
+                USER_PUBLIC_ID.toString(),
+                100L
+        );
+
+        assertThat(first.tripId()).isEqualTo("100");
+        assertThat(first.invitationToken()).isEqualTo(INVITATION_TOKEN);
+        assertThat(second.invitationToken())
+                .isEqualTo(first.invitationToken());
+        verify(tripInvitationRepository, never())
+                .save(any(TripInvitation.class));
+    }
+
+    @Test
+    void savesInvitationHashForTripCreatedBeforeFixedToken() {
+        Trip trip = trip(100L);
+        TripMember host = TripMember.createHost(trip, user);
+        when(tripRepository.findByIdForUpdate(100L))
+                .thenReturn(Optional.of(trip));
+        when(tripMemberRepository.findByTripAndUserAndLeftAtIsNull(
+                trip,
+                user
+        )).thenReturn(Optional.of(host));
+        when(tripInvitationRepository.findByTokenHash(
+                INVITATION_TOKEN_HASH
+        )).thenReturn(Optional.empty());
+
+        TripCreateResponse response = tripService.getInvitation(
+                USER_PUBLIC_ID.toString(),
+                100L
+        );
+
+        assertThat(response.invitationToken()).isEqualTo(INVITATION_TOKEN);
+        ArgumentCaptor<TripInvitation> invitationCaptor =
+                ArgumentCaptor.forClass(TripInvitation.class);
+        verify(tripInvitationRepository).save(invitationCaptor.capture());
+        assertThat(invitationCaptor.getValue().getTrip()).isSameAs(trip);
+        assertThat(invitationCaptor.getValue().getTokenHash())
+                .isEqualTo(INVITATION_TOKEN_HASH);
+    }
+
+    @Test
+    void rejectsInvitationRequestFromMember() {
+        Trip trip = trip(100L);
+        TripMember member = TripMember.createMember(trip, user);
+        when(tripRepository.findByIdForUpdate(100L))
+                .thenReturn(Optional.of(trip));
+        when(tripMemberRepository.findByTripAndUserAndLeftAtIsNull(
+                trip,
+                user
+        )).thenReturn(Optional.of(member));
+
+        assertError(
+                () -> tripService.getInvitation(
+                        USER_PUBLIC_ID.toString(),
+                        100L
+                ),
+                ErrorCode.ACCESS_DENIED
+        );
+
+        verify(tripInvitationRepository, never())
+                .save(any(TripInvitation.class));
     }
 
     @Test
@@ -983,6 +1368,10 @@ class TripServiceImplTest {
         )));
         when(tripRepository.findByIdForUpdate(trip.getId()))
                 .thenReturn(Optional.of(trip));
+    }
+
+    private String invitationSource(Long tripId) {
+        return INVITATION_SECRET + ":trip-invitation:" + tripId;
     }
 
     private void assertError(Runnable action, ErrorCode errorCode) {

@@ -22,6 +22,12 @@ public interface TripMemberRepository
 
     long countByTripAndLeftAtIsNull(Trip trip);
 
+    /** 회원 탈퇴 시, 이 사용자가 활성 멤버로 남아있는 모든 여행방을 정리하기 위해 씁니다. */
+    List<TripMember> findByUserAndActiveSlotAndLeftAtIsNull(
+            User user,
+            Byte activeSlot
+    );
+
     Optional<TripMember> findByTripAndUserAndLeftAtIsNull(
             Trip trip,
             User user
@@ -38,6 +44,24 @@ public interface TripMemberRepository
             ORDER BY tm.joinedAt ASC, tm.id ASC
             """)
     List<TripMember> findActiveMembersByTrip(
+            @Param("trip") Trip trip
+    );
+
+    /**
+     * 여행방 상세 화면처럼, 탈퇴한 사용자의 멤버십도 "탈퇴한 사용자"로 표시하기 위해 남겨둬야
+     * 하는 화면에서 쓴다. findActiveMembersByTrip과 달리 memberUser.deletedAt을 걸러내지
+     * 않는다.
+     */
+    @Query("""
+            SELECT tm
+            FROM TripMember tm
+            JOIN FETCH tm.user memberUser
+            WHERE tm.trip = :trip
+              AND tm.activeSlot = 1
+              AND tm.leftAt IS NULL
+            ORDER BY tm.joinedAt ASC, tm.id ASC
+            """)
+    List<TripMember> findActiveMembersByTripIncludingWithdrawn(
             @Param("trip") Trip trip
     );
 

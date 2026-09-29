@@ -1,6 +1,6 @@
 package com.planit.trip.service;
 
-import com.planit.auth.token.SecureTokenGenerator;
+import com.planit.auth.config.AuthProperties;
 import com.planit.auth.token.TokenHasher;
 import com.planit.domain.*;
 import com.planit.global.error.BusinessException;
@@ -11,12 +11,14 @@ import com.planit.repository.TripInvitationRepository;
 import com.planit.repository.TripMemberRepository;
 import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
+import com.planit.schedule.service.SchedulePersistenceService;
 import com.planit.trip.dto.TripCreateRequest;
 import com.planit.trip.dto.TripCreateResponse;
 import com.planit.trip.dto.TripDetailResponse;
 import com.planit.trip.dto.TripJoinRequest;
 import com.planit.trip.dto.TripJoinResponse;
 import com.planit.trip.dto.TripInvitationPreviewResponse;
+import com.planit.trip.dto.TripLeaveResponse;
 import com.planit.trip.dto.TripListResponse;
 import com.planit.trip.pagination.TripListCursorCodec;
 import com.planit.trip.pagination.TripListCursorCodec.Cursor;
@@ -41,18 +43,20 @@ import java.util.stream.Collectors;
 public class TripServiceImpl implements TripService {
 
     private static final ZoneId SEOUL_ZONE = ZoneId.of("Asia/Seoul");
-
+    private final AuthProperties authProperties;
     private final UserRepository userRepository;
     private final RegionRepository regionRepository;
     private final TripRepository tripRepository;
     private final TripMemberRepository tripMemberRepository;
     private final TripInvitationRepository tripInvitationRepository;
-    private final SecureTokenGenerator secureTokenGenerator;
+
     private final TokenHasher tokenHasher;
     private final TripListCursorCodec tripListCursorCodec;
     private final ImageProperties imageProperties;
+    private final SchedulePersistenceService schedulePersistenceService;
 
     private static final int MAX_TRIP_LIST_SIZE = 10;
+    private static final String WITHDRAWN_USER_NAME = "탈퇴한 사용자";
 
     @Override
     @Transactional
@@ -87,7 +91,7 @@ public class TripServiceImpl implements TripService {
         TripMember host = TripMember.createHost(savedTrip, user);
         tripMemberRepository.save(host);
 
-        String invitationToken = secureTokenGenerator.generate();
+        String invitationToken = generateInvitationToken(savedTrip.getId());
 
         String invitationTokenHash = tokenHasher.sha256(invitationToken);
 
@@ -157,11 +161,7 @@ public class TripServiceImpl implements TripService {
             throw new BusinessException(ErrorCode.INVITATION_EXPIRED);
         }
 
-        LocalDateTime now = LocalDateTime.now(SEOUL_ZONE);
-        if (!trip.getSurveyDeadlineAt().isAfter(now)) {
-            throw new BusinessException(ErrorCode.SURVEY_CLOSED);
-        }
-
+        // 설문 마감이 지나도 여행 당일까지는 초대로 참여할 수 있다. (설문 제출만 막힌다)
         if (userPublicId == null) {
             throw new BusinessException(
                     ErrorCode.AUTHENTICATION_REQUIRED
@@ -236,17 +236,12 @@ public class TripServiceImpl implements TripService {
         User user = findActiveUser(userPublicId);
         Trip trip = findActiveTrip(tripId);
         TripMember currentMember = findActiveMember(trip, user);
-        List<TripMember> activeMembers =
-                tripMemberRepository.findActiveMembersByTrip(trip);
+        List<TripMember> activeMembers = tripMemberRepository
+                .findActiveMembersByTripIncludingWithdrawn(trip);
 
         Region region = trip.getRegion();
         List<TripDetailResponse.Member> members = activeMembers.stream()
-                .map(member -> new TripDetailResponse.Member(
-                        member.getUser().getPublicId(),
-                        member.getUser().getUsername(),
-                        imageProperties.defaultProfileUrl().toString(),
-                        member.getRole()
-                ))
+                .map(this::toMemberResponse)
                 .toList();
 
         return new TripDetailResponse(
@@ -274,33 +269,141 @@ public class TripServiceImpl implements TripService {
 
     @Override
     @Transactional
-    public void leaveTrip(
+    public TripLeaveResponse leaveTrip(
             String userPublicId,
             Long tripId
     ) {
         User user = findActiveUser(userPublicId);
         Trip trip = findActiveTripForUpdate(tripId);
         TripMember currentMember = findActiveMember(trip, user);
+
+        LocalDate today = LocalDate.now(SEOUL_ZONE);
+        if (!today.isBefore(trip.getStartDate())) {
+            throw new BusinessException(ErrorCode.TRIP_LEAVE_NOT_ALLOWED);
+        }
+
         LocalDateTime leftAt = LocalDateTime.now(SEOUL_ZONE);
+        // leaveTrip은 위에서 이미 여행 시작 전임을 확인했으므로 자동 삭제 규칙이 항상 적용된다.
+        return performLeave(trip, currentMember, leftAt, true);
+    }
 
-        if (currentMember.getRole() == TripMemberRole.HOST) {
-            TripMember nextHost = tripMemberRepository
-                    .findActiveMembersByTrip(trip)
-                    .stream()
-                    .filter(member -> member.getRole()
-                            == TripMemberRole.MEMBER)
-                    .findFirst()
-                    .orElseThrow(() -> new BusinessException(
-                            ErrorCode.HOST_CANNOT_LEAVE_ALONE
-                    ));
+    @Override
+    @Transactional
+    public void leaveAllTripsForWithdrawal(
+            User user,
+            LocalDateTime leftAt
+    ) {
+        List<TripMember> memberships = tripMemberRepository
+                .findByUserAndActiveSlotAndLeftAtIsNull(user, (byte) 1);
+        LocalDate today = LocalDate.now(SEOUL_ZONE);
 
+        for (TripMember member : memberships) {
+            Trip trip = tripRepository
+                    .findByIdForUpdate(member.getTrip().getId())
+                    .orElse(null);
+            if (trip == null || trip.getDeletedAt() != null) {
+                continue;
+            }
+
+            // 탈퇴는 날짜와 무관하게 항상 처리하되, 이미 시작했거나 끝난 여행이면 자동 삭제
+            // 규칙은 건너뛰어 다른 멤버의 완료된 여행 기록이 사라지지 않게 한다.
+            boolean allowAutoDelete = today.isBefore(trip.getStartDate());
+            performLeave(trip, member, leftAt, allowAutoDelete);
+        }
+    }
+
+    /**
+     * 나가기(직접 나가기·회원 탈퇴 공통)를 처리한다.
+     * allowAutoDelete가 true이고 나간 뒤 활성 멤버가 1명 이하로 남으면(한 번이라도 2명
+     * 이상이었던 방 포함) 여행방을 소프트 삭제하고 남은 멤버십도 종료하며, 후보·확정
+     * 일정을 함께 정리한다.
+     * allowAutoDelete가 false면(탈퇴 시점에 여행이 이미 시작했거나 끝난 경우) 방과 기록을
+     * 그대로 보존한다: 멤버십 자체는 종료 처리하지 않고, 방장이었다면 host 슬롯만 내려놓고
+     * 남은 멤버가 있으면 그 멤버에게 위임한다. 탈퇴한 사용자는 User.deletedAt을 기준으로
+     * 화면에서 "탈퇴한 사용자"로 표시된다(getTripDetail 참고).
+     * allowAutoDelete가 true이고 2명 이상 남았는데 방장이 나갔다면, 가장 먼저 참가한
+     * 멤버에게 방장을 이전한다.
+     */
+    private TripLeaveResponse performLeave(
+            Trip trip,
+            TripMember currentMember,
+            LocalDateTime leftAt,
+            boolean allowAutoDelete
+    ) {
+        List<TripMember> remainingMembers = tripMemberRepository
+                .findActiveMembersByTrip(trip)
+                .stream()
+                .filter(member -> member != currentMember)
+                .toList();
+
+        if (allowAutoDelete && remainingMembers.size() <= 1) {
             currentMember.leave(leftAt);
-            tripMemberRepository.flush();
-            nextHost.promoteToHost();
-            return;
+            remainingMembers.forEach(member -> member.leave(leftAt));
+            trip.delete(leftAt);
+            schedulePersistenceService.deleteAllForTrip(trip.getId());
+            return new TripLeaveResponse(true, null);
+        }
+
+        if (!allowAutoDelete) {
+            if (currentMember.getRole() == TripMemberRole.HOST
+                    && !remainingMembers.isEmpty()) {
+                currentMember.demoteFromHost();
+                tripMemberRepository.flush();
+                // findActiveMembersByTrip은 joinedAt 오름차순이라, 첫 원소가 가장 먼저 참가한 멤버다.
+                TripMember nextHost = remainingMembers.get(0);
+                nextHost.promoteToHost();
+                return new TripLeaveResponse(false, nextHost.getId().toString());
+            }
+            return new TripLeaveResponse(false, null);
         }
 
         currentMember.leave(leftAt);
+
+        if (currentMember.getRole() == TripMemberRole.HOST) {
+            // findActiveMembersByTrip은 joinedAt 오름차순이라, 첫 원소가 가장 먼저 참가한 멤버다.
+            TripMember nextHost = remainingMembers.get(0);
+            tripMemberRepository.flush();
+            nextHost.promoteToHost();
+            return new TripLeaveResponse(false, nextHost.getId().toString());
+        }
+
+        return new TripLeaveResponse(false, null);
+    }
+
+    @Override
+    @Transactional
+    public TripCreateResponse getInvitation(
+            String userPublicId,
+            Long tripId
+    ) {
+        User user = findActiveUser(userPublicId);
+        Trip trip = findActiveTripForUpdate(tripId);
+        TripMember currentMember = findActiveMember(trip, user);
+
+        if (currentMember.getRole() != TripMemberRole.HOST) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
+
+        String invitationToken = generateInvitationToken(trip.getId());
+        String invitationTokenHash = tokenHasher.sha256(invitationToken);
+
+        if (tripInvitationRepository.findByTokenHash(invitationTokenHash).isEmpty()) {
+            tripInvitationRepository.save(
+                    new TripInvitation(trip, invitationTokenHash)
+            );
+        }
+
+        return new TripCreateResponse(
+                trip.getId().toString(),
+                invitationToken
+        );
+    }
+
+    private String generateInvitationToken(Long tripId) {
+        return tokenHasher
+                .sha256(authProperties.jwt().secretBase64()
+                        + ":trip-invitation:" + tripId)
+                .substring(0, 43);
     }
 
     @Override
@@ -441,6 +544,17 @@ public class TripServiceImpl implements TripService {
         if (size < 1 || size > MAX_TRIP_LIST_SIZE) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST);
         }
+    }
+
+    private TripDetailResponse.Member toMemberResponse(TripMember member) {
+        boolean withdrawn = member.getUser().getDeletedAt() != null;
+        return new TripDetailResponse.Member(
+                member.getId().toString(),
+                withdrawn ? null : member.getUser().getPublicId(),
+                withdrawn ? WITHDRAWN_USER_NAME : member.getUser().getUsername(),
+                imageProperties.defaultProfileUrl().toString(),
+                member.getRole()
+        );
     }
 
     private Trip findActiveTrip(Long tripId) {

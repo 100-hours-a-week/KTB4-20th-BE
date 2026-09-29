@@ -97,6 +97,10 @@ public class Trip {
         return deletedAt;
     }
 
+    public void delete(LocalDateTime deletedAt) {
+        this.deletedAt = deletedAt;
+    }
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
