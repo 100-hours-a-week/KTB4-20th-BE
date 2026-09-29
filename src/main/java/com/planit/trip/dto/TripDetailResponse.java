@@ -32,6 +32,7 @@ public record TripDetailResponse(
     }
 
     public record Member(
+            String memberId,
             UUID userPublicId,
             String userName,
             String profileImageUrl,

@@ -6,6 +6,7 @@ import com.planit.trip.dto.TripCreateResponse;
 import com.planit.trip.dto.TripDetailResponse;
 import com.planit.trip.dto.TripJoinRequest;
 import com.planit.trip.dto.TripJoinResponse;
+import com.planit.trip.dto.TripLeaveResponse;
 import com.planit.trip.dto.TripListResponse;
 import com.planit.trip.service.TripService;
 import jakarta.validation.Valid;
@@ -29,6 +30,8 @@ public class TripController {
     private static final String DETAIL_SUCCESS_MESSAGE = "여행방을 조회했습니다.";
     private static final String INVITATION_SUCCESS_CODE = "TRIP_INVITATION_RETRIEVED";
     private static final String INVITATION_SUCCESS_MESSAGE = "초대 링크를 조회했습니다.";
+    private static final String LEAVE_SUCCESS_CODE = "TRIP_MEMBERSHIP_ENDED";
+    private static final String LEAVE_SUCCESS_MESSAGE = "여행방에서 나갔습니다.";
 
     private final TripService tripService;
 
@@ -121,11 +124,19 @@ public class TripController {
     }
 
     @DeleteMapping("/{tripId}/members/me")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void leaveTrip(
+    public ApiResponse<TripLeaveResponse> leaveTrip(
             Authentication authentication,
             @PathVariable Long tripId
     ) {
-        tripService.leaveTrip(authentication.getName(), tripId);
+        TripLeaveResponse response = tripService.leaveTrip(
+                authentication.getName(),
+                tripId
+        );
+
+        return ApiResponse.success(
+                LEAVE_SUCCESS_CODE,
+                LEAVE_SUCCESS_MESSAGE,
+                response
+        );
     }
 }
