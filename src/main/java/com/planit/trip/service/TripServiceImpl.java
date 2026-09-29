@@ -161,11 +161,7 @@ public class TripServiceImpl implements TripService {
             throw new BusinessException(ErrorCode.INVITATION_EXPIRED);
         }
 
-        LocalDateTime now = LocalDateTime.now(SEOUL_ZONE);
-        if (!trip.getSurveyDeadlineAt().isAfter(now)) {
-            throw new BusinessException(ErrorCode.SURVEY_CLOSED);
-        }
-
+        // 설문 마감이 지나도 여행 당일까지는 초대로 참여할 수 있다. (설문 제출만 막힌다)
         if (userPublicId == null) {
             throw new BusinessException(
                     ErrorCode.AUTHENTICATION_REQUIRED
