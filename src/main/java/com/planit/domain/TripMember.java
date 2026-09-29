@@ -98,6 +98,15 @@ public class TripMember {
         this.hostSlot = (byte) 1;
     }
 
+    /**
+     * 멤버십은 유지한 채(activeSlot·leftAt은 건드리지 않고) 방장 슬롯만 내려놓는다.
+     * 이미 시작했거나 끝난 여행에서 방장이 탈퇴할 때, 기록은 남기면서 다음 방장에게
+     * host_slot 유일 제약을 넘겨주기 위해 쓴다.
+     */
+    public void demoteFromHost() {
+        this.hostSlot = null;
+    }
+
     public Long getId() {
         return id;
     }
