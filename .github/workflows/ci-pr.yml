@@ -23,9 +23,9 @@ jobs:
         image: mysql:8.4
         env:
           MYSQL_DATABASE: planit
-          MYSQL_USER: planit
-          MYSQL_PASSWORD: ci-db-password
-          MYSQL_ROOT_PASSWORD: ci-root-password
+          MYSQL_USER: planit_ci
+          MYSQL_PASSWORD: ${{ secrets.CI_MYSQL_PASSWORD }}
+          MYSQL_ROOT_PASSWORD: ${{ secrets.CI_MYSQL_ROOT_PASSWORD }}
         ports:
           - 3306:3306
         options: >-
@@ -62,11 +62,10 @@ jobs:
       - name: Test and build backend
         env:
           DB_URL: jdbc:mysql://127.0.0.1:3306/planit?sslMode=DISABLED&allowPublicKeyRetrieval=true&connectionTimeZone=Asia/Seoul
-          DB_USERNAME: planit
-          DB_PASSWORD: ci-db-password
+          DB_USERNAME: planit_ci
+          DB_PASSWORD: ${{ secrets.CI_MYSQL_PASSWORD }}
           AUTH_COOKIE_SECURE: 'false'
-          # CI 테스트 전용 키이며 운영 환경에서는 사용하지 않습니다.
-          JWT_HS256_SECRET_BASE64: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY='
+          JWT_HS256_SECRET_BASE64: ${{ secrets.CI_JWT_HS256_SECRET_BASE64 }}
           KAKAO_REST_API_KEY: ci-client-id
           KAKAO_CLIENT_SECRET: ci-client-secret
           KAKAO_ADMIN_KEY: ci-admin-key
