@@ -312,7 +312,7 @@ class TripControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "name": "제주여행1",
+                                  "name": "제주여행!",
                                   "regionId": 1,
                                   "startDate": "2026-10-01",
                                   "capacity": 4

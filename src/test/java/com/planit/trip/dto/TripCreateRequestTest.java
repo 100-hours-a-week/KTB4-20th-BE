@@ -103,7 +103,7 @@ class TripCreateRequestTest {
     @Test
     void rejectsUnsupportedNameCharacters() {
         TripCreateRequest request = new TripCreateRequest(
-                "제주여행1",
+                "제주여행!",
                 1L,
                 START_DATE,
                 4,
