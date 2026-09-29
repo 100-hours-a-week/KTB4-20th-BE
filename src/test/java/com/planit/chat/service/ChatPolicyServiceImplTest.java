@@ -11,6 +11,7 @@ import com.planit.global.error.ErrorCode;
 import com.planit.repository.ChatPolicyConsentRepository;
 import com.planit.repository.ChatPolicyVersionRepository;
 import com.planit.repository.UserRepository;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -71,6 +72,7 @@ class ChatPolicyServiceImplTest {
                 .thenReturn(Optional.of(policyVersion));
     }
 
+    @DisplayName("동의 이력이 없어도 현재 채팅 정책을 조회한다")
     @Test
     void getsCurrentPolicyWithoutConsent() {
         when(chatPolicyConsentRepository.findByUserAndChatPolicyVersion(user, policyVersion))
@@ -86,6 +88,7 @@ class ChatPolicyServiceImplTest {
         assertThat(response.consentedAt()).isNull();
     }
 
+    @DisplayName("새로운 채팅 정책 동의를 저장한다")
     @Test
     void recordsNewConsent() {
         when(chatPolicyConsentRepository.findByUserAndChatPolicyVersion(user, policyVersion))
@@ -103,6 +106,7 @@ class ChatPolicyServiceImplTest {
         verify(chatPolicyConsentRepository).save(any(ChatPolicyConsent.class));
     }
 
+    @DisplayName("이미 동의했다면 기존 동의를 반환하고 중복 저장하지 않는다")
     @Test
     void returnsExistingConsentWithoutDuplicateInsert() {
         ChatPolicyConsent existingConsent = new ChatPolicyConsent(user, policyVersion);
@@ -120,6 +124,7 @@ class ChatPolicyServiceImplTest {
         verify(chatPolicyConsentRepository, never()).save(any());
     }
 
+    @DisplayName("현재 버전이 아닌 채팅 정책에 대한 동의를 거부한다")
     @Test
     void rejectsPolicyThatIsNotCurrent() {
         assertThatThrownBy(() -> chatPolicyService.recordConsent(

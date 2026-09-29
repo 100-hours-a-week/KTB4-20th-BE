@@ -14,6 +14,7 @@ import com.planit.repository.ChatPolicyVersionRepository;
 import com.planit.repository.RegionalChatRoomMemberRepository;
 import com.planit.repository.RegionalChatRoomRepository;
 import com.planit.repository.UserRepository;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -72,6 +73,7 @@ class RegionalChatRoomMembershipServiceImplTest {
                 .thenReturn(true);
     }
 
+    @DisplayName("현재 채팅 정책에 동의한 사용자가 채팅방에 참여한다")
     @Test
     void joinsRoomAfterCurrentPolicyConsent() {
         when(memberRepository.findByUserAndRegionalChatRoom(user, room))
@@ -89,6 +91,7 @@ class RegionalChatRoomMembershipServiceImplTest {
         verify(memberRepository).save(any(RegionalChatRoomMember.class));
     }
 
+    @DisplayName("이미 참여 중이면 기존 참여 정보를 반환하고 중복 저장하지 않는다")
     @Test
     void returnsActiveMembershipWithoutDuplicateInsert() {
         RegionalChatRoomMember membership = new RegionalChatRoomMember(user, room);
@@ -104,6 +107,7 @@ class RegionalChatRoomMembershipServiceImplTest {
         verify(memberRepository, never()).save(any());
     }
 
+    @DisplayName("과거 참여 이력을 재활성화하고 새 행을 생성하지 않는다")
     @Test
     void rejoinsPastMembershipWithoutNewRow() {
         RegionalChatRoomMember membership = new RegionalChatRoomMember(user, room);
@@ -117,6 +121,7 @@ class RegionalChatRoomMembershipServiceImplTest {
         verify(memberRepository, never()).save(any());
     }
 
+    @DisplayName("현재 채팅 정책에 동의하지 않으면 참여를 거부한다")
     @Test
     void rejectsJoinWithoutCurrentPolicyConsent() {
         when(policyConsentRepository.existsByUserAndChatPolicyVersion(user, policy))
@@ -130,6 +135,7 @@ class RegionalChatRoomMembershipServiceImplTest {
         verify(memberRepository, never()).save(any());
     }
 
+    @DisplayName("활성화된 채팅방 참여를 종료한다")
     @Test
     void leavesActiveMembership() {
         RegionalChatRoomMember membership = new RegionalChatRoomMember(user, room);
@@ -145,6 +151,7 @@ class RegionalChatRoomMembershipServiceImplTest {
         assertThat(response.leftAt()).isNotNull();
     }
 
+    @DisplayName("이미 나간 채팅방이면 기존 이력을 변경하지 않는다")
     @Test
     void returnsPastLeaveWithoutChangingItAgain() {
         RegionalChatRoomMember membership = new RegionalChatRoomMember(user, room);
@@ -161,6 +168,7 @@ class RegionalChatRoomMembershipServiceImplTest {
         assertThat(response.leftAt()).isEqualTo(originalLeftAt.toInstant(java.time.ZoneOffset.UTC));
     }
 
+    @DisplayName("참여 이력이 없는 채팅방 나가기를 거부한다")
     @Test
     void rejectsLeaveWithoutMembershipHistory() {
         when(memberRepository.findByUserAndRegionalChatRoom(user, room))

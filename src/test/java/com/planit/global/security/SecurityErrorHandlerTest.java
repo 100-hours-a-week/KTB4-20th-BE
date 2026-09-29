@@ -1,6 +1,7 @@
 package com.planit.global.security;
 
 import com.planit.global.error.ErrorCode;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -20,6 +21,7 @@ class SecurityErrorHandlerTest {
     private final SecurityErrorResponseWriter responseWriter =
             new SecurityErrorResponseWriter(objectMapper);
 
+    @DisplayName("인증되지 않은 요청에 공통 인증 오류 응답을 작성한다")
     @Test
     void authenticationEntryPointWritesCommonUnauthorizedResponse() throws Exception {
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -40,6 +42,7 @@ class SecurityErrorHandlerTest {
         assertThat(body.get("data").isNull()).isTrue();
     }
 
+    @DisplayName("탈퇴한 사용자의 요청에 전용 인증 오류 응답을 작성한다")
     @Test
     void authenticationEntryPointWritesWithdrawnUserResponse() throws Exception {
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -70,6 +73,7 @@ class SecurityErrorHandlerTest {
                 .isEqualTo("USER_WITHDRAWN");
     }
 
+    @DisplayName("권한이 없는 요청에 공통 접근 거부 응답을 작성한다")
     @Test
     void accessDeniedHandlerWritesCommonForbiddenResponse() throws Exception {
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -89,6 +93,7 @@ class SecurityErrorHandlerTest {
         assertThat(body.get("data").isNull()).isTrue();
     }
 
+    @DisplayName("보안 오류 응답에 오류 코드의 상태와 메시지를 사용한다")
     @Test
     void writerUsesStatusAndMessageFromErrorCode() throws Exception {
         MockHttpServletResponse response = new MockHttpServletResponse();

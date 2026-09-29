@@ -4,6 +4,7 @@ import com.planit.survey.dto.PreferenceQuestionResponse;
 import com.planit.survey.dto.SurveyCatalogResponse;
 import com.planit.survey.dto.SurveyExclusionCategoryResponse;
 import com.planit.survey.service.SurveyCatalogService;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -18,6 +19,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class SurveyCatalogControllerTest {
 
+    @DisplayName("설문 문항과 제외 카테고리 목록을 조회한다")
     @Test
     void getsSurveyCatalog() throws Exception {
         SurveyCatalogService service = mock(SurveyCatalogService.class);

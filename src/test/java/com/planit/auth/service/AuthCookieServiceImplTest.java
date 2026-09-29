@@ -1,6 +1,7 @@
 package com.planit.auth.service;
 
 import com.planit.auth.config.AuthProperties;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseCookie;
@@ -59,6 +60,7 @@ class AuthCookieServiceImplTest {
                 new AuthCookieServiceImpl(properties);
     }
 
+    @DisplayName("리프레시 토큰 쿠키를 생성한다")
     @Test
     void createsRefreshTokenCookie() {
         ResponseCookie cookie =
@@ -80,6 +82,7 @@ class AuthCookieServiceImplTest {
                 .isEqualTo(Duration.ofDays(30));
     }
 
+    @DisplayName("리프레시 토큰 쿠키를 만료시킨다")
     @Test
     void deletesRefreshTokenCookie() {
         ResponseCookie cookie =
@@ -94,6 +97,7 @@ class AuthCookieServiceImplTest {
                 .isEqualTo(Duration.ZERO);
     }
 
+    @DisplayName("OAuth state 쿠키를 생성한다")
     @Test
     void createsOAuthStateCookie() {
         ResponseCookie cookie =

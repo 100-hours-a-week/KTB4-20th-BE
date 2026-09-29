@@ -2,6 +2,7 @@ package com.planit.region.controller;
 
 import com.planit.region.dto.RegionListResponse;
 import com.planit.region.service.RegionService;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -17,6 +18,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class RegionControllerTest {
 
+    @DisplayName("지역 목록을 조회한다")
     @Test
     void getsRegions() throws Exception {
         RegionService service = mock(RegionService.class);

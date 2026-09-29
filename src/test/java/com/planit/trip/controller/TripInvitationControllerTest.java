@@ -5,6 +5,7 @@ import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
 import com.planit.trip.dto.TripInvitationPreviewResponse;
 import com.planit.trip.service.TripService;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.TestingAuthenticationToken;
@@ -41,6 +42,7 @@ class TripInvitationControllerTest {
                 .build();
     }
 
+    @DisplayName("초대 링크의 여행 미리보기를 조회한다")
     @Test
     void retrievesInvitationPreview() throws Exception {
         when(tripService.getInvitationPreview(
@@ -104,6 +106,9 @@ class TripInvitationControllerTest {
         );
     }
 
+    @DisplayName(
+            "초대 링크가 유효하지만 로그인하지 않은 사용자에게 인증 필요 응답을 반환한다"
+    )
     @Test
     void returnsAuthenticationRequiredAfterValidInvitationCheck()
             throws Exception {

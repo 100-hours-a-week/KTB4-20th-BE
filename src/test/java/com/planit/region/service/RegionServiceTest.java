@@ -5,6 +5,7 @@ import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
 import com.planit.region.dto.RegionListResponse;
 import com.planit.repository.RegionRepository;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -17,6 +18,7 @@ import static org.mockito.Mockito.when;
 
 class RegionServiceTest {
 
+    @DisplayName("저장소 조회 순서대로 지역 목록을 반환한다")
     @Test
     void returnsRegionsInRepositoryOrder() {
         RegionRepository repository = mock(RegionRepository.class);
@@ -35,6 +37,7 @@ class RegionServiceTest {
                 .isEqualByComparingTo("37.566500");
     }
 
+    @DisplayName("지역 목록이 비어 있으면 오류를 반환한다")
     @Test
     void rejectsEmptyRegionCatalog() {
         RegionRepository repository = mock(RegionRepository.class);

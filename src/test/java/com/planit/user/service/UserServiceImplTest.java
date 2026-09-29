@@ -14,6 +14,7 @@ import com.planit.repository.RefreshTokenRepository;
 import com.planit.repository.UserRepository;
 import com.planit.trip.service.TripService;
 import com.planit.user.dto.CurrentUserResponse;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClientException;
@@ -72,6 +73,7 @@ class UserServiceImplTest {
         );
     }
 
+    @DisplayName("현재 활성 사용자 정보를 조회한다")
     @Test
     void getsCurrentActiveUser() {
         User user = new User(
@@ -93,6 +95,7 @@ class UserServiceImplTest {
                 .isEqualTo(DEFAULT_PROFILE_IMAGE_URL);
     }
 
+    @DisplayName("존재하지 않거나 탈퇴한 사용자 조회를 거부한다")
     @Test
     void rejectsUnknownCurrentUser() {
         when(userRepository.findByPublicIdAndDeletedAtIsNull(
@@ -112,6 +115,7 @@ class UserServiceImplTest {
                 );
     }
 
+    @DisplayName("JWT에 담긴 사용자 ID 형식이 올바르지 않으면 거부한다")
     @Test
     void rejectsInvalidJwtSubject() {
         assertThatThrownBy(() -> userService.getCurrentUser(
@@ -127,6 +131,7 @@ class UserServiceImplTest {
                 );
     }
 
+    @DisplayName("사용자를 탈퇴 처리하고 리프레시 토큰을 폐기한다")
     @Test
     void withdrawsUserAndRevokesRefreshTokens() {
         User user = new User(
@@ -185,6 +190,7 @@ class UserServiceImplTest {
                 .findAllByUserAndRevokedAtIsNull(user);
     }
 
+    @DisplayName("카카오 연결 해제에 실패하면 로컬 사용자를 활성 상태로 유지한다")
     @Test
     void keepsLocalUserActiveWhenKakaoUnlinkFails() {
         User user = new User(
@@ -222,6 +228,7 @@ class UserServiceImplTest {
         assertThat(user.getDeletedAt()).isNull();
     }
 
+    @DisplayName("로컬 사용자 탈퇴 처리 실패를 오류로 반환한다")
     @Test
     void reportsLocalWithdrawalFailure() {
         User user = new User(

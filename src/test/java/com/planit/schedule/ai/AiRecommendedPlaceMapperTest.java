@@ -2,6 +2,7 @@ package com.planit.schedule.ai;
 
 import com.planit.schedule.route.PlaceCategoryGroup;
 import com.planit.schedule.route.RouteCalculationException;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -17,6 +18,7 @@ class AiRecommendedPlaceMapperTest {
     private final AiRecommendedPlaceMapper mapper =
             new AiRecommendedPlaceMapper();
 
+    @DisplayName("AI 응답의 사용자별 추천 대상과 선호 항목을 올바르게 읽는다")
     @Test
     void deserializesProvidedSnakeCaseFields() throws Exception {
         String json = """
@@ -49,6 +51,7 @@ class AiRecommendedPlaceMapperTest {
                 .containsExactly("HISTORY_CULTURE");
     }
 
+    @DisplayName("여섯 장소를 변환하고 경로 계산용 카테고리를 정규화한다")
     @Test
     void mapsSixPlacesAndNormalizesCategoryForRouteCalculation() {
         List<AiPlaceRecommendationResponse.Place> places = IntStream
@@ -77,6 +80,7 @@ class AiRecommendedPlaceMapperTest {
                 .isEqualTo("historical_landmark");
     }
 
+    @DisplayName("실패 응답이나 다섯 개 미만의 장소를 거부한다")
     @Test
     void rejectsNonSuccessResponseAndFewerThanFivePlaces() {
         assertInvalid(new AiPlaceRecommendationResponse(
@@ -91,6 +95,7 @@ class AiRecommendedPlaceMapperTest {
         ))));
     }
 
+    @DisplayName("AI가 장소를 다섯 개만 반환해도 정상 변환한다")
     @Test
     void mapsFivePlacesWhenAiFallsShortOfSix() {
         List<AiPlaceRecommendationResponse.Place> places = IntStream
@@ -108,6 +113,7 @@ class AiRecommendedPlaceMapperTest {
         assertThat(result).hasSize(5);
     }
 
+    @DisplayName("자연·힐링 선호로 추천된 장소를 휴식 카테고리로 분류한다")
     @Test
     void classifiesCompoundMatchedPreferenceAsRest() {
         AiPlaceRecommendationResponse.Place place = place(
@@ -129,6 +135,7 @@ class AiRecommendedPlaceMapperTest {
                 .isEqualTo(PlaceCategoryGroup.REST);
     }
 
+    @DisplayName("스파 장소가 쇼핑 선호로 추천되면 쇼핑 카테고리를 우선 적용한다")
     @Test
     void prefersAiBucketOverTypeWhenSpaIsGroupedAsShopping() {
         // AI는 "spa" 타입을 CONVENIENCE_SHOPPING 버킷으로 분류해서 준다.
@@ -152,6 +159,7 @@ class AiRecommendedPlaceMapperTest {
                 .isEqualTo(PlaceCategoryGroup.SHOPPING);
     }
 
+    @DisplayName("음식 선호 장소를 장소 유형에 따라 카페와 식당으로 구분한다")
     @Test
     void splitsFoodBucketIntoCafeAndRestaurantByType() {
         AiPlaceRecommendationResponse.Place cafe = place(
@@ -181,6 +189,7 @@ class AiRecommendedPlaceMapperTest {
                 .isEqualTo(PlaceCategoryGroup.RESTAURANT);
     }
 
+    @DisplayName("중복된 Google 장소 ID를 거부한다")
     @Test
     void rejectsDuplicateGooglePlaceIds() {
         AiPlaceRecommendationResponse.Place duplicate = place(

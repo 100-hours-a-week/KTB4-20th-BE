@@ -1,6 +1,7 @@
 package com.planit.ai;
 
 import com.sun.net.httpserver.HttpServer;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.ResourceAccessException;
@@ -23,6 +24,7 @@ class AiRestClientConfigTest {
         }
     }
 
+    @DisplayName("AI 서버 응답이 읽기 제한 시간을 초과하면 요청에 실패한다")
     @Test
     void stopsWaitingWhenAiResponseExceedsReadTimeout() throws Exception {
         server = HttpServer.create(new InetSocketAddress(0), 0);

@@ -23,6 +23,7 @@ import com.planit.repository.ImageFileRepository;
 import com.planit.repository.OAuthAccountRepository;
 import com.planit.repository.RefreshTokenRepository;
 import com.planit.repository.UserRepository;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -86,6 +87,7 @@ class AuthServiceImplTest {
         );
     }
 
+    @DisplayName("유효한 리프레시 토큰으로 액세스 토큰을 발급한다")
     @Test
     void issuesAccessTokenWithValidRefreshToken() {
         String rawRefreshToken = "refresh-token";
@@ -123,6 +125,7 @@ class AuthServiceImplTest {
         verify(jwtTokenProvider).issue(user.getPublicId());
     }
 
+    @DisplayName("허용되지 않은 출처의 토큰 재발급을 거부한다")
     @Test
     void rejectsRefreshFromUnknownOrigin() {
         assertThatThrownBy(() -> authService.refresh(
@@ -140,6 +143,7 @@ class AuthServiceImplTest {
         verifyNoInteractions(refreshTokenRepository);
     }
 
+    @DisplayName("리프레시 토큰이 없으면 재발급을 거부한다")
     @Test
     void rejectsRefreshWithoutRefreshToken() {
         assertThatThrownBy(() -> authService.refresh(
@@ -154,6 +158,7 @@ class AuthServiceImplTest {
                 );
     }
 
+    @DisplayName("만료된 리프레시 토큰을 거부한다")
     @Test
     void rejectsExpiredRefreshToken() {
         String rawRefreshToken = "refresh-token";
@@ -191,6 +196,7 @@ class AuthServiceImplTest {
         verifyNoInteractions(jwtTokenProvider);
     }
 
+    @DisplayName("탈퇴한 사용자의 리프레시 토큰을 폐기한다")
     @Test
     void revokesRefreshTokenBelongingToWithdrawnUser() {
         String rawRefreshToken = "refresh-token";
@@ -231,6 +237,7 @@ class AuthServiceImplTest {
         );
     }
 
+    @DisplayName("로그아웃하면 리프레시 토큰을 폐기한다")
     @Test
     void revokesRefreshTokenOnLogout() {
         String rawRefreshToken = "refresh-token";
@@ -254,6 +261,7 @@ class AuthServiceImplTest {
                 .isNotNull();
     }
 
+    @DisplayName("리프레시 토큰이 없어도 로그아웃에 성공한다")
     @Test
     void succeedsLogoutWithoutRefreshToken() {
         authService.logout(
@@ -264,6 +272,7 @@ class AuthServiceImplTest {
         verifyNoInteractions(refreshTokenRepository);
     }
 
+    @DisplayName("로그아웃 중 데이터베이스 오류가 발생하면 실패로 처리한다")
     @Test
     void reportsLogoutDatabaseFailure() {
         when(refreshTokenRepository.findByTokenHash(anyString()))
@@ -284,6 +293,7 @@ class AuthServiceImplTest {
                 );
     }
 
+    @DisplayName("카카오 인가 요청 정보를 생성한다")
     @Test
     void createsKakaoAuthorizationRequest() {
         OAuthAuthorizeResult result =
@@ -311,6 +321,7 @@ class AuthServiceImplTest {
         assertThat(result.returnTo()).isEqualTo("/");
     }
 
+    @DisplayName("OAuth state가 일치하지 않으면 콜백을 거부한다")
     @Test
     void rejectsCallbackWhenStateDoesNotMatch() {
         assertThatThrownBy(() -> authService.login(
@@ -331,6 +342,7 @@ class AuthServiceImplTest {
         verifyNoInteractions(kakaoOAuthClient);
     }
 
+    @DisplayName("카카오 액세스 토큰 발급에 실패하면 OAuth 로그인 오류를 반환한다")
     @Test
     void reportsKakaoCodeExchangeFailure() {
         when(kakaoOAuthClient.exchangeCode("test-code"))
@@ -352,6 +364,7 @@ class AuthServiceImplTest {
                 );
     }
 
+    @DisplayName("기존 카카오 사용자를 로그인시킨다")
     @Test
     void logsInExistingKakaoUser() {
         User user = new User(
@@ -403,6 +416,7 @@ class AuthServiceImplTest {
                 .isEqualTo(savedToken.getIssuedAt().plusDays(30));
     }
 
+    @DisplayName("신규 카카오 계정으로 사용자를 생성한다")
     @Test
     void createsUserForNewKakaoAccount() {
         ImageFile defaultProfile = mock(ImageFile.class);
@@ -462,6 +476,7 @@ class AuthServiceImplTest {
                 .isEqualTo("123456789");
     }
 
+    @DisplayName("카카오 닉네임의 앞뒤 공백을 제거해 저장한다")
     @Test
     void trimsKakaoNicknameBeforeSavingUser() {
         ImageFile defaultProfile = mock(ImageFile.class);
@@ -499,6 +514,7 @@ class AuthServiceImplTest {
                 .isEqualTo("플랜잇사용자");
     }
 
+    @DisplayName("닉네임이 없는 카카오 사용자의 로그인을 거부한다")
     @Test
     void rejectsKakaoUserWithoutNickname() {
         prepareKakaoUser(null);

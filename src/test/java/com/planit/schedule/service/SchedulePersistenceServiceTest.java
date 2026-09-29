@@ -16,6 +16,7 @@ import com.planit.schedule.repository.ScheduleLegRepository;
 import com.planit.schedule.repository.ScheduleRepository;
 import com.planit.schedule.repository.ScheduleVisitRepository;
 import com.planit.schedule.route.PlaceCategoryGroup;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -97,6 +98,7 @@ class SchedulePersistenceServiceTest {
         );
     }
 
+    @DisplayName("하루 일정에 여섯 방문 장소와 다섯 이동 구간을 저장한다")
     @Test
     void savesOneDaySixVisitsAndFiveLegs() {
         GeneratedScheduleResult result = service.save(1L, recommendations());
@@ -110,6 +112,7 @@ class SchedulePersistenceServiceTest {
         verify(legRepository, times(5)).save(any(ScheduleLeg.class));
     }
 
+    @DisplayName("AI가 다섯 장소만 반환하면 다섯 방문 장소와 네 이동 구간을 저장한다")
     @Test
     void savesOneDayFiveVisitsAndFourLegsWhenAiFallsShortOfSix() {
         GeneratedScheduleResult result = service.save(1L, recommendations(5));
@@ -121,6 +124,7 @@ class SchedulePersistenceServiceTest {
         verify(legRepository, times(4)).save(any(ScheduleLeg.class));
     }
 
+    @DisplayName("이미 활성 일정이 있는 여행의 일정 저장을 거부한다")
     @Test
     void rejectsTripThatAlreadyHasActiveSchedule() {
         when(scheduleRepository.existsByTripIdAndActiveConfirmedSlot(

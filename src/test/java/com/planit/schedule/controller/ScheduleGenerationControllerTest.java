@@ -4,6 +4,7 @@ import com.planit.ai.AiPlaceSelectionResponse;
 import com.planit.global.error.GlobalExceptionHandler;
 import com.planit.schedule.dto.SchedulePlaceSelectionResponse;
 import com.planit.schedule.service.ScheduleGenerationService;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.TestingAuthenticationToken;
@@ -37,6 +38,7 @@ class ScheduleGenerationControllerTest {
                 .build();
     }
 
+    @DisplayName("일정에 사용할 장소 후보를 생성한다")
     @Test
     void generatesSchedulePlaceCandidates() throws Exception {
         when(service.generate(USER_PUBLIC_ID, 100L))
