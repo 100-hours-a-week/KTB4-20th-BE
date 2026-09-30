@@ -1267,20 +1267,20 @@ class TripServiceImplTest {
         );
     }
 
-    @DisplayName("당일 여행의 설문 마감 시각을 정오로 설정한다")
+    @DisplayName("오늘 날짜의 여행 생성을 거부한다")
     @Test
-    void fixesTodayTripSurveyDeadlineAtNoon() {
+    void rejectsTodayTripDate() {
         LocalDate today = LocalDate.now(SEOUL_ZONE);
 
-        tripService.createTrip(
-                USER_PUBLIC_ID.toString(),
-                request(today, null)
+        assertError(
+                () -> tripService.createTrip(
+                        USER_PUBLIC_ID.toString(),
+                        request(today, null)
+                ),
+                ErrorCode.INVALID_REQUEST
         );
 
-        ArgumentCaptor<Trip> captor = ArgumentCaptor.forClass(Trip.class);
-        verify(tripRepository).save(captor.capture());
-        assertThat(captor.getValue().getSurveyDeadlineAt())
-                .isEqualTo(today.atTime(12, 0));
+        verify(tripRepository, never()).save(any());
     }
 
     @DisplayName("과거 날짜의 여행 생성을 거부한다")

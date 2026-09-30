@@ -665,7 +665,8 @@ public class TripServiceImpl implements TripService {
             LocalDate startDate,
             LocalDate today
     ) {
-        if (startDate.isBefore(today)) {
+        // 당일 여행은 생성 즉시 진행 중으로 판단돼 설문·일정 생성·나가기가 막히므로 내일부터만 허용한다.
+        if (!startDate.isAfter(today)) {
             throw new BusinessException(
                     ErrorCode.INVALID_REQUEST
             );
@@ -695,10 +696,6 @@ public class TripServiceImpl implements TripService {
             LocalDate selectedDate,
             LocalDate today
     ) {
-        if (startDate.equals(today)) {
-            return startDate.atTime(12, 0);
-        }
-
         LocalDate deadlineDate = selectedDate != null
                 ? selectedDate
                 : startDate.minusDays(1);
