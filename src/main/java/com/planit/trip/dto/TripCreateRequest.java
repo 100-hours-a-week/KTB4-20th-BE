@@ -30,13 +30,4 @@ public record TripCreateRequest(
 
         LocalDate surveyDeadlineDate
 ) {
-    public TripCreateRequest {
-        if (name != null) {
-            name = name.trim();
-        }
-
-        if (capacity == null) {
-            capacity = 4;
-        }
-    }
 }

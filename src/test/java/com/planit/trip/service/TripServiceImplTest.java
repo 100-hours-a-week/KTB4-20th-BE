@@ -168,6 +168,44 @@ class TripServiceImplTest {
                 .isEqualTo(INVITATION_TOKEN);
     }
 
+    @DisplayName("여행 이름의 앞뒤 공백을 제거해 저장한다")
+    @Test
+    void trimsTripNameBeforeSaving() {
+        LocalDate startDate = LocalDate.now(SEOUL_ZONE).plusDays(5);
+        TripCreateRequest request = new TripCreateRequest(
+                "  제주 여행  ",
+                1L,
+                startDate,
+                4,
+                null
+        );
+
+        tripService.createTrip(USER_PUBLIC_ID.toString(), request);
+
+        ArgumentCaptor<Trip> captor = ArgumentCaptor.forClass(Trip.class);
+        verify(tripRepository).save(captor.capture());
+        assertThat(captor.getValue().getName()).isEqualTo("제주 여행");
+    }
+
+    @DisplayName("정원을 생략하면 기본 정원 4명으로 저장한다")
+    @Test
+    void usesDefaultCapacityWhenCapacityIsMissing() {
+        LocalDate startDate = LocalDate.now(SEOUL_ZONE).plusDays(5);
+        TripCreateRequest request = new TripCreateRequest(
+                "제주 여행",
+                1L,
+                startDate,
+                null,
+                null
+        );
+
+        tripService.createTrip(USER_PUBLIC_ID.toString(), request);
+
+        ArgumentCaptor<Trip> captor = ArgumentCaptor.forClass(Trip.class);
+        verify(tripRepository).save(captor.capture());
+        assertThat(captor.getValue().getCapacity()).isEqualTo((byte) 4);
+    }
+
     @DisplayName("초대 링크의 여행 미리보기를 조회한다")
     @Test
     void retrievesInvitationPreview() {
