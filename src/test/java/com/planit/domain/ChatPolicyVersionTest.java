@@ -1,11 +1,13 @@
 package com.planit.domain;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ChatPolicyVersionTest {
 
+    @DisplayName("초안 상태의 채팅 정책 버전을 생성한다")
     @Test
     void createsDraftPolicyVersion() {
         ChatPolicyVersion policyVersion = new ChatPolicyVersion(

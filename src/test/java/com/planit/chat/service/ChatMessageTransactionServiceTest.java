@@ -18,6 +18,7 @@ import com.planit.repository.RegionalChatRoomMemberRepository;
 import com.planit.repository.RegionalChatRoomRepository;
 import com.planit.repository.TextChatMessageRepository;
 import com.planit.repository.UserRepository;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -100,6 +101,7 @@ class ChatMessageTransactionServiceTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
     }
 
+    @DisplayName("정규화한 텍스트 메시지를 저장한다")
     @Test
     void savesNormalizedTextMessage() {
         ChatMessageSendResult result = service.createOrFind(
@@ -120,6 +122,7 @@ class ChatMessageTransactionServiceTest {
         assertThat(textCaptor.getValue().getTextContent()).isEqualTo("경주 맛집");
     }
 
+    @DisplayName("같은 메시지가 재전송되면 기존 결과를 반환하고 재방송하지 않는다")
     @Test
     void returnsExistingResultWithoutBroadcastCandidateForSamePayload() {
         ChatMessage existing = new ChatMessage(
@@ -145,6 +148,7 @@ class ChatMessageTransactionServiceTest {
         verify(messageRepository, never()).saveAndFlush(any());
     }
 
+    @DisplayName("같은 클라이언트 메시지 ID를 다른 내용으로 재사용하면 거부한다")
     @Test
     void rejectsReusedClientMessageIdWithDifferentText() {
         ChatMessage existing = new ChatMessage(
@@ -168,6 +172,7 @@ class ChatMessageTransactionServiceTest {
                 .isEqualTo(ErrorCode.CLIENT_MESSAGE_ID_REUSED);
     }
 
+    @DisplayName("현재 채팅 정책에 동의하지 않은 사용자의 메시지를 거부한다")
     @Test
     void rejectsUserWithoutActivePolicyConsent() {
         when(policyConsentRepository.existsByUserAndChatPolicyVersion(any(), any()))

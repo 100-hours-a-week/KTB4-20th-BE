@@ -5,6 +5,7 @@ import com.planit.chat.dto.ChatMessageHistoryResponse.ChatMessageItemResponse;
 import com.planit.chat.dto.ChatMessageHistoryResponse.ChatSenderResponse;
 import com.planit.chat.dto.ChatMessageResultEvent;
 import com.planit.chat.service.ChatMessageSendResult;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.messaging.MessageHeaders;
@@ -25,6 +26,7 @@ class ChatMessageEventPublisherTest {
     private static final String USER_PUBLIC_ID =
             "01991f6e-7300-7b21-a3cc-1436db3df95e";
 
+    @DisplayName("새 메시지는 채팅방에 전파하고 처리 결과는 요청 세션에만 전송한다")
     @Test
     void publishesNewMessageToRoomAndResultOnlyToRequestSession() {
         SimpMessagingTemplate messagingTemplate = mock(SimpMessagingTemplate.class);
@@ -57,6 +59,7 @@ class ChatMessageEventPublisherTest {
         )).isEqualTo("session-1");
     }
 
+    @DisplayName("이미 처리된 메시지는 다시 전파하지 않는다")
     @Test
     void doesNotBroadcastExistingMessageAgain() {
         SimpMessagingTemplate messagingTemplate = mock(SimpMessagingTemplate.class);

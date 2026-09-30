@@ -7,6 +7,7 @@ import com.planit.domain.ImagePurpose;
 import com.planit.domain.RegionalChatRoom;
 import com.planit.domain.TextChatMessage;
 import com.planit.domain.User;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -36,6 +37,7 @@ class ChatMessageRepositoryTest {
     @Autowired
     private UserRepository userRepository;
 
+    @DisplayName("채팅 내역 조회 시 메시지 내용과 발신자 정보를 함께 반환한다")
     @Test
     void queriesTextMessageHistoryProjection() {
         RegionalChatRoom room = roomRepository.findById(1L).orElseThrow();

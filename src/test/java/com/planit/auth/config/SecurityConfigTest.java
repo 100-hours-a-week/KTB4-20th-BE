@@ -13,6 +13,7 @@ import com.planit.trip.controller.TripInvitationController;
 import com.planit.trip.service.TripService;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -74,6 +75,7 @@ class SecurityConfigTest {
     @MockitoBean
     private JwtDecoder jwtDecoder;
 
+    @DisplayName("현재 사용자 조회에는 액세스 토큰이 필요하다")
     @Test
     void requiresAccessTokenForCurrentUser() throws Exception {
         mockMvc.perform(get("/api/users/me"))
@@ -82,6 +84,7 @@ class SecurityConfigTest {
                         .value("AUTHENTICATION_REQUIRED"));
     }
 
+    @DisplayName("로그인하지 않아도 초대 링크의 유효성을 확인할 수 있다")
     @Test
     void allowsInvitationValidationBeforeAuthentication() throws Exception {
         String invitationToken = "a".repeat(43);
@@ -101,6 +104,7 @@ class SecurityConfigTest {
         verify(tripService).getInvitationPreview(null, invitationToken);
     }
 
+    @DisplayName("액세스 토큰 없이 토큰을 재발급할 수 있다")
     @Test
     void allowsRefreshWithoutAccessToken() throws Exception {
         when(authService.refresh(null, null))
@@ -116,6 +120,7 @@ class SecurityConfigTest {
                         .value("access-token"));
     }
 
+    @DisplayName("JWT에 담긴 사용자 ID로 현재 사용자 정보를 조회한다")
     @Test
     void passesJwtSubjectToCurrentUserService() throws Exception {
         UUID publicId = UUID.fromString(USER_PUBLIC_ID);
@@ -137,6 +142,7 @@ class SecurityConfigTest {
                         .value("플랜잇사용자"));
     }
 
+    @DisplayName("허용된 프론트엔드 주소의 인증 요청에 CORS와 쿠키 전송을 허용한다")
     @Test
     void allowsConfiguredFrontendOrigin() throws Exception {
         mockMvc.perform(options("/api/auth/refresh")
@@ -159,6 +165,7 @@ class SecurityConfigTest {
                 ));
     }
 
+    @DisplayName("액세스 토큰 없이 기본 프로필 이미지를 조회할 수 있다")
     @Test
     void allowsDefaultProfileImageWithoutAccessToken() throws Exception {
         mockMvc.perform(get("/images/default-profile.svg"))
@@ -169,6 +176,7 @@ class SecurityConfigTest {
                 ));
     }
 
+    @DisplayName("액세스 토큰이 없는 웹소켓 요청을 인증 오류로 차단하지 않는다")
     @Test
     void allowsWebSocketHandshakePathWithoutHttpAccessToken() throws Exception {
         mockMvc.perform(get("/ws"))

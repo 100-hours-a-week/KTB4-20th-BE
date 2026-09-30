@@ -4,6 +4,7 @@ import com.planit.chat.presence.RegionalChatRoomPresenceRegistry;
 import com.planit.global.error.ErrorCode;
 import com.planit.repository.RegionalChatRoomMemberRepository;
 import com.planit.repository.RegionalChatRoomRepository;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
@@ -50,6 +51,7 @@ class RegionalChatRoomSubscriptionChannelInterceptorTest {
         );
     }
 
+    @DisplayName("활성 회원의 채팅방 구독을 허용한다")
     @Test
     void acceptsSubscriptionForActiveMember() {
         when(roomRepository.existsById(3001L)).thenReturn(true);
@@ -79,6 +81,7 @@ class RegionalChatRoomSubscriptionChannelInterceptorTest {
         ));
     }
 
+    @DisplayName("비회원의 구독을 거부하되 연결은 유지한다")
     @Test
     void rejectsSubscriptionForNonMemberWithoutClosingConnection() {
         when(roomRepository.existsById(3001L)).thenReturn(true);
@@ -99,6 +102,7 @@ class RegionalChatRoomSubscriptionChannelInterceptorTest {
         verify(presenceRegistry, never()).register(any(), any(), any(), any());
     }
 
+    @DisplayName("채팅방 구독을 해제한다")
     @Test
     void unregistersSubscription() {
         Message<byte[]> message = stompMessage(
@@ -115,6 +119,7 @@ class RegionalChatRoomSubscriptionChannelInterceptorTest {
         );
     }
 
+    @DisplayName("개인 이벤트 구독은 채팅방 참여 검증에서 제외한다")
     @Test
     void ignoresPersonalEventSubscription() {
         Message<byte[]> message = stompMessage(

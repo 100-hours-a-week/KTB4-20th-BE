@@ -20,6 +20,7 @@ import com.planit.repository.TripMemberRepository;
 import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
 import com.planit.survey.dto.SurveySummaryResponse;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -88,6 +89,7 @@ class SurveySummaryServiceTest {
         givenTrip(LocalDateTime.of(2099, 9, 25, 23, 59));
     }
 
+    @DisplayName("활성 멤버가 제출한 설문을 요약한다")
     @Test
     void summarizesSubmittedSurveysOfActiveMembers() {
         List<Survey> submittedSurveys = List.of(hostSurvey, memberSurvey);
@@ -145,6 +147,7 @@ class SurveySummaryServiceTest {
                 ));
     }
 
+    @DisplayName("제출한 멤버가 없으면 빈 설문 요약을 반환한다")
     @Test
     void returnsEmptySummaryWhenNobodySubmitted() {
         givenTrip(LocalDateTime.of(2000, 1, 1, 0, 0));
@@ -161,6 +164,7 @@ class SurveySummaryServiceTest {
         assertThat(response.excludedCategories()).isEmpty();
     }
 
+    @DisplayName("활성 여행 멤버가 아닌 사용자의 요약 조회를 거부한다")
     @Test
     void rejectsUserWhoIsNotActiveTripMember() {
         when(tripMemberRepository.findByTripAndUserAndLeftAtIsNull(

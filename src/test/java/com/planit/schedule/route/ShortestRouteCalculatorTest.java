@@ -1,5 +1,6 @@
 package com.planit.schedule.route;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -19,6 +20,7 @@ class ShortestRouteCalculatorTest {
     private final ShortestRouteCalculator calculator =
             new ShortestRouteCalculator();
 
+    @DisplayName("정확한 최단 개방 경로를 찾고 다섯 개 이동 구간을 생성한다")
     @Test
     void findsExactShortestOpenRouteAndBuildsFiveLegs() {
         List<RoutePlace> places = List.of(
@@ -45,6 +47,7 @@ class ShortestRouteCalculatorTest {
                         .sum());
     }
 
+    @DisplayName("식당과 카페, 활동 장소의 순서 제약을 적용한다")
     @Test
     void appliesRestaurantCafeAndActivitySequenceConstraints() {
         List<RoutePlace> places = List.of(
@@ -77,6 +80,7 @@ class ShortestRouteCalculatorTest {
         }
     }
 
+    @DisplayName("거리가 같으면 장소 ID 순서로 경로를 결정한다")
     @Test
     void usesPlaceIdOrderToBreakEqualDistanceTies() {
         List<RoutePlace> places = List.of(
@@ -96,6 +100,7 @@ class ShortestRouteCalculatorTest {
         assertThat(plan.totalDistanceMeters()).isZero();
     }
 
+    @DisplayName("두 장소의 좌표를 이용해 거리를 미터 단위로 계산한다")
     @Test
     void calculatesHaversineDistanceInMeters() {
         List<RoutePlace> places = List.of(
@@ -115,6 +120,7 @@ class ShortestRouteCalculatorTest {
                 .isBetween(555_970L, 555_980L);
     }
 
+    @DisplayName("장소가 다섯 개 미만이면 경로 계산을 거부한다")
     @Test
     void rejectsFewerThanFivePlaces() {
         assertThatThrownBy(() -> calculator.calculate(List.of(
@@ -127,6 +133,7 @@ class ShortestRouteCalculatorTest {
                 );
     }
 
+    @DisplayName("다섯 장소의 최단 개방 경로와 네 개 이동 구간을 생성한다")
     @Test
     void findsShortestOpenRouteAndBuildsFourLegsForFivePlaces() {
         List<RoutePlace> places = List.of(
@@ -148,6 +155,7 @@ class ShortestRouteCalculatorTest {
                 .containsExactly(1, 2, 3, 4);
     }
 
+    @DisplayName("중복 장소 ID와 유효하지 않은 좌표를 거부한다")
     @Test
     void rejectsDuplicatePlaceIdsAndInvalidCoordinates() {
         List<RoutePlace> duplicateIds = List.of(
@@ -171,6 +179,7 @@ class ShortestRouteCalculatorTest {
         assertInvalid(invalidCoordinate);
     }
 
+    @DisplayName("카테고리 조건을 만족하는 경로가 없으면 실패한다")
     @Test
     void failsWhenNoCategoryValidRouteExists() {
         List<RoutePlace> places = List.of(

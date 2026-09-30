@@ -3,6 +3,7 @@ package com.planit.survey.controller;
 import com.planit.global.error.GlobalExceptionHandler;
 import com.planit.survey.dto.SurveySummaryResponse;
 import com.planit.survey.service.SurveyService;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.TestingAuthenticationToken;
@@ -38,6 +39,7 @@ class SurveySummaryControllerTest {
                 .build();
     }
 
+    @DisplayName("여행 설문 요약을 조회한다")
     @Test
     void getsSurveySummary() throws Exception {
         UUID publicId = UUID.fromString(USER_PUBLIC_ID);

@@ -4,6 +4,7 @@ import com.planit.auth.config.AuthProperties;
 import com.planit.auth.config.JwtConfig;
 import com.planit.auth.dto.AccessTokenResponse;
 import com.planit.repository.UserRepository;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -51,6 +52,7 @@ class JwtTokenProviderTest {
         );
     }
 
+    @DisplayName("HS256 방식의 액세스 토큰을 발급한다")
     @Test
     void issuesHs256AccessToken() {
         AccessTokenResponse response =
@@ -77,6 +79,7 @@ class JwtTokenProviderTest {
         assertThat(response.expiresIn()).isEqualTo(900);
     }
 
+    @DisplayName("비활성 사용자의 액세스 토큰 발급을 거부한다")
     @Test
     void rejectsAccessTokenForInactiveUser() {
         when(userRepository.existsByPublicIdAndDeletedAtIsNull(

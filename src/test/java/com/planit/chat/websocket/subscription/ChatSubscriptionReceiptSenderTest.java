@@ -1,5 +1,6 @@
 package com.planit.chat.websocket.subscription;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
@@ -13,6 +14,7 @@ import static org.mockito.Mockito.verify;
 
 class ChatSubscriptionReceiptSenderTest {
 
+    @DisplayName("구독 처리 확인 응답을 요청한 세션에 전송한다")
     @Test
     void sendsReceiptToRequestingSession() {
         MessageChannel outboundChannel = mock(MessageChannel.class);

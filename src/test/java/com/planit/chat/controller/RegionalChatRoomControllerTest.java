@@ -12,6 +12,7 @@ import com.planit.chat.dto.RegionalChatRoomLeaveResponse;
 import com.planit.chat.service.RegionalChatRoomListService;
 import com.planit.chat.service.RegionalChatRoomMembershipService;
 import com.planit.global.error.GlobalExceptionHandler;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.TestingAuthenticationToken;
@@ -55,6 +56,7 @@ class RegionalChatRoomControllerTest {
                 .build();
     }
 
+    @DisplayName("지역 채팅방의 최신 메시지를 조회한다")
     @Test
     void getsLatestChatMessages() throws Exception {
         ChatMessageHistoryResponse response = new ChatMessageHistoryResponse(
@@ -90,6 +92,7 @@ class RegionalChatRoomControllerTest {
         verify(messageHistoryService).getMessages(USER_PUBLIC_ID, 3001L, null, null);
     }
 
+    @DisplayName("지역 채팅방 목록을 조회한다")
     @Test
     void getsRegionalChatRooms() throws Exception {
         RegionalChatRoomListResponse response = new RegionalChatRoomListResponse(
@@ -113,6 +116,7 @@ class RegionalChatRoomControllerTest {
         verify(service).getRegionalChatRooms(USER_PUBLIC_ID);
     }
 
+    @DisplayName("지역 채팅방에 참여한다")
     @Test
     void joinsRegionalChatRoom() throws Exception {
         Instant joinedAt = Instant.parse("2026-09-20T01:00:00.123456Z");
@@ -130,6 +134,7 @@ class RegionalChatRoomControllerTest {
         verify(membershipService).join(USER_PUBLIC_ID, 3001L);
     }
 
+    @DisplayName("지역 채팅방에서 나간다")
     @Test
     void leavesRegionalChatRoom() throws Exception {
         Instant leftAt = Instant.parse("2026-09-20T02:00:00.123456Z");

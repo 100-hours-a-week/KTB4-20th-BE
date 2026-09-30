@@ -1,5 +1,6 @@
 package com.planit.global.response;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -16,6 +17,7 @@ class ApiResponseTest {
 
     private final ObjectMapper objectMapper = JsonMapper.builder().build();
 
+    @DisplayName("성공 응답은 코드와 메시지, 데이터를 포함하고 오류는 포함하지 않는다")
     @Test
     void successResponseContainsCodeMessageAndDataWithoutErrors() throws Exception {
         ApiResponse<Map<String, String>> response = ApiResponse.success(
@@ -32,6 +34,7 @@ class ApiResponseTest {
         assertThat(json.has("errors")).isFalse();
     }
 
+    @DisplayName("일반 오류 응답은 데이터와 검증 오류를 포함하지 않는다")
     @Test
     void errorResponseContainsNullDataWithoutErrors() {
         ApiResponse<Void> response = ApiResponse.error(
@@ -47,6 +50,7 @@ class ApiResponseTest {
         assertThat(json.has("errors")).isFalse();
     }
 
+    @DisplayName("검증 오류 응답은 필드와 오류 사유를 포함한다")
     @Test
     void validationErrorResponseContainsFieldAndReason() {
         ApiResponse<Void> response = ApiResponse.validationError(
@@ -62,6 +66,9 @@ class ApiResponseTest {
         assertThat(json.get("errors").get(0).get("reason").asText()).isEqualTo("REQUIRED");
     }
 
+    @DisplayName(
+            "검증 오류 응답은 원본 목록의 변경에 영향받지 않고 직접 수정할 수도 없다"
+    )
     @Test
     void validationErrorsAreDefensivelyCopied() {
         List<ApiFieldError> errors = new ArrayList<>();
@@ -79,6 +86,7 @@ class ApiResponseTest {
                 .isInstanceOf(UnsupportedOperationException.class);
     }
 
+    @DisplayName("빈 검증 오류 목록으로 응답을 생성할 수 없다")
     @Test
     void validationErrorRejectsEmptyErrors() {
         assertThatThrownBy(() -> ApiResponse.validationError(

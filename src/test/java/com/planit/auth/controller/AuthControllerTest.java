@@ -5,6 +5,7 @@ import com.planit.auth.service.AuthCookieService;
 import com.planit.auth.service.AuthService;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
@@ -19,6 +20,7 @@ import static org.mockito.Mockito.when;
 
 class AuthControllerTest {
 
+    @DisplayName("OAuth 콜백 실패 시 쿠키를 삭제하고 로그인 실패 페이지로 이동한다")
     @Test
     void redirectsAndDeletesOAuthCookiesWhenCallbackFails() {
         AuthService authService = mock(AuthService.class);
@@ -79,6 +81,9 @@ class AuthControllerTest {
                 );
     }
 
+    @DisplayName(
+            "OAuth 로그인 저장 중 데이터베이스 오류가 발생하면 로그인 실패 페이지로 이동한다"
+    )
     @Test
     void redirectsWithLoginFailureWhenCallbackCommitFails() {
         AuthService authService = mock(AuthService.class);

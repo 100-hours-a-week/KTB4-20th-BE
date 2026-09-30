@@ -1,5 +1,6 @@
 package com.planit.domain;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
@@ -9,6 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class TripTest {
 
+    @DisplayName("여행을 생성하면 종료일을 시작일로 설정하고 삭제되지 않은 상태로 초기화한다")
     @Test
     void createsTrip() {
         Region region = new Region();

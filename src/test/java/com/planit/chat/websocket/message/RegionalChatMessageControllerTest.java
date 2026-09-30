@@ -5,6 +5,7 @@ import com.planit.chat.service.ChatMessageSendResult;
 import com.planit.chat.service.ChatMessageSendService;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.security.Principal;
@@ -21,6 +22,7 @@ class RegionalChatMessageControllerTest {
     private static final Long ROOM_ID = 3001L;
     private static final String SESSION_ID = "session-1";
 
+    @DisplayName("메시지 처리 성공 결과를 요청 세션에 전송한다")
     @Test
     void publishesAcceptedResultAfterServiceReturns() {
         ChatMessageSendService service = mock(ChatMessageSendService.class);
@@ -45,6 +47,7 @@ class RegionalChatMessageControllerTest {
         );
     }
 
+    @DisplayName("메시지 처리 중 발생한 비즈니스 오류를 요청 세션에 전송한다")
     @Test
     void publishesBusinessFailureToRequestSession() {
         ChatMessageSendService service = mock(ChatMessageSendService.class);

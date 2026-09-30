@@ -5,6 +5,7 @@ import com.planit.domain.Region;
 import com.planit.domain.Trip;
 import com.planit.domain.TripMember;
 import com.planit.domain.User;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -43,6 +44,7 @@ class TripMemberRepositoryTest {
     @Autowired
     private TripMemberRepository tripMemberRepository;
 
+    @DisplayName("겹치는 날짜에 참여 중인 여행 수를 계산한다")
     @Test
     void countsActiveTripOnOverlappingDate() {
         User user = createUser();
@@ -58,6 +60,7 @@ class TripMemberRepositoryTest {
         assertThat(count).isEqualTo(1);
     }
 
+    @DisplayName("초대받은 여행을 제외하고 일정이 겹치는 여행을 조회한다")
     @Test
     void findsOverlappingTripExceptInvitationTrip() {
         User user = createUser();
@@ -87,6 +90,7 @@ class TripMemberRepositoryTest {
         assertThat(result).containsExactly(overlappingMembership);
     }
 
+    @DisplayName("사용자가 탈퇴한 멤버십은 일정 중복 검사에서 제외한다")
     @Test
     void excludesMembershipThatUserLeft() {
         User user = createUser();
@@ -109,6 +113,7 @@ class TripMemberRepositoryTest {
         assertThat(count).isZero();
     }
 
+    @DisplayName("삭제된 여행은 일정 중복 검사에서 제외한다")
     @Test
     void excludesDeletedTrip() {
         User user = createUser();
@@ -130,6 +135,7 @@ class TripMemberRepositoryTest {
         assertThat(count).isZero();
     }
 
+    @DisplayName("예정된 여행을 지난 여행보다 먼저 조회한다")
     @Test
     void listsUpcomingTripsBeforePastTrips() {
         LocalDate referenceDate = LocalDate.of(2026, 9, 23);
@@ -175,6 +181,7 @@ class TripMemberRepositoryTest {
                 );
     }
 
+    @DisplayName("예정 여행 커서 이후의 여행을 구간에 걸쳐 조회한다")
     @Test
     void listsTripsAfterUpcomingCursorAcrossSections() {
         LocalDate referenceDate = LocalDate.of(2026, 9, 23);
@@ -212,6 +219,7 @@ class TripMemberRepositoryTest {
                 .containsExactly(upcomingLater, pastTrip);
     }
 
+    @DisplayName("지난 여행 커서 이후의 여행을 조회한다")
     @Test
     void listsPastTripsAfterPastCursor() {
         LocalDate referenceDate = LocalDate.of(2026, 9, 23);
@@ -244,6 +252,7 @@ class TripMemberRepositoryTest {
                 .containsExactly(recentTrip);
     }
 
+    @DisplayName("탈퇴한 사용자를 여행 멤버 목록에서 제외한다")
     @Test
     void excludesWithdrawnUserFromTripMembers() {
         Trip trip = createTrip();
@@ -266,6 +275,7 @@ class TripMemberRepositoryTest {
         assertThat(members).containsExactly(activeMember);
     }
 
+    @DisplayName("탈퇴한 멤버십과 삭제된 여행을 목록에서 제외한다")
     @Test
     void excludesLeftMembershipAndDeletedTripFromList() {
         LocalDate referenceDate = LocalDate.of(2026, 9, 23);
@@ -320,6 +330,7 @@ class TripMemberRepositoryTest {
                 .containsExactly(activeTrip);
     }
 
+    @DisplayName("활성 멤버만 참여 순서대로 조회한다")
     @Test
     void findsOnlyActiveMembersInJoinOrder() {
         Trip trip = createTrip();
@@ -368,6 +379,7 @@ class TripMemberRepositoryTest {
         assertThat(members).containsExactly(firstMember, secondMember);
     }
 
+    @DisplayName("한 여행에 여러 명의 활성 방장이 존재할 수 없다")
     @Test
     void preventsMultipleActiveHostsInSameTrip() {
         Trip trip = createTrip();

@@ -2,6 +2,7 @@ package com.planit.chat.websocket.auth;
 
 import com.planit.chat.error.ChatAuthenticationException;
 import com.planit.chat.error.ChatErrorCode;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -21,6 +22,7 @@ class JwtChatAccessTokenAuthenticatorTest {
     private static final String USER_PUBLIC_ID =
             "01991f6e-7300-7b21-a3cc-1436db3df95e";
 
+    @DisplayName("JWT에 담긴 사용자 ID로 인증된 채팅 사용자를 생성한다")
     @Test
     void createsAuthenticatedPrincipalFromJwtSubject() {
         JwtDecoder jwtDecoder = mock(JwtDecoder.class);
@@ -36,6 +38,7 @@ class JwtChatAccessTokenAuthenticatorTest {
         assertThat(authentication.getPrincipal()).isSameAs(jwt);
     }
 
+    @DisplayName("JWT 검증 실패를 채팅 인증 실패로 변환한다")
     @Test
     void convertsJwtValidationFailureToChatAuthenticationFailure() {
         JwtDecoder jwtDecoder = mock(JwtDecoder.class);

@@ -13,6 +13,7 @@ import com.planit.repository.TripMemberRepository;
 import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
 import com.planit.survey.dto.SurveyResponse;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -67,6 +68,7 @@ class SurveyServiceImplTest {
         );
     }
 
+    @DisplayName("작성 중인 설문은 중립 점수로 반환한다")
     @Test
     void returnsNeutralScoresForDraftSurvey() {
         UUID publicId = UUID.fromString(USER_PUBLIC_ID);

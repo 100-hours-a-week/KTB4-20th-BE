@@ -22,6 +22,7 @@ import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
 import com.planit.schedule.dto.SchedulePlaceSelectionResponse;
 import com.planit.schedule.ai.AiRecommendedPlaceMapper;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -134,6 +135,7 @@ class ScheduleGenerationServiceTest {
                 .thenReturn(aiResponse());
     }
 
+    @DisplayName("당일 여행에 사용할 장소를 선정한다")
     @Test
     void selectsPlacesForDayTrip() {
         SchedulePlaceSelectionResponse response = service.generate(
@@ -167,6 +169,7 @@ class ScheduleGenerationServiceTest {
         );
     }
 
+    @DisplayName("방장이 아닌 사용자의 일정 생성을 거부한다")
     @Test
     void rejectsNonHost() {
         when(host.getRole()).thenReturn(TripMemberRole.MEMBER);
@@ -176,6 +179,7 @@ class ScheduleGenerationServiceTest {
         verify(aiTripClient, never()).selectPlaces(any());
     }
 
+    @DisplayName("설문을 제출하지 않은 방장의 일정 생성을 거부한다")
     @Test
     void rejectsHostWithoutSubmittedSurvey() {
         when(surveyRepository.findByTripMemberInAndSubmittedAtIsNotNull(
@@ -187,6 +191,7 @@ class ScheduleGenerationServiceTest {
         verify(aiTripClient, never()).selectPlaces(any());
     }
 
+    @DisplayName("답변이 15개가 아닌 설문을 거부한다")
     @Test
     void rejectsSurveyWithoutFifteenAnswers() {
         List<SurveyAnswer> fourteenAnswers = answers().subList(0, 14);
@@ -200,6 +205,7 @@ class ScheduleGenerationServiceTest {
         verify(aiTripClient, never()).selectPlaces(any());
     }
 
+    @DisplayName("설문 마감 전에는 미제출 멤버가 있으면 일정 생성을 거부한다")
     @Test
     void rejectsIncompleteSurveysBeforeDeadline() {
         TripMember member = mock(TripMember.class);
@@ -214,6 +220,7 @@ class ScheduleGenerationServiceTest {
         verify(aiTripClient, never()).selectPlaces(any());
     }
 
+    @DisplayName("설문 마감 후에는 제출한 멤버의 응답으로 장소를 선정한다")
     @Test
     void selectsPlacesWithSubmittedMembersAfterDeadline() {
         TripMember member = mock(TripMember.class);
@@ -230,6 +237,7 @@ class ScheduleGenerationServiceTest {
         verify(aiTripClient).selectPlaces(any());
     }
 
+    @DisplayName("AI 일정 생성을 지원하지 않는 지역을 거부한다")
     @Test
     void rejectsUnsupportedRegion() {
         when(trip.getRegion().getCode()).thenReturn("REGION-DAEGU");
@@ -239,6 +247,7 @@ class ScheduleGenerationServiceTest {
         verify(aiTripClient, never()).selectPlaces(any());
     }
 
+    @DisplayName("AI 서버 호출에 실패하면 일정 생성 실패를 반환한다")
     @Test
     void returnsFailureWhenAiCallFails() {
         when(aiTripClient.selectPlaces(any()))
@@ -247,6 +256,7 @@ class ScheduleGenerationServiceTest {
         assertError(ErrorCode.AI_SCHEDULE_GENERATION_FAILED);
     }
 
+    @DisplayName("성공 상태가 아닌 AI 응답을 거부한다")
     @Test
     void rejectsUnsuccessfulAiResponse() {
         when(aiTripClient.selectPlaces(any()))
@@ -258,6 +268,7 @@ class ScheduleGenerationServiceTest {
         assertError(ErrorCode.AI_SCHEDULE_GENERATION_FAILED);
     }
 
+    @DisplayName("장소가 없는 AI 응답을 거부한다")
     @Test
     void rejectsAiResponseWithoutPlaces() {
         when(aiTripClient.selectPlaces(any()))
@@ -269,6 +280,7 @@ class ScheduleGenerationServiceTest {
         assertError(ErrorCode.AI_SCHEDULE_GENERATION_FAILED);
     }
 
+    @DisplayName("AI가 장소를 다섯 개만 반환해도 허용한다")
     @Test
     void acceptsFivePlacesWhenAiFallsShortOfSix() {
         when(aiTripClient.selectPlaces(any()))
@@ -282,6 +294,7 @@ class ScheduleGenerationServiceTest {
         assertThat(response.places()).hasSize(5);
     }
 
+    @DisplayName("필수 정보가 누락된 AI 추천 장소를 거부한다")
     @Test
     void rejectsAiPlaceWithoutRequiredData() {
         AiPlaceSelectionResponse.Place invalidPlace =

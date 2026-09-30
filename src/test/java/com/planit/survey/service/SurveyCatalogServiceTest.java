@@ -5,6 +5,7 @@ import com.planit.domain.SurveyExclusionCategory;
 import com.planit.repository.PreferenceQuestionRepository;
 import com.planit.repository.SurveyExclusionCategoryRepository;
 import com.planit.survey.dto.SurveyCatalogResponse;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -15,6 +16,7 @@ import static org.mockito.Mockito.when;
 
 class SurveyCatalogServiceTest {
 
+    @DisplayName("설문 문항과 제외 카테고리를 저장된 순서대로 반환한다")
     @Test
     void returnsQuestionsAndExclusionCategoriesInStoredOrder() {
         PreferenceQuestionRepository questionRepository = mock(

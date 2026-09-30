@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class RefreshTokenTest {
@@ -11,6 +12,7 @@ class RefreshTokenTest {
     private static final String TOKEN_HASH =
             "e3f0d29ab9f10fc9862b46fcb152876d429aafc96a14358c0802a45d9d1314e5";
 
+    @DisplayName("리프레시 토큰 폐기 시각을 기록한다")
     @Test
     void recordsRevokedAt() {
         RefreshToken refreshToken = createRefreshToken();
@@ -21,6 +23,7 @@ class RefreshTokenTest {
         assertThat(refreshToken.getRevokedAt()).isEqualTo(revokedAt);
     }
 
+    @DisplayName("토큰을 다시 폐기해도 최초 폐기 시각을 유지한다")
     @Test
     void keepsFirstRevokedAtWhenRevokedAgain() {
         RefreshToken refreshToken = createRefreshToken();

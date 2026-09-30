@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.net.URI;
 import java.time.Duration;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -32,6 +33,7 @@ class AuthPropertiesTest {
                     "planit.auth.kakao.unlink-uri=https://kapi.kakao.com/v1/user/unlink"
             );
 
+    @DisplayName("프론트엔드 주소와 OAuth 쿠키, JWT, 카카오 설정을 정확히 읽어온다")
     @Test
     void bindsAuthProperties() {
         contextRunner.run(context -> {

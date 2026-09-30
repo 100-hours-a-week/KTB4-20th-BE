@@ -16,6 +16,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -57,6 +58,7 @@ class TripControllerTest {
                 .build();
     }
 
+    @DisplayName("여행을 생성한다")
     @Test
     void createsTrip() throws Exception {
         when(tripService.createTrip(
@@ -96,6 +98,7 @@ class TripControllerTest {
         );
     }
 
+    @DisplayName("초대 토큰을 사용해 여행에 참여한다")
     @Test
     void joinsTripUsingInvitationToken() throws Exception {
         when(tripService.joinTrip(
@@ -126,6 +129,7 @@ class TripControllerTest {
         );
     }
 
+    @DisplayName("참여 중인 여행 목록을 조회한다")
     @Test
     void getsParticipatingTrips() throws Exception {
         String cursor = "next-cursor";
@@ -173,6 +177,7 @@ class TripControllerTest {
         verify(tripService).getTrips(USER_PUBLIC_ID, cursor, 5);
     }
 
+    @DisplayName("여행 상세 정보를 조회한다")
     @Test
     void getsTripDetail() throws Exception {
         when(tripService.getTripDetail(USER_PUBLIC_ID, 1001L))
@@ -235,6 +240,7 @@ class TripControllerTest {
         verify(tripService).getTripDetail(USER_PUBLIC_ID, 1001L);
     }
 
+    @DisplayName("여행에서 나간다")
     @Test
     void leavesTrip() throws Exception {
         when(tripService.leaveTrip(USER_PUBLIC_ID, 1001L))
@@ -255,6 +261,7 @@ class TripControllerTest {
         verify(tripService).leaveTrip(USER_PUBLIC_ID, 1001L);
     }
 
+    @DisplayName("형식이 올바르지 않은 초대 토큰을 거부한다")
     @ParameterizedTest
     @MethodSource("invalidInvitationTokens")
     void rejectsInvalidInvitationToken(String invitationToken)
@@ -278,6 +285,7 @@ class TripControllerTest {
         verify(tripService, never()).joinTrip(any(), any());
     }
 
+    @DisplayName("정원을 생략하면 기본값을 적용하고 설문 마감일 생략을 허용한다")
     @Test
     void appliesDefaultCapacityAndAcceptsMissingDeadline() throws Exception {
         when(tripService.createTrip(
@@ -313,6 +321,7 @@ class TripControllerTest {
         assertThat(captor.getValue().surveyDeadlineDate()).isNull();
     }
 
+    @DisplayName("유효하지 않은 여행 이름을 거부한다")
     @Test
     void rejectsInvalidTripName() throws Exception {
         mockMvc.perform(post("/api/trips")

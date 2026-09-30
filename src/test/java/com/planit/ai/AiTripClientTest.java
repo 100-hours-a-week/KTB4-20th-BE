@@ -1,5 +1,6 @@
 package com.planit.ai;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
@@ -40,6 +41,7 @@ class AiTripClientTest {
         );
     }
 
+    @DisplayName("AI 서버에 여행 장소 선정을 요청한다")
     @Test
     void requestsPlaceSelectionFromAiServer() {
         AiPlaceSelectionRequest request = new AiPlaceSelectionRequest(
