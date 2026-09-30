@@ -3,6 +3,7 @@ package com.planit.global.error;
 import com.planit.global.response.ApiFieldError;
 import com.planit.global.response.ApiResponse;
 import com.planit.global.response.ValidationErrorReason;
+import io.sentry.Sentry;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -27,6 +28,9 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException exception) {
+        if (exception.getErrorCode().getHttpStatus().is5xxServerError()) {
+            Sentry.captureException(exception);
+        }
         return errorResponse(exception.getErrorCode());
     }
 
@@ -115,6 +119,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleUnexpectedException(Exception exception) {
         log.error("처리되지 않은 서버 예외가 발생했습니다.", exception);
+        Sentry.captureException(exception);
         return errorResponse(ErrorCode.INTERNAL_SERVER_ERROR);
     }
 

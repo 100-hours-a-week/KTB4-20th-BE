@@ -4,6 +4,7 @@ import com.planit.chat.dto.ChatMessageSendRequest;
 import com.planit.chat.service.ChatMessageSendResult;
 import com.planit.chat.service.ChatMessageSendService;
 import com.planit.global.error.BusinessException;
+import io.sentry.Sentry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.Header;
@@ -41,6 +42,9 @@ public class RegionalChatMessageController {
                     result
             );
         } catch (BusinessException exception) {
+            if (exception.getErrorCode().getHttpStatus().is5xxServerError()) {
+                Sentry.captureException(exception);
+            }
             eventPublisher.publishRejected(
                     principal.getName(),
                     sessionId,
