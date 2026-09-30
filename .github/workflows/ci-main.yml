@@ -31,9 +31,13 @@ jobs:
           persist-credentials: false
 
       - name: Build Docker image
+        env:
+          DOCKER_BUILDKIT: '1'
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: |
           docker build \
             --platform linux/amd64 \
+            --secret id=SENTRY_AUTH_TOKEN,env=SENTRY_AUTH_TOKEN \
             -t planit-backend:ci .
 
       - name: Configure AWS credentials
