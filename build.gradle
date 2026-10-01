@@ -2,6 +2,7 @@ plugins {
 	id 'java'
 	id 'org.springframework.boot' version '4.1.1'
 	id 'io.spring.dependency-management' version '1.1.7'
+	id "io.sentry.jvm.gradle" version "6.23.0"
 }
 
 group = 'com.planit'
@@ -42,4 +43,11 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+}
+
+sentry {
+	includeSourceContext = System.getenv("SENTRY_AUTH_TOKEN") != null
+	org = "0da92dac133e"
+	projectName = "planit-backend"
+	authToken = System.getenv("SENTRY_AUTH_TOKEN")
 }
