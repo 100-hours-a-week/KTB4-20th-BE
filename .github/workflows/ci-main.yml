@@ -38,6 +38,7 @@ jobs:
           docker build \
             --platform linux/amd64 \
             --secret id=SENTRY_AUTH_TOKEN,env=SENTRY_AUTH_TOKEN \
+            --build-arg SENTRY_RELEASE=planit-backend@${{ github.sha }} \
             -t planit-backend:ci .
 
       - name: Configure AWS credentials
