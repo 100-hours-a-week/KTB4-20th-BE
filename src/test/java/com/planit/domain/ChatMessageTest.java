@@ -1,5 +1,6 @@
 package com.planit.domain;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
@@ -10,6 +11,7 @@ import static org.mockito.Mockito.mock;
 
 class ChatMessageTest {
 
+    @DisplayName("클라이언트 메시지 ID를 가진 공개 텍스트 메시지를 생성한다")
     @Test
     void createsVisibleTextMessageWithClientMessageId() {
         RegionalChatRoom room = mock(RegionalChatRoom.class);
@@ -32,6 +34,7 @@ class ChatMessageTest {
         assertThat(message.getCreatedAt()).isNotNull();
     }
 
+    @DisplayName("텍스트 상세 정보는 텍스트 메시지만 참조할 수 있다")
     @Test
     void textDetailsCanOnlyReferenceTextMessages() {
         ChatMessage imageMessage = new ChatMessage(
@@ -45,6 +48,7 @@ class ChatMessageTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    @DisplayName("텍스트 메시지와 상세 정보를 연결한다")
     @Test
     void associatesTextDetailsWithTextMessage() {
         ChatMessage message = new ChatMessage(

@@ -2,6 +2,7 @@ package com.planit.chat.websocket.auth;
 
 import com.planit.chat.error.ChatAuthenticationException;
 import com.planit.chat.error.ChatErrorCode;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -38,6 +39,7 @@ class StompAuthenticationChannelInterceptorTest {
         channel = mock(MessageChannel.class);
     }
 
+    @DisplayName("STOMP 연결의 Bearer 토큰을 인증하고 사용자를 설정한다")
     @Test
     void authenticatesConnectBearerTokenAndSetsPrincipal() {
         JwtAuthenticationToken authentication = authentication(
@@ -55,6 +57,7 @@ class StompAuthenticationChannelInterceptorTest {
         verify(authenticator).authenticate("access-token");
     }
 
+    @DisplayName("연결 후 JWT가 만료되면 메시지 전송을 거부한다")
     @Test
     void rejectsSendWhenConnectedJwtHasExpired() {
         Message<byte[]> message = message(
@@ -69,6 +72,7 @@ class StompAuthenticationChannelInterceptorTest {
                 .isEqualTo(ChatErrorCode.INVALID_ACCESS_TOKEN);
     }
 
+    @DisplayName("JWT가 유효한 동안 채팅방 구독을 허용한다")
     @Test
     void acceptsSubscribeWhileConnectedJwtIsValid() {
         Message<byte[]> message = message(

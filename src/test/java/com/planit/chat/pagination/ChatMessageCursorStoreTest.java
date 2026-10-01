@@ -2,6 +2,7 @@ package com.planit.chat.pagination;
 
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -18,6 +19,7 @@ class ChatMessageCursorStoreTest {
     private static final String USER_PUBLIC_ID = "01991f6e-7300-7b21-a3cc-1436db3df95e";
     private static final Instant NOW = Instant.parse("2026-09-22T10:00:00Z");
 
+    @DisplayName("발급한 커서에서 이전 메시지 조회 기준을 복원한다")
     @Test
     void resolvesBoundaryForSameUserAndRoom() {
         ChatMessageCursorStore store = new ChatMessageCursorStore(
@@ -32,6 +34,7 @@ class ChatMessageCursorStoreTest {
         assertThat(boundary.beforeMessageId()).isEqualTo(10001L);
     }
 
+    @DisplayName("다른 채팅방에서 발급된 메시지 커서를 거부한다")
     @Test
     void rejectsCursorFromDifferentContext() {
         ChatMessageCursorStore store = new ChatMessageCursorStore(
@@ -50,6 +53,7 @@ class ChatMessageCursorStoreTest {
                 );
     }
 
+    @DisplayName("만료된 메시지 커서를 거부한다")
     @Test
     void rejectsExpiredCursor() {
         MutableClock clock = new MutableClock(NOW);

@@ -4,6 +4,7 @@ import com.planit.chat.dto.ChatPolicyConsentResponse;
 import com.planit.chat.dto.ChatPolicyResponse;
 import com.planit.chat.service.ChatPolicyService;
 import com.planit.global.error.GlobalExceptionHandler;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -38,6 +39,7 @@ class ChatPolicyControllerTest {
                 .build();
     }
 
+    @DisplayName("현재 채팅 정책을 조회한다")
     @Test
     void getsCurrentPolicy() throws Exception {
         Instant effectiveAt = Instant.parse("2026-08-31T15:00:00Z");
@@ -63,6 +65,7 @@ class ChatPolicyControllerTest {
         verify(chatPolicyService).getCurrentPolicy(USER_PUBLIC_ID);
     }
 
+    @DisplayName("채팅 정책 동의를 기록한다")
     @Test
     void recordsPolicyConsent() throws Exception {
         Instant consentedAt = Instant.parse("2026-09-07T11:00:00.123456Z");
@@ -82,6 +85,7 @@ class ChatPolicyControllerTest {
         verify(chatPolicyService).recordConsent(USER_PUBLIC_ID, "9001");
     }
 
+    @DisplayName("유효하지 않은 정책 버전 ID를 거부한다")
     @Test
     void rejectsInvalidPolicyVersionId() throws Exception {
         mockMvc.perform(put("/api/chat-policy/consent")

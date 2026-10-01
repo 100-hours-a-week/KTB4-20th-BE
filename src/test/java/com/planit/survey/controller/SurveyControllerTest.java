@@ -4,6 +4,7 @@ import com.planit.global.error.GlobalExceptionHandler;
 import com.planit.survey.dto.SurveyAnswerResponse;
 import com.planit.survey.dto.SurveyResponse;
 import com.planit.survey.service.SurveyService;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -41,6 +42,7 @@ class SurveyControllerTest {
                 .build();
     }
 
+    @DisplayName("내 여행 설문을 조회한다")
     @Test
     void getsMySurvey() throws Exception {
         when(surveyService.getMySurvey(USER_PUBLIC_ID, 1001L))
@@ -63,6 +65,7 @@ class SurveyControllerTest {
         verify(surveyService).getMySurvey(USER_PUBLIC_ID, 1001L);
     }
 
+    @DisplayName("내 여행 설문을 저장한다")
     @Test
     void savesMySurvey() throws Exception {
         OffsetDateTime submittedAt = OffsetDateTime.parse(
@@ -101,6 +104,7 @@ class SurveyControllerTest {
                         .value("1"));
     }
 
+    @DisplayName("5점 척도를 벗어난 점수를 거부한다")
     @Test
     void rejectsScoreOutsideFivePointScale() throws Exception {
         mockMvc.perform(put("/api/trips/1001/survey")
@@ -118,6 +122,7 @@ class SurveyControllerTest {
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
     }
 
+    @DisplayName("설문 저장 시 제외 카테고리 ID가 필요하다")
     @Test
     void requiresExcludedCategoryIds() throws Exception {
         mockMvc.perform(put("/api/trips/1001/survey")

@@ -1,6 +1,7 @@
 package com.planit.auth.kakao;
 
 import com.planit.auth.config.AuthProperties;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -79,6 +80,7 @@ class KakaoOAuthClientTest {
         );
     }
 
+    @DisplayName("인가 코드로 카카오 액세스 토큰을 발급받는다")
     @Test
     void exchangesAuthorizationCodeForAccessToken() {
         MultiValueMap<String, String> expectedForm =
@@ -125,6 +127,7 @@ class KakaoOAuthClientTest {
         server.verify();
     }
 
+    @DisplayName("카카오 사용자 ID와 닉네임을 조회한다")
     @Test
     void getsKakaoUserIdAndNickname() {
         server.expect(requestTo(
@@ -163,6 +166,7 @@ class KakaoOAuthClientTest {
         server.verify();
     }
 
+    @DisplayName("관리자 키로 카카오 연결을 해제한다")
     @Test
     void unlinksKakaoUserWithAdminKey() {
         MultiValueMap<String, String> expectedForm =
@@ -192,6 +196,7 @@ class KakaoOAuthClientTest {
         server.verify();
     }
 
+    @DisplayName("이미 연결 해제된 카카오 사용자는 성공으로 처리한다")
     @Test
     void treatsAlreadyUnlinkedKakaoUserAsSuccess() {
         server.expect(requestTo(

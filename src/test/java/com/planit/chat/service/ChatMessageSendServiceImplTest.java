@@ -1,6 +1,7 @@
 package com.planit.chat.service;
 
 import com.planit.chat.dto.ChatMessageSendRequest;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 
@@ -13,6 +14,7 @@ import static org.mockito.Mockito.when;
 
 class ChatMessageSendServiceImplTest {
 
+    @DisplayName("동시 저장 충돌이 발생하면 기존 메시지를 다시 조회한다")
     @Test
     void reloadsExistingMessageAfterConcurrentUniqueConflict() {
         ChatMessageTransactionService transactionService = mock(

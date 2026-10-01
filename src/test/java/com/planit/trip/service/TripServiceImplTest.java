@@ -28,6 +28,7 @@ import com.planit.trip.dto.TripLeaveResponse;
 import com.planit.trip.dto.TripListResponse;
 import com.planit.trip.pagination.TripListCursorCodec;
 import com.planit.trip.pagination.TripListCursorCodec.Cursor;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -126,6 +127,7 @@ class TripServiceImplTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
     }
 
+    @DisplayName("여행과 방장 멤버십, 초대 정보를 함께 생성한다")
     @Test
     void createsTripHostMembershipAndInvitation() {
         LocalDate today = LocalDate.now(SEOUL_ZONE);
@@ -166,6 +168,45 @@ class TripServiceImplTest {
                 .isEqualTo(INVITATION_TOKEN);
     }
 
+    @DisplayName("여행 이름의 앞뒤 공백을 제거해 저장한다")
+    @Test
+    void trimsTripNameBeforeSaving() {
+        LocalDate startDate = LocalDate.now(SEOUL_ZONE).plusDays(5);
+        TripCreateRequest request = new TripCreateRequest(
+                "  제주 여행  ",
+                1L,
+                startDate,
+                4,
+                null
+        );
+
+        tripService.createTrip(USER_PUBLIC_ID.toString(), request);
+
+        ArgumentCaptor<Trip> captor = ArgumentCaptor.forClass(Trip.class);
+        verify(tripRepository).save(captor.capture());
+        assertThat(captor.getValue().getName()).isEqualTo("제주 여행");
+    }
+
+    @DisplayName("정원을 생략하면 기본 정원 4명으로 저장한다")
+    @Test
+    void usesDefaultCapacityWhenCapacityIsMissing() {
+        LocalDate startDate = LocalDate.now(SEOUL_ZONE).plusDays(5);
+        TripCreateRequest request = new TripCreateRequest(
+                "제주 여행",
+                1L,
+                startDate,
+                null,
+                null
+        );
+
+        tripService.createTrip(USER_PUBLIC_ID.toString(), request);
+
+        ArgumentCaptor<Trip> captor = ArgumentCaptor.forClass(Trip.class);
+        verify(tripRepository).save(captor.capture());
+        assertThat(captor.getValue().getCapacity()).isEqualTo((byte) 4);
+    }
+
+    @DisplayName("초대 링크의 여행 미리보기를 조회한다")
     @Test
     void retrievesInvitationPreview() {
         Trip trip = trip(1001L);
@@ -222,6 +263,7 @@ class TripServiceImplTest {
                 .isEqualTo("1002");
     }
 
+    @DisplayName("존재하지 않는 초대 토큰을 거부한다")
     @Test
     void rejectsUnknownInvitation() {
         when(tripInvitationRepository.findByTokenHash(
@@ -239,6 +281,7 @@ class TripServiceImplTest {
         verifyNoInteractions(userRepository);
     }
 
+    @DisplayName("유효한 초대 링크를 확인한 후 사용자 인증을 요구한다")
     @Test
     void requiresAuthenticationAfterValidInvitationCheck() {
         Trip trip = trip(1001L);
@@ -260,6 +303,7 @@ class TripServiceImplTest {
         verifyNoInteractions(userRepository);
     }
 
+    @DisplayName("삭제된 여행의 초대 미리보기를 거부한다")
     @Test
     void rejectsPreviewForDeletedTrip() {
         Trip trip = trip(1001L);
@@ -284,6 +328,7 @@ class TripServiceImplTest {
         );
     }
 
+    @DisplayName("종료된 여행의 초대 링크를 거부한다")
     @Test
     void rejectsExpiredInvitation() {
         Trip trip = trip(
@@ -306,6 +351,7 @@ class TripServiceImplTest {
         );
     }
 
+    @DisplayName("설문 마감 후에도 여행 시작 전이면 초대 미리보기를 허용한다")
     @Test
     void allowsInvitationPreviewAfterSurveyDeadline() {
         Trip trip = trip(1001L);
@@ -331,6 +377,7 @@ class TripServiceImplTest {
         );
     }
 
+    @DisplayName("설문 마감 후에도 여행 시작 전이면 초대받은 여행에 참여한다")
     @Test
     void joinsTripAfterSurveyDeadline() {
         Trip invitedTrip = trip(200L);
@@ -350,6 +397,7 @@ class TripServiceImplTest {
         verify(tripMemberRepository).save(any(TripMember.class));
     }
 
+    @DisplayName("요청한 개수의 여행과 다음 커서를 반환한다")
     @Test
     void returnsRequestedTripsAndNextCursor() {
         LocalDate referenceDate = LocalDate.now(SEOUL_ZONE);
@@ -403,6 +451,7 @@ class TripServiceImplTest {
         ));
     }
 
+    @DisplayName("커서 이후의 여행 목록을 반환한다")
     @Test
     void returnsTripsAfterCursor() {
         LocalDate referenceDate = LocalDate.now(SEOUL_ZONE);
@@ -438,6 +487,7 @@ class TripServiceImplTest {
         assertThat(response.nextCursor()).isNull();
     }
 
+    @DisplayName("각 여행의 진행 상태를 계산해 반환한다")
     @Test
     void returnsProgressStatusForEachTrip() {
         LocalDate today = LocalDate.now(SEOUL_ZONE);
@@ -481,6 +531,7 @@ class TripServiceImplTest {
                 );
     }
 
+    @DisplayName("참여한 여행이 없으면 빈 목록을 반환한다")
     @Test
     void returnsEmptyTripList() {
         when(tripMemberRepository.findActiveTripMemberships(
@@ -500,6 +551,7 @@ class TripServiceImplTest {
         assertThat(response.nextCursor()).isNull();
     }
 
+    @DisplayName("허용 범위를 벗어난 여행 목록 크기를 거부한다")
     @Test
     void rejectsInvalidTripListSize() {
         assertError(
@@ -514,6 +566,7 @@ class TripServiceImplTest {
         verifyNoInteractions(userRepository);
     }
 
+    @DisplayName("초대 토큰으로 여행을 조회한다")
     @Test
     void findsTripUsingInvitationToken() {
         Trip invitedTrip = trip(200L);
@@ -539,6 +592,7 @@ class TripServiceImplTest {
         assertThat(member.getRole()).isEqualTo(TripMemberRole.MEMBER);
     }
 
+    @DisplayName("활성 멤버를 포함한 여행 상세 정보를 반환한다")
     @Test
     void returnsTripDetailWithActiveMembers() {
         Trip trip = trip(200L);
@@ -583,6 +637,7 @@ class TripServiceImplTest {
                 .containsOnly("https://example.com/default-profile.png");
     }
 
+    @DisplayName("탈퇴한 멤버는 여행 상세에서 대체 정보로 표시한다")
     @Test
     void showsWithdrawnUserPlaceholderInTripDetail() {
         Trip trip = trip(200L);
@@ -622,6 +677,7 @@ class TripServiceImplTest {
                 .containsExactly(USER_PUBLIC_ID, null);
     }
 
+    @DisplayName("여행 멤버가 아닌 사용자의 상세 조회를 거부한다")
     @Test
     void rejectsTripDetailForNonMember() {
         Trip trip = trip(200L);
@@ -640,6 +696,7 @@ class TripServiceImplTest {
         );
     }
 
+    @DisplayName("존재하지 않는 여행의 상세 조회를 거부한다")
     @Test
     void rejectsMissingTripDetail() {
         when(tripRepository.findById(200L)).thenReturn(Optional.empty());
@@ -653,6 +710,7 @@ class TripServiceImplTest {
         );
     }
 
+    @DisplayName("삭제된 여행의 상세 조회를 거부한다")
     @Test
     void rejectsDeletedTripDetail() {
         Trip trip = trip(200L);
@@ -672,6 +730,7 @@ class TripServiceImplTest {
         );
     }
 
+    @DisplayName("탈퇴한 여행 멤버의 상세 조회를 거부한다")
     @Test
     void rejectsInactiveTripMember() {
         Trip trip = trip(200L);
@@ -696,6 +755,7 @@ class TripServiceImplTest {
         );
     }
 
+    @DisplayName("활성 멤버가 세 명 이상 남으면 일반 멤버만 여행에서 탈퇴시킨다")
     @Test
     void leavesTripAsMemberWhenThreeOrMoreActiveMembersRemain() {
         Trip trip = trip(200L);
@@ -723,6 +783,7 @@ class TripServiceImplTest {
         verifyNoInteractions(schedulePersistenceService);
     }
 
+    @DisplayName("혼자 남은 방장이 나가면 여행을 삭제한다")
     @Test
     void deletesTripWhenHostLeavesAlone() {
         Trip trip = trip(200L);
@@ -748,6 +809,7 @@ class TripServiceImplTest {
         verify(schedulePersistenceService).deleteAllForTrip(200L);
     }
 
+    @DisplayName("탈퇴 후 한 명만 남으면 여행을 삭제하고 남은 멤버십도 종료한다")
     @Test
     void deletesTripAndEndsRemainingMembershipWhenLeavingDropsToOneMember() {
         // 방장이 나가서 1명만 남으면, 한 번이라도 2명 이상이었던 방이므로 방 전체를 삭제하고
@@ -779,6 +841,7 @@ class TripServiceImplTest {
         verify(schedulePersistenceService).deleteAllForTrip(200L);
     }
 
+    @DisplayName("일반 멤버 탈퇴 후 한 명만 남으면 여행을 삭제한다")
     @Test
     void deletesTripWhenNonHostMemberLeavesDropsToOneMember() {
         // 방장이 아닌 멤버가 나가도, 남는 인원이 1명뿐이면 방 전체가 삭제된다.
@@ -805,6 +868,7 @@ class TripServiceImplTest {
         verify(schedulePersistenceService).deleteAllForTrip(200L);
     }
 
+    @DisplayName("방장이 나가면 가장 먼저 참여한 멤버에게 방장을 위임한다")
     @Test
     void transfersHostRoleToEarliestJoinedMember() {
         Trip trip = trip(200L);
@@ -844,6 +908,7 @@ class TripServiceImplTest {
         verifyNoInteractions(schedulePersistenceService);
     }
 
+    @DisplayName("이미 시작한 여행에서 나가기를 거부한다")
     @Test
     void rejectsLeavingTripThatAlreadyStarted() {
         Trip trip = trip(200L, LocalDate.now(SEOUL_ZONE));
@@ -863,6 +928,7 @@ class TripServiceImplTest {
         verify(tripMemberRepository, never()).findActiveMembersByTrip(trip);
     }
 
+    @DisplayName("사용자 탈퇴 시 여러 여행의 방장을 위임하고 1인 여행은 삭제한다")
     @Test
     void withdrawalTransfersHostAndDeletesSoloTripAcrossMultipleTrips() {
         // 탈퇴하는 사용자가 방장으로 있는 여행방 두 곳: 하나는 다른 멤버가 2명 있어 위임되고,
@@ -908,6 +974,7 @@ class TripServiceImplTest {
         verify(schedulePersistenceService).deleteAllForTrip(300L);
     }
 
+    @DisplayName("종료된 여행의 유일한 멤버가 탈퇴해도 완료된 여행 기록을 유지한다")
     @Test
     void withdrawalKeepsMembershipAliveWhenSoleActiveTripAlreadyEnded() {
         // 이미 끝난 여행에 혼자 남아있던 방장이 탈퇴해도, 완료된 여행 기록은 삭제하지 않고
@@ -936,6 +1003,7 @@ class TripServiceImplTest {
         verifyNoInteractions(schedulePersistenceService);
     }
 
+    @DisplayName("진행 중인 여행의 방장이 탈퇴하면 여행을 삭제하지 않고 방장을 위임한다")
     @Test
     void withdrawalTransfersHostWithoutDeletingTripInProgress() {
         // 진행 중인(오늘 시작하는) 여행에서 방장이 탈퇴하면, 남은 인원이 1명이어도 방을
@@ -971,6 +1039,7 @@ class TripServiceImplTest {
         verifyNoInteractions(schedulePersistenceService);
     }
 
+    @DisplayName("종료된 여행에서 일반 멤버가 탈퇴해도 다른 멤버의 여행 기록을 유지한다")
     @Test
     void withdrawalPreservesOtherMembersHistoryWhenNonHostLeavesEndedTrip() {
         // 이미 끝난 여행에서 방장이 아닌 멤버가 탈퇴해도, 방장의 완료된 여행 기록은
@@ -1001,6 +1070,7 @@ class TripServiceImplTest {
         verifyNoInteractions(schedulePersistenceService);
     }
 
+    @DisplayName("방장이 초대 링크를 다시 요청하면 동일한 토큰을 반환한다")
     @Test
     void returnsSameInvitationTokenForHost() {
         Trip trip = trip(100L);
@@ -1035,6 +1105,7 @@ class TripServiceImplTest {
                 .save(any(TripInvitation.class));
     }
 
+    @DisplayName("초대 토큰이 없는 기존 여행에 새 초대 토큰을 발급하고 저장한다")
     @Test
     void savesInvitationHashForTripCreatedBeforeFixedToken() {
         Trip trip = trip(100L);
@@ -1063,6 +1134,7 @@ class TripServiceImplTest {
                 .isEqualTo(INVITATION_TOKEN_HASH);
     }
 
+    @DisplayName("일반 멤버의 초대 링크 요청을 거부한다")
     @Test
     void rejectsInvitationRequestFromMember() {
         Trip trip = trip(100L);
@@ -1086,6 +1158,7 @@ class TripServiceImplTest {
                 .save(any(TripInvitation.class));
     }
 
+    @DisplayName("여행 멤버가 아닌 사용자의 나가기를 거부한다")
     @Test
     void rejectsLeavingTripForNonMember() {
         Trip trip = trip(200L);
@@ -1105,6 +1178,7 @@ class TripServiceImplTest {
         );
     }
 
+    @DisplayName("존재하지 않는 초대 토큰을 거부한다")
     @Test
     void rejectsMissingInvitationToken() {
         when(tripInvitationRepository.findByTokenHash(
@@ -1120,6 +1194,7 @@ class TripServiceImplTest {
         );
     }
 
+    @DisplayName("삭제된 여행의 초대 토큰을 거부한다")
     @Test
     void rejectsInvitationForDeletedTrip() {
         Trip deletedTrip = trip(200L);
@@ -1139,6 +1214,7 @@ class TripServiceImplTest {
         );
     }
 
+    @DisplayName("종료된 여행의 초대 토큰을 거부한다")
     @Test
     void rejectsInvitationForPastTrip() {
         Trip pastTrip = trip(200L);
@@ -1156,6 +1232,7 @@ class TripServiceImplTest {
         );
     }
 
+    @DisplayName("이미 참여 중인 사용자의 중복 참여를 거부한다")
     @Test
     void rejectsUserAlreadyParticipatingInTrip() {
         Trip invitedTrip = trip(200L);
@@ -1173,6 +1250,7 @@ class TripServiceImplTest {
         );
     }
 
+    @DisplayName("정원이 가득 찬 여행 참여를 거부한다")
     @Test
     void rejectsTripAtCapacity() {
         Trip invitedTrip = trip(200L);
@@ -1189,6 +1267,7 @@ class TripServiceImplTest {
         );
     }
 
+    @DisplayName("기존 여행과 일정이 겹치면 참여를 거부한다")
     @Test
     void rejectsJoiningTripWithOverlappingDate() {
         Trip invitedTrip = trip(200L);
@@ -1208,6 +1287,7 @@ class TripServiceImplTest {
         );
     }
 
+    @DisplayName("설문 마감일을 생략하면 여행 전날로 설정한다")
     @Test
     void usesDayBeforeTripAsDefaultSurveyDeadline() {
         LocalDate startDate = LocalDate.now(SEOUL_ZONE).plusDays(5);
@@ -1225,21 +1305,23 @@ class TripServiceImplTest {
         );
     }
 
+    @DisplayName("오늘 날짜의 여행 생성을 거부한다")
     @Test
-    void fixesTodayTripSurveyDeadlineAtNoon() {
+    void rejectsTodayTripDate() {
         LocalDate today = LocalDate.now(SEOUL_ZONE);
 
-        tripService.createTrip(
-                USER_PUBLIC_ID.toString(),
-                request(today, null)
+        assertError(
+                () -> tripService.createTrip(
+                        USER_PUBLIC_ID.toString(),
+                        request(today, null)
+                ),
+                ErrorCode.INVALID_REQUEST
         );
 
-        ArgumentCaptor<Trip> captor = ArgumentCaptor.forClass(Trip.class);
-        verify(tripRepository).save(captor.capture());
-        assertThat(captor.getValue().getSurveyDeadlineAt())
-                .isEqualTo(today.atTime(12, 0));
+        verify(tripRepository, never()).save(any());
     }
 
+    @DisplayName("과거 날짜의 여행 생성을 거부한다")
     @Test
     void rejectsPastTripDate() {
         LocalDate yesterday = LocalDate.now(SEOUL_ZONE).minusDays(1);
@@ -1255,6 +1337,7 @@ class TripServiceImplTest {
         verify(tripRepository, never()).save(any());
     }
 
+    @DisplayName("오늘보다 이전인 설문 마감일을 거부한다")
     @Test
     void rejectsSurveyDeadlineBeforeToday() {
         LocalDate today = LocalDate.now(SEOUL_ZONE);
@@ -1268,6 +1351,7 @@ class TripServiceImplTest {
         );
     }
 
+    @DisplayName("여행 시작일과 같은 설문 마감일을 거부한다")
     @Test
     void rejectsSurveyDeadlineOnTripDate() {
         LocalDate startDate = LocalDate.now(SEOUL_ZONE).plusDays(5);
@@ -1281,6 +1365,7 @@ class TripServiceImplTest {
         );
     }
 
+    @DisplayName("비활성 사용자의 여행 생성을 거부한다")
     @Test
     void rejectsInactiveUser() {
         when(userRepository.findByPublicIdAndDeletedAtIsNull(USER_PUBLIC_ID))
@@ -1295,6 +1380,7 @@ class TripServiceImplTest {
         );
     }
 
+    @DisplayName("존재하지 않는 지역으로 여행을 생성할 수 없다")
     @Test
     void rejectsMissingRegion() {
         when(regionRepository.findById(1L)).thenReturn(Optional.empty());
@@ -1308,6 +1394,7 @@ class TripServiceImplTest {
         );
     }
 
+    @DisplayName("참여 중인 여행과 일정이 겹치면 여행 생성을 거부한다")
     @Test
     void rejectsDateOverlappingActiveTrip() {
         LocalDate startDate = LocalDate.now(SEOUL_ZONE).plusDays(5);

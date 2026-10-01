@@ -68,3 +68,8 @@ management:
   health:
     db:
       enabled: true
+
+sentry:
+  # SENTRY_DSN이 없으면 Sentry가 꺼진다. 운영 서버에만 설정한다.
+  dsn: ${SENTRY_DSN:}
+  environment: ${SENTRY_ENVIRONMENT:production}

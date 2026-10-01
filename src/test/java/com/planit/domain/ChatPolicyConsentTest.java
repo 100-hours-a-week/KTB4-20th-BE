@@ -1,5 +1,6 @@
 package com.planit.domain;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
@@ -8,6 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class ChatPolicyConsentTest {
 
+    @DisplayName("사용자와 동의한 채팅 정책 버전을 연결한다")
     @Test
     void associatesUserWithPolicyVersion() {
         User user = new User(null, UUID.randomUUID(), "플랜잇사용자");

@@ -2,6 +2,7 @@ package com.planit.global.error;
 
 import com.planit.global.response.ApiResponse;
 import com.planit.global.response.ValidationErrorReason;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -13,6 +14,7 @@ class GlobalExceptionHandlerTest {
 
     private final GlobalExceptionHandler handler = new GlobalExceptionHandler();
 
+    @DisplayName("비즈니스 예외를 해당 오류 코드의 응답으로 변환한다")
     @Test
     void convertsBusinessExceptionUsingItsErrorCode() {
         ResponseEntity<ApiResponse<Void>> response = handler.handleBusinessException(
@@ -26,6 +28,7 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getBody().data()).isNull();
     }
 
+    @DisplayName("필수 요청 파라미터 누락을 필수값 오류로 변환한다")
     @Test
     void convertsMissingRequestParameterToRequiredFieldError() {
         ResponseEntity<ApiResponse<Void>> response = handler.handleMissingRequestParameter(
@@ -41,6 +44,7 @@ class GlobalExceptionHandlerTest {
                 .isEqualTo(ValidationErrorReason.REQUIRED);
     }
 
+    @DisplayName("예상하지 못한 예외의 상세 내용을 숨기고 서버 오류로 응답한다")
     @Test
     void hidesUnexpectedExceptionBehindInternalServerError() {
         ResponseEntity<ApiResponse<Void>> response = handler.handleUnexpectedException(

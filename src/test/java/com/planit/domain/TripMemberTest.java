@@ -1,5 +1,6 @@
 package com.planit.domain;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
@@ -10,6 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class TripMemberTest {
 
+    @DisplayName("방장 권한의 여행 멤버십을 생성한다")
     @Test
     void createsHostMembership() {
         Trip trip = createTrip();
@@ -28,6 +30,7 @@ class TripMemberTest {
         assertThat(member.getLeftAt()).isNull();
     }
 
+    @DisplayName("일반 권한의 여행 멤버십을 생성한다")
     @Test
     void createsGeneralMembership() {
         Trip trip = createTrip();
@@ -43,6 +46,7 @@ class TripMemberTest {
         assertThat(member.getLeftAt()).isNull();
     }
 
+    @DisplayName("여행 멤버십의 탈퇴 시각을 기록한다")
     @Test
     void leavesTripMembership() {
         TripMember member = TripMember.createHost(
@@ -64,6 +68,7 @@ class TripMemberTest {
         assertThat(member.getLeftAt()).isEqualTo(leftAt);
     }
 
+    @DisplayName("일반 멤버를 방장으로 변경한다")
     @Test
     void promotesMemberToHost() {
         TripMember member = TripMember.createMember(

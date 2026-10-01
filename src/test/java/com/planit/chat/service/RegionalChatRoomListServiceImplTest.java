@@ -6,6 +6,7 @@ import com.planit.domain.User;
 import com.planit.repository.RegionalChatRoomRepository;
 import com.planit.repository.RegionalChatRoomRepository.RegionalChatRoomListProjection;
 import com.planit.repository.UserRepository;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -44,6 +45,7 @@ class RegionalChatRoomListServiceImplTest {
                 .thenReturn(Optional.of(user));
     }
 
+    @DisplayName("여행 관련 여부와 참여 여부, 접속자 수에 따라 채팅방을 정렬한다")
     @Test
     void sortsRoomsByApprovedContractOrder() {
         List<RegionalChatRoomListProjection> rooms = List.of(
@@ -70,6 +72,7 @@ class RegionalChatRoomListServiceImplTest {
                 .containsExactly("5", "1", "2", "3", "4", "6", "7");
     }
 
+    @DisplayName("모든 지역 채팅방을 한 번에 반환한다")
     @Test
     void returnsEveryRoomInOneResponse() {
         List<RegionalChatRoomListProjection> rooms = List.of(

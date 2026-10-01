@@ -10,6 +10,7 @@ import com.planit.domain.SurveyExclusionCategory;
 import com.planit.domain.Trip;
 import com.planit.domain.TripMember;
 import com.planit.domain.User;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -56,6 +57,7 @@ class SurveySummaryRepositoryTest {
     @Autowired
     private SurveyExcludedCategoryRepository excludedCategoryRepository;
 
+    @DisplayName("설문 요약에는 제출 완료된 설문의 답변과 제외 카테고리만 조회한다")
     @Test
     void loadsSubmittedSurveyDataUsedBySummary() {
         Trip trip = createTrip();

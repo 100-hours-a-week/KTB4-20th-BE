@@ -19,6 +19,7 @@ import com.planit.repository.ImageFileRepository;
 import com.planit.repository.RegionalChatRoomMemberRepository;
 import com.planit.repository.RegionalChatRoomRepository;
 import com.planit.repository.UserRepository;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -160,6 +161,7 @@ class RegionalChatMessagingIntegrationTest {
         }
     }
 
+    @DisplayName("STOMP로 텍스트 메시지를 전송하고 저장한 뒤 수신한다")
     @Test
     void sendsPersistsAndReceivesTextMessageOverStomp() throws Exception {
         session = connect(accessToken(user));
@@ -208,6 +210,7 @@ class RegionalChatMessagingIntegrationTest {
         )).isPresent();
     }
 
+    @DisplayName("유효하지 않은 액세스 토큰의 STOMP 연결을 거부한다")
     @Test
     void rejectsConnectWithInvalidAccessToken() throws Exception {
         CompletableFuture<JsonNode> errorFrame = new CompletableFuture<>();
@@ -227,6 +230,7 @@ class RegionalChatMessagingIntegrationTest {
         assertThat(error.get("code").asText()).isEqualTo("INVALID_ACCESS_TOKEN");
     }
 
+    @DisplayName("채팅방 비회원의 구독을 거부한다")
     @Test
     void rejectsRoomSubscriptionForNonMember() throws Exception {
         membership.leave();

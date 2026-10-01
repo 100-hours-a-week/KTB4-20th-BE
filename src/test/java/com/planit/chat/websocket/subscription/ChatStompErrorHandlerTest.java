@@ -3,6 +3,7 @@ package com.planit.chat.websocket.subscription;
 import com.planit.chat.error.ChatAuthenticationException;
 import com.planit.chat.error.ChatErrorCode;
 import com.planit.global.error.ErrorCode;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageDeliveryException;
@@ -20,6 +21,7 @@ class ChatStompErrorHandlerTest {
     private final ChatStompErrorHandler errorHandler =
             new ChatStompErrorHandler(objectMapper);
 
+    @DisplayName("구독 실패를 ERROR 프레임으로 변환하고 receipt를 유지한다")
     @Test
     void convertsSubscriptionFailureToErrorFrameAndPreservesReceipt() throws Exception {
         StompHeaderAccessor clientAccessor = StompHeaderAccessor.create(StompCommand.SUBSCRIBE);
@@ -50,6 +52,7 @@ class ChatStompErrorHandlerTest {
                 .isEqualTo(ErrorCode.REGIONAL_CHAT_MEMBER_REQUIRED.getMessage());
     }
 
+    @DisplayName("인증 실패를 ERROR 프레임으로 변환한다")
     @Test
     void convertsAuthenticationFailureToErrorFrame() throws Exception {
         StompHeaderAccessor clientAccessor = StompHeaderAccessor.create(

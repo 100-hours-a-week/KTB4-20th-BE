@@ -11,6 +11,7 @@ import com.planit.repository.ChatMessageRepository;
 import com.planit.repository.ChatMessageRepository.ChatMessageHistoryProjection;
 import com.planit.repository.RegionalChatRoomMemberRepository;
 import com.planit.repository.RegionalChatRoomRepository;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Pageable;
@@ -59,6 +60,9 @@ class ChatMessageHistoryServiceImplTest {
         when(memberRepository.existsActiveMembership(USER_UUID, ROOM_ID)).thenReturn(true);
     }
 
+    @DisplayName(
+            "최신 메시지 20개를 오래된 순으로 반환하고 이전 내역 조회 커서를 제공한다"
+    )
     @Test
     void returnsLatestMessagesInAscendingDisplayOrderWithOlderCursor() {
         List<ChatMessageHistoryProjection> descending = new ArrayList<>();
@@ -81,6 +85,7 @@ class ChatMessageHistoryServiceImplTest {
         assertThat(response.page().nextAfterMessageId()).isNull();
     }
 
+    @DisplayName("기준 메시지 이후의 새 메시지 20개와 다음 조회 기준을 반환한다")
     @Test
     void returnsNewerMessagesAndNextAfterMessageId() {
         ChatMessage baseMessage = mock(ChatMessage.class);
@@ -114,6 +119,7 @@ class ChatMessageHistoryServiceImplTest {
         assertThat(response.page().hasNext()).isTrue();
     }
 
+    @DisplayName("커서와 기준 메시지 ID를 함께 사용하면 거부한다")
     @Test
     void rejectsCursorAndAfterMessageIdTogether() {
         assertThatThrownBy(() -> service.getMessages(
