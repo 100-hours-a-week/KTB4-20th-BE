@@ -285,9 +285,9 @@ class TripControllerTest {
         verify(tripService, never()).joinTrip(any(), any());
     }
 
-    @DisplayName("정원을 생략하면 기본값을 적용하고 설문 마감일 생략을 허용한다")
+    @DisplayName("정원과 설문 마감일을 생략한 요청을 서비스에 전달한다")
     @Test
-    void appliesDefaultCapacityAndAcceptsMissingDeadline() throws Exception {
+    void passesMissingCapacityAndDeadlineToService() throws Exception {
         when(tripService.createTrip(
                 org.mockito.ArgumentMatchers.eq(USER_PUBLIC_ID),
                 any(TripCreateRequest.class)
@@ -317,7 +317,7 @@ class TripControllerTest {
                 org.mockito.ArgumentMatchers.eq(USER_PUBLIC_ID),
                 captor.capture()
         );
-        assertThat(captor.getValue().capacity()).isEqualTo(4);
+        assertThat(captor.getValue().capacity()).isNull();
         assertThat(captor.getValue().surveyDeadlineDate()).isNull();
     }
 

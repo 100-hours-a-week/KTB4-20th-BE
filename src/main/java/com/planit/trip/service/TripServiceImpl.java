@@ -56,6 +56,7 @@ public class TripServiceImpl implements TripService {
     private final SchedulePersistenceService schedulePersistenceService;
 
     private static final int MAX_TRIP_LIST_SIZE = 10;
+    private static final int DEFAULT_TRIP_CAPACITY = 4;
     private static final String WITHDRAWN_USER_NAME = "탈퇴한 사용자";
 
     @Override
@@ -77,12 +78,16 @@ public class TripServiceImpl implements TripService {
                 request.surveyDeadlineDate(),
                 today
         );
+        String tripName = request.name().trim();
+        int capacity = request.capacity() == null
+                ? DEFAULT_TRIP_CAPACITY
+                : request.capacity();
 
         Trip trip = new Trip(
                 region,
-                request.name(),
+                tripName,
                 request.startDate(),
-                request.capacity().byteValue(),
+                (byte) capacity,
                 surveyDeadlineAt
         );
 

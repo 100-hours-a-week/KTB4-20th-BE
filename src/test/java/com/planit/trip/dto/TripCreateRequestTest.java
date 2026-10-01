@@ -37,20 +37,6 @@ class TripCreateRequestTest {
         assertThat(validator.validate(request)).isEmpty();
     }
 
-    @DisplayName("정원을 생략하면 기본 정원을 적용한다")
-    @Test
-    void appliesDefaultCapacity() {
-        TripCreateRequest request = new TripCreateRequest(
-                "부산 여행",
-                1L,
-                START_DATE,
-                null,
-                SURVEY_DEADLINE_DATE
-        );
-
-        assertThat(request.capacity()).isEqualTo(4);
-    }
-
     @DisplayName("설문 마감일이 없는 요청을 허용한다")
     @Test
     void acceptsMissingSurveyDeadlineDate() {
@@ -63,20 +49,6 @@ class TripCreateRequestTest {
         );
 
         assertThat(validator.validate(request)).isEmpty();
-    }
-
-    @DisplayName("여행 이름의 앞뒤 공백을 제거한다")
-    @Test
-    void trimsName() {
-        TripCreateRequest request = new TripCreateRequest(
-                "  부산 여행  ",
-                1L,
-                START_DATE,
-                4,
-                SURVEY_DEADLINE_DATE
-        );
-
-        assertThat(request.name()).isEqualTo("부산 여행");
     }
 
     @DisplayName("빈 여행 이름을 거부한다")
