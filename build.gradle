@@ -42,7 +42,7 @@ dependencies {
 }
 
 tasks.named('bootJar') {
-	archiveFileName = 'planit-backend.jar'
+	archiveFileName = 'planit-backend-0.0.1-SNAPSHOT.jar'
 }
 
 tasks.named('test') {
