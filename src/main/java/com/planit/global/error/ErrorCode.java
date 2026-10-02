@@ -37,7 +37,7 @@ public enum ErrorCode {
     SURVEY_SUBMISSION_CLOSED(HttpStatus.CONFLICT, "설문 제출 기간이 종료되었습니다."),
     SURVEY_RESUBMISSION_CLOSED(HttpStatus.CONFLICT, "설문 수정 기간이 종료되었습니다."),
     EXCLUSION_CATEGORY_NOT_FOUND(HttpStatus.NOT_FOUND, "설문 제외 항목을 찾을 수 없습니다."),
-    INVALID_AI_PLACE_RESULT(HttpStatus.BAD_REQUEST, "AI 추천 장소 결과가 유효하지 않습니다."),
+    INVALID_AI_PLACE_RESULT(HttpStatus.BAD_GATEWAY, "AI 추천 장소 결과가 유효하지 않습니다."),
     SCHEDULE_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 생성된 여행 일정이 있습니다."),
     ACTIVE_SCHEDULE_NOT_FOUND(HttpStatus.NOT_FOUND, "아직 확정된 일정이 없습니다."),
     SCHEDULE_ROUTE_NOT_FOUND(HttpStatus.CONFLICT, "조건을 만족하는 여행 동선을 만들 수 없습니다."),

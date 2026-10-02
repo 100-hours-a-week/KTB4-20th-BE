@@ -8,6 +8,7 @@ import com.planit.auth.service.AuthCookieService;
 import com.planit.auth.service.AuthService;
 import com.planit.global.error.BusinessException;
 import com.planit.global.response.ApiResponse;
+import io.sentry.Sentry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.CacheControl;
@@ -94,13 +95,15 @@ public class AuthController {
                     savedReturnTo
             );
         } catch (BusinessException exception) {
+            if (exception.getCause() != null) {
+                Sentry.captureException(exception);
+            }
             return oauthFailureResponse(
                     exception.getErrorCode().getCode()
             );
         } catch (DataAccessException exception) {
-            return oauthFailureResponse(
-                    "OAUTH_LOGIN_FAILED"
-            );
+            Sentry.captureException(exception);
+            return oauthFailureResponse("OAUTH_LOGIN_FAILED");
         }
 
         HttpHeaders headers = new HttpHeaders();
