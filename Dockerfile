@@ -20,4 +20,4 @@ ENV SENTRY_RELEASE=${SENTRY_RELEASE}
 
 EXPOSE 8080
 
-CMD ["java", "-jar", "build/libs/planit-backend-0.0.1-SNAPSHOT.jar"]
+CMD ["java", "-jar", "build/libs/planit-backend.jar"]

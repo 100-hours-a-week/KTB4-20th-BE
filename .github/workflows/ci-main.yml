@@ -35,10 +35,18 @@ jobs:
           DOCKER_BUILDKIT: '1'
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: |
+          set -euo pipefail
+
+          APP_VERSION=$(sed -n "s/^version = '\(.*\)'$/\1/p" build.gradle)
+          if [[ -z "$APP_VERSION" ]]; then
+            echo "::error::build.gradle version is missing."
+            exit 1
+          fi
+
           docker build \
             --platform linux/amd64 \
             --secret id=SENTRY_AUTH_TOKEN,env=SENTRY_AUTH_TOKEN \
-            --build-arg SENTRY_RELEASE=planit-backend@${{ github.sha }} \
+            --build-arg SENTRY_RELEASE="planit-backend@${APP_VERSION}+${GITHUB_SHA::7}" \
             -t planit-backend:ci .
 
       - name: Configure AWS credentials
