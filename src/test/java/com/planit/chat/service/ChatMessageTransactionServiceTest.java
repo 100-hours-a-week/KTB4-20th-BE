@@ -25,6 +25,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -75,7 +76,15 @@ class ChatMessageTransactionServiceTest {
                 messageRepository,
                 textMessageRepository,
                 new ChatTextNormalizer(),
-                new ImageProperties(URI.create("https://example.com/profile.svg"))
+                new ImageProperties(
+                        URI.create("https://example.com/profile.svg"),
+                        "test-bucket",
+                        "ap-northeast-2",
+                        Duration.ofMinutes(5),
+                        5_242_880,
+                        Duration.ofSeconds(3),
+                        Duration.ofSeconds(5)
+                )
         );
         user = new User(mock(ImageFile.class), USER_PUBLIC_ID, "플랜잇사용자");
         room = mock(RegionalChatRoom.class);

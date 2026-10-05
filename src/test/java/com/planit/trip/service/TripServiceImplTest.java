@@ -38,6 +38,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.net.URI;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -97,9 +98,17 @@ class TripServiceImplTest {
                 tripInvitationRepository,
                 tokenHasher,
                 tripListCursorCodec,
-                new ImageProperties(URI.create(
-                        "https://example.com/default-profile.png"
-                )),
+                new ImageProperties(
+                        URI.create(
+                                "https://example.com/default-profile.png"
+                        ),
+                        "test-bucket",
+                        "ap-northeast-2",
+                        Duration.ofMinutes(5),
+                        5_242_880,
+                        Duration.ofSeconds(3),
+                        Duration.ofSeconds(5)
+                ),
                 schedulePersistenceService
         );
 

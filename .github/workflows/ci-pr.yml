@@ -69,6 +69,8 @@ jobs:
           KAKAO_REST_API_KEY: ci-client-id
           KAKAO_CLIENT_SECRET: ci-client-secret
           KAKAO_ADMIN_KEY: ci-admin-key
+          IMAGE_S3_BUCKET: planit-ci-images
+          AWS_REGION: ap-northeast-2
         run: ./gradlew clean build --no-daemon
 
       - name: Build Docker image

@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Pageable;
 
 import java.net.URI;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -52,9 +53,17 @@ class ChatMessageHistoryServiceImplTest {
                 memberRepository,
                 messageRepository,
                 new ChatMessageCursorStore(),
-                new ImageProperties(URI.create(
-                        "http://localhost:8080/images/default-profile.svg"
-                ))
+                new ImageProperties(
+                        URI.create(
+                                "http://localhost:8080/images/default-profile.svg"
+                        ),
+                        "test-bucket",
+                        "ap-northeast-2",
+                        Duration.ofMinutes(5),
+                        5_242_880,
+                        Duration.ofSeconds(3),
+                        Duration.ofSeconds(5)
+                )
         );
         when(roomRepository.existsById(ROOM_ID)).thenReturn(true);
         when(memberRepository.existsActiveMembership(USER_UUID, ROOM_ID)).thenReturn(true);
