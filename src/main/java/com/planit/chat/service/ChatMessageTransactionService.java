@@ -7,12 +7,13 @@ import com.planit.domain.ChatMessage;
 import com.planit.domain.ChatMessageType;
 import com.planit.domain.ChatPolicyStatus;
 import com.planit.domain.ChatPolicyVersion;
+import com.planit.domain.ImageFile;
 import com.planit.domain.RegionalChatRoom;
 import com.planit.domain.TextChatMessage;
 import com.planit.domain.User;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
-import com.planit.image.config.ImageProperties;
+import com.planit.image.storage.ImageStorage;
 import com.planit.repository.ChatMessageRepository;
 import com.planit.repository.ChatPolicyConsentRepository;
 import com.planit.repository.ChatPolicyVersionRepository;
@@ -39,7 +40,7 @@ public class ChatMessageTransactionService {
     private final ChatMessageRepository messageRepository;
     private final TextChatMessageRepository textMessageRepository;
     private final ChatTextNormalizer textNormalizer;
-    private final ImageProperties imageProperties;
+    private final ImageStorage imageStorage;
 
     @Transactional
     public ChatMessageSendResult createOrFind(
@@ -173,10 +174,17 @@ public class ChatMessageTransactionService {
                 new ChatSenderResponse(
                         sender.getPublicId().toString(),
                         sender.getUsername(),
-                        imageProperties.defaultProfileUrl().toString()
+                        profileImageUrl(sender)
                 ),
                 message.getCreatedAt().toInstant(ZoneOffset.UTC)
         );
+    }
+
+    private String profileImageUrl(User user) {
+        ImageFile imageFile = user.getImageFile();
+        return imageFile == null
+                ? null
+                : imageStorage.createReadUrl(imageFile.getImageKey());
     }
 
     private User findUser(UUID publicId) {

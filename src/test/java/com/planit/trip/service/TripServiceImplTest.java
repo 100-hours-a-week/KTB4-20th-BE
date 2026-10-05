@@ -2,6 +2,7 @@ package com.planit.trip.service;
 
 import com.planit.auth.config.AuthProperties;
 import com.planit.auth.token.TokenHasher;
+import com.planit.domain.ImageFile;
 import com.planit.domain.Region;
 import com.planit.domain.Trip;
 import com.planit.domain.TripInvitation;
@@ -11,7 +12,7 @@ import com.planit.domain.TripProgressStatus;
 import com.planit.domain.User;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
-import com.planit.image.config.ImageProperties;
+import com.planit.image.storage.ImageStorage;
 import com.planit.repository.RegionRepository;
 import com.planit.repository.TripInvitationRepository;
 import com.planit.repository.TripMemberRepository;
@@ -37,8 +38,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.net.URI;
-import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -70,6 +69,7 @@ class TripServiceImplTest {
     private TripInvitationRepository tripInvitationRepository;
     private TokenHasher tokenHasher;
     private TripListCursorCodec tripListCursorCodec;
+    private ImageStorage imageStorage;
     private SchedulePersistenceService schedulePersistenceService;
     private TripServiceImpl tripService;
     private User user;
@@ -88,6 +88,7 @@ class TripServiceImplTest {
         tripInvitationRepository = mock(TripInvitationRepository.class);
         tokenHasher = mock(TokenHasher.class);
         tripListCursorCodec = new TripListCursorCodec();
+        imageStorage = mock(ImageStorage.class);
         schedulePersistenceService = mock(SchedulePersistenceService.class);
         tripService = new TripServiceImpl(
                 authProperties,
@@ -98,17 +99,7 @@ class TripServiceImplTest {
                 tripInvitationRepository,
                 tokenHasher,
                 tripListCursorCodec,
-                new ImageProperties(
-                        URI.create(
-                                "https://example.com/default-profile.png"
-                        ),
-                        "test-bucket",
-                        "ap-northeast-2",
-                        Duration.ofMinutes(5),
-                        5_242_880,
-                        Duration.ofSeconds(3),
-                        Duration.ofSeconds(5)
-                ),
+                imageStorage,
                 schedulePersistenceService
         );
 
@@ -421,7 +412,14 @@ class TripServiceImplTest {
         TripMember extraMembership =
                 TripMember.createMember(extraTrip, user);
 
+        ImageFile profileImage = mock(ImageFile.class);
         when(user.getUsername()).thenReturn("사용자A");
+        when(user.getImageFile()).thenReturn(profileImage);
+        when(profileImage.getImageKey())
+                .thenReturn("profiles/user/profile.jpg");
+        when(imageStorage.createReadUrl(
+                "profiles/user/profile.jpg"
+        )).thenReturn("https://example.com/presigned-profile");
         when(tripMemberRepository.findActiveTripMemberships(
                 org.mockito.ArgumentMatchers.eq(user),
                 org.mockito.ArgumentMatchers.eq(referenceDate),
@@ -448,7 +446,7 @@ class TripServiceImplTest {
                 .isEqualTo("사용자A");
         assertThat(response.trips().getFirst().members().getFirst()
                 .profileImageUrl())
-                .isEqualTo("https://example.com/default-profile.png");
+                .isEqualTo("https://example.com/presigned-profile");
         assertThat(response.hasNext()).isTrue();
 
         Cursor nextCursor = tripListCursorCodec.decode(
@@ -643,7 +641,7 @@ class TripServiceImplTest {
                 .containsExactly("사용자A", "사용자B");
         assertThat(response.members())
                 .extracting(TripDetailResponse.Member::profileImageUrl)
-                .containsOnly("https://example.com/default-profile.png");
+                .allMatch(profileImageUrl -> profileImageUrl == null);
     }
 
     @DisplayName("탈퇴한 멤버는 여행 상세에서 대체 정보로 표시한다")
