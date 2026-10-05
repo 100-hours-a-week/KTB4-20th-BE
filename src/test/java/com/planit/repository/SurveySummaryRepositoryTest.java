@@ -1,6 +1,5 @@
 package com.planit.repository;
 
-import com.planit.domain.ImageFile;
 import com.planit.domain.PreferenceQuestion;
 import com.planit.domain.Region;
 import com.planit.domain.Survey;
@@ -26,9 +25,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest
 @Transactional
 class SurveySummaryRepositoryTest {
-
-    @Autowired
-    private ImageFileRepository imageFileRepository;
 
     @Autowired
     private UserRepository userRepository;
@@ -120,11 +116,8 @@ class SurveySummaryRepositoryTest {
     }
 
     private User createUser(String username) {
-        ImageFile imageFile = imageFileRepository.findAll().stream()
-                .findFirst()
-                .orElseThrow();
         return userRepository.save(new User(
-                imageFile,
+                null,
                 UUID.randomUUID(),
                 username
         ));

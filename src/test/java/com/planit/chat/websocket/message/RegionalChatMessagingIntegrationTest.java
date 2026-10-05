@@ -8,14 +8,12 @@ import com.planit.chat.dto.ChatMessageSendRequest;
 import com.planit.domain.ChatPolicyStatus;
 import com.planit.domain.ChatPolicyVersion;
 import com.planit.domain.ChatPolicyConsent;
-import com.planit.domain.ImagePurpose;
 import com.planit.domain.RegionalChatRoom;
 import com.planit.domain.RegionalChatRoomMember;
 import com.planit.domain.User;
 import com.planit.repository.ChatMessageRepository;
 import com.planit.repository.ChatPolicyConsentRepository;
 import com.planit.repository.ChatPolicyVersionRepository;
-import com.planit.repository.ImageFileRepository;
 import com.planit.repository.RegionalChatRoomMemberRepository;
 import com.planit.repository.RegionalChatRoomRepository;
 import com.planit.repository.UserRepository;
@@ -67,9 +65,6 @@ class RegionalChatMessagingIntegrationTest {
 
     @Autowired
     private UserRepository userRepository;
-
-    @Autowired
-    private ImageFileRepository imageFileRepository;
 
     @Autowired
     private RegionalChatRoomRepository roomRepository;
@@ -256,9 +251,7 @@ class RegionalChatMessagingIntegrationTest {
 
     private User createUser(String username) {
         return userRepository.save(new User(
-                imageFileRepository.findByImagePurposeAndDeletedAtIsNull(
-                        ImagePurpose.DEFAULT_PROFILE
-                ).orElseThrow(),
+                null,
                 uuidV7Generator.generate(),
                 username
         ));

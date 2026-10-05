@@ -147,6 +147,8 @@ class KakaoOAuthClientTest {
                             "profile_nickname_needs_agreement": false,
                             "profile": {
                               "nickname": "플랜잇사용자",
+                              "profile_image_url": "https://example.com/profile.jpg",
+                              "is_default_image": false,
                               "is_default_nickname": false
                             }
                           }
@@ -163,7 +165,43 @@ class KakaoOAuthClientTest {
                 .isEqualTo("123456789");
         assertThat(user.nickname())
                 .isEqualTo("플랜잇사용자");
+        assertThat(user.customProfileImageUrl())
+                .isEqualTo("https://example.com/profile.jpg");
         server.verify();
+    }
+
+    @DisplayName("카카오 기본 프로필 이미지는 사용자 이미지로 사용하지 않는다")
+    @Test
+    void ignoresKakaoDefaultProfileImage() {
+        KakaoUserResponse user = new KakaoUserResponse(
+                123456789L,
+                new KakaoUserResponse.KakaoAccount(
+                        new KakaoUserResponse.Profile(
+                                "플랜잇사용자",
+                                "https://example.com/default-profile.jpg",
+                                true
+                        )
+                )
+        );
+
+        assertThat(user.customProfileImageUrl()).isNull();
+    }
+
+    @DisplayName("카카오 프로필 이미지 URL이 없으면 사용자 이미지가 없는 것으로 처리한다")
+    @Test
+    void treatsMissingKakaoProfileImageUrlAsNoImage() {
+        KakaoUserResponse user = new KakaoUserResponse(
+                123456789L,
+                new KakaoUserResponse.KakaoAccount(
+                        new KakaoUserResponse.Profile(
+                                "플랜잇사용자",
+                                null,
+                                false
+                        )
+                )
+        );
+
+        assertThat(user.customProfileImageUrl()).isNull();
     }
 
     @DisplayName("관리자 키로 카카오 연결을 해제한다")
