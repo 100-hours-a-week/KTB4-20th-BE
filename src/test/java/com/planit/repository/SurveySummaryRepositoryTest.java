@@ -131,6 +131,7 @@ class SurveySummaryRepositoryTest {
                 region,
                 "설문 테스트",
                 tripDate,
+                tripDate.plusDays(2),
                 (byte) 4,
                 tripDate.minusDays(1).atTime(23, 59, 59)
         ));

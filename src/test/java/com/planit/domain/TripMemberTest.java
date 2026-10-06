@@ -87,6 +87,7 @@ class TripMemberTest {
                 new Region(),
                 "부산 맛집 여행",
                 LocalDate.of(2026, 9, 23),
+                LocalDate.of(2026, 9, 25),
                 (byte) 4,
                 LocalDateTime.of(
                         2026,
