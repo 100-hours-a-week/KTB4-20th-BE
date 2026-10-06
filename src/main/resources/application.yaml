@@ -26,6 +26,12 @@ planit:
     read-timeout: 30s
   image:
     default-profile-url: ${DEFAULT_PROFILE_IMAGE_URL:http://localhost:8080/images/default-profile.svg}
+    bucket: ${IMAGE_S3_BUCKET}
+    region: ${AWS_REGION:ap-northeast-2}
+    read-url-ttl: 5m
+    max-profile-bytes: 5242880
+    download-connect-timeout: 3s
+    download-read-timeout: 5s
   auth:
     frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
     allowed-frontend-origin: ${ALLOWED_FRONTEND_ORIGIN:http://localhost:5173}

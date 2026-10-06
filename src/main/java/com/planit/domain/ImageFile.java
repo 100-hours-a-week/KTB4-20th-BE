@@ -41,4 +41,54 @@ public class ImageFile {
 
     protected ImageFile() {
     }
+
+    private ImageFile(
+            String imageKey,
+            ImagePurpose imagePurpose,
+            String mimeType,
+            Integer sizeBytes
+    ) {
+        this.imageKey = imageKey;
+        this.imagePurpose = imagePurpose;
+        this.mimeType = mimeType;
+        this.sizeBytes = sizeBytes;
+        this.createdAt = LocalDateTime.now();
+    }
+
+    public static ImageFile profile(
+            String imageKey,
+            String mimeType,
+            int sizeBytes
+    ) {
+        return new ImageFile(
+                imageKey,
+                ImagePurpose.PROFILE,
+                mimeType,
+                sizeBytes
+        );
+    }
+
+    public String getImageKey() {
+        return imageKey;
+    }
+
+    public ImagePurpose getImagePurpose() {
+        return imagePurpose;
+    }
+
+    public String getMimeType() {
+        return mimeType;
+    }
+
+    public Integer getSizeBytes() {
+        return sizeBytes;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public LocalDateTime getDeletedAt() {
+        return deletedAt;
+    }
 }

@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClientException;
 
 import java.net.URI;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -69,7 +70,7 @@ class UserServiceImplTest {
                 oauthAccountRepository,
                 kakaoOAuthClient,
                 withdrawalTransactionService,
-                new ImageProperties(URI.create(DEFAULT_PROFILE_IMAGE_URL))
+                imageProperties()
         );
     }
 
@@ -248,7 +249,7 @@ class UserServiceImplTest {
                 oauthAccountRepository,
                 kakaoOAuthClient,
                 failedTransaction,
-                new ImageProperties(URI.create(DEFAULT_PROFILE_IMAGE_URL))
+                imageProperties()
         );
         when(userRepository.findByPublicIdAndDeletedAtIsNull(
                 USER_PUBLIC_ID
@@ -276,5 +277,17 @@ class UserServiceImplTest {
                                 exception.getErrorCode()
                         ).isEqualTo(ErrorCode.WITHDRAWAL_UNAVAILABLE)
                 );
+    }
+
+    private ImageProperties imageProperties() {
+        return new ImageProperties(
+                URI.create(DEFAULT_PROFILE_IMAGE_URL),
+                "test-bucket",
+                "ap-northeast-2",
+                Duration.ofMinutes(5),
+                5_242_880,
+                Duration.ofSeconds(3),
+                Duration.ofSeconds(5)
+        );
     }
 }

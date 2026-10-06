@@ -39,6 +39,8 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	implementation platform('software.amazon.awssdk:bom:2.55.11')
+	implementation 'software.amazon.awssdk:s3'
 }
 
 tasks.named('bootJar') {
