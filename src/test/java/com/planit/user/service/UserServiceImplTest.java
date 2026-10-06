@@ -8,7 +8,7 @@ import com.planit.domain.RefreshToken;
 import com.planit.domain.User;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
-import com.planit.image.config.ImageProperties;
+import com.planit.image.storage.ImageStorage;
 import com.planit.repository.OAuthAccountRepository;
 import com.planit.repository.RefreshTokenRepository;
 import com.planit.repository.UserRepository;
@@ -19,8 +19,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClientException;
 
-import java.net.URI;
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -31,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.ArgumentMatchers.any;
@@ -40,13 +39,16 @@ class UserServiceImplTest {
     private static final UUID USER_PUBLIC_ID = UUID.fromString(
             "01991f6e-7300-7b21-a3cc-1436db3df95e"
     );
-    private static final String DEFAULT_PROFILE_IMAGE_URL =
-            "http://localhost:8080/images/default-profile.svg";
+    private static final String PROFILE_IMAGE_KEY =
+            "profiles/user/profile.jpg";
+    private static final String PROFILE_IMAGE_URL =
+            "https://example.com/presigned-profile";
 
     private UserRepository userRepository;
     private OAuthAccountRepository oauthAccountRepository;
     private RefreshTokenRepository refreshTokenRepository;
     private KakaoOAuthClient kakaoOAuthClient;
+    private ImageStorage imageStorage;
     private TripService tripService;
     private WithdrawalTransactionService withdrawalTransactionService;
     private UserService userService;
@@ -57,6 +59,7 @@ class UserServiceImplTest {
         oauthAccountRepository = mock(OAuthAccountRepository.class);
         refreshTokenRepository = mock(RefreshTokenRepository.class);
         kakaoOAuthClient = mock(KakaoOAuthClient.class);
+        imageStorage = mock(ImageStorage.class);
         tripService = mock(TripService.class);
         withdrawalTransactionService =
                 new WithdrawalTransactionService(
@@ -70,18 +73,22 @@ class UserServiceImplTest {
                 oauthAccountRepository,
                 kakaoOAuthClient,
                 withdrawalTransactionService,
-                imageProperties()
+                imageStorage
         );
     }
 
     @DisplayName("현재 활성 사용자 정보를 조회한다")
     @Test
     void getsCurrentActiveUser() {
+        ImageFile imageFile = mock(ImageFile.class);
         User user = new User(
-                mock(ImageFile.class),
+                imageFile,
                 USER_PUBLIC_ID,
                 "플랜잇사용자"
         );
+        when(imageFile.getImageKey()).thenReturn(PROFILE_IMAGE_KEY);
+        when(imageStorage.createReadUrl(PROFILE_IMAGE_KEY))
+                .thenReturn(PROFILE_IMAGE_URL);
         when(userRepository.findByPublicIdAndDeletedAtIsNull(
                 USER_PUBLIC_ID
         )).thenReturn(Optional.of(user));
@@ -93,7 +100,28 @@ class UserServiceImplTest {
         assertThat(response.publicId()).isEqualTo(USER_PUBLIC_ID);
         assertThat(response.userName()).isEqualTo("플랜잇사용자");
         assertThat(response.profileImageUrl())
-                .isEqualTo(DEFAULT_PROFILE_IMAGE_URL);
+                .isEqualTo(PROFILE_IMAGE_URL);
+        verify(imageStorage).createReadUrl(PROFILE_IMAGE_KEY);
+    }
+
+    @DisplayName("프로필 이미지가 없는 사용자는 이미지 URL을 반환하지 않는다")
+    @Test
+    void returnsNullProfileImageUrlWithoutProfileImage() {
+        User user = new User(
+                null,
+                USER_PUBLIC_ID,
+                "플랜잇사용자"
+        );
+        when(userRepository.findByPublicIdAndDeletedAtIsNull(
+                USER_PUBLIC_ID
+        )).thenReturn(Optional.of(user));
+
+        CurrentUserResponse response = userService.getCurrentUser(
+                USER_PUBLIC_ID.toString()
+        );
+
+        assertThat(response.profileImageUrl()).isNull();
+        verifyNoInteractions(imageStorage);
     }
 
     @DisplayName("존재하지 않거나 탈퇴한 사용자 조회를 거부한다")
@@ -249,7 +277,7 @@ class UserServiceImplTest {
                 oauthAccountRepository,
                 kakaoOAuthClient,
                 failedTransaction,
-                imageProperties()
+                imageStorage
         );
         when(userRepository.findByPublicIdAndDeletedAtIsNull(
                 USER_PUBLIC_ID
@@ -277,17 +305,5 @@ class UserServiceImplTest {
                                 exception.getErrorCode()
                         ).isEqualTo(ErrorCode.WITHDRAWAL_UNAVAILABLE)
                 );
-    }
-
-    private ImageProperties imageProperties() {
-        return new ImageProperties(
-                URI.create(DEFAULT_PROFILE_IMAGE_URL),
-                "test-bucket",
-                "ap-northeast-2",
-                Duration.ofMinutes(5),
-                5_242_880,
-                Duration.ofSeconds(3),
-                Duration.ofSeconds(5)
-        );
     }
 }

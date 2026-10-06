@@ -6,7 +6,7 @@ import com.planit.domain.ChatMessageStatus;
 import com.planit.domain.ChatMessageType;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
-import com.planit.image.config.ImageProperties;
+import com.planit.image.storage.ImageStorage;
 import com.planit.repository.ChatMessageRepository;
 import com.planit.repository.ChatMessageRepository.ChatMessageHistoryProjection;
 import com.planit.repository.RegionalChatRoomMemberRepository;
@@ -16,8 +16,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Pageable;
 
-import java.net.URI;
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -41,6 +39,7 @@ class ChatMessageHistoryServiceImplTest {
     private RegionalChatRoomRepository roomRepository;
     private RegionalChatRoomMemberRepository memberRepository;
     private ChatMessageRepository messageRepository;
+    private ImageStorage imageStorage;
     private ChatMessageHistoryServiceImpl service;
 
     @BeforeEach
@@ -48,22 +47,13 @@ class ChatMessageHistoryServiceImplTest {
         roomRepository = mock(RegionalChatRoomRepository.class);
         memberRepository = mock(RegionalChatRoomMemberRepository.class);
         messageRepository = mock(ChatMessageRepository.class);
+        imageStorage = mock(ImageStorage.class);
         service = new ChatMessageHistoryServiceImpl(
                 roomRepository,
                 memberRepository,
                 messageRepository,
                 new ChatMessageCursorStore(),
-                new ImageProperties(
-                        URI.create(
-                                "http://localhost:8080/images/default-profile.svg"
-                        ),
-                        "test-bucket",
-                        "ap-northeast-2",
-                        Duration.ofMinutes(5),
-                        5_242_880,
-                        Duration.ofSeconds(3),
-                        Duration.ofSeconds(5)
-                )
+                imageStorage
         );
         when(roomRepository.existsById(ROOM_ID)).thenReturn(true);
         when(memberRepository.existsActiveMembership(USER_UUID, ROOM_ID)).thenReturn(true);
@@ -92,6 +82,34 @@ class ChatMessageHistoryServiceImplTest {
         assertThat(response.page().hasNext()).isTrue();
         assertThat(response.page().nextCursor()).isNotBlank();
         assertThat(response.page().nextAfterMessageId()).isNull();
+        assertThat(response.items())
+                .allMatch(item -> item.sender().profileImageUrl() == null);
+    }
+
+    @DisplayName("프로필 이미지가 있는 발신자는 이미지 URL을 반환한다")
+    @Test
+    void returnsSenderProfileImageUrl() {
+        ChatMessageHistoryProjection projection = projection(1L);
+        when(projection.getSenderImageKey())
+                .thenReturn("profiles/user/profile.jpg");
+        when(imageStorage.createReadUrl(
+                "profiles/user/profile.jpg"
+        )).thenReturn("https://example.com/presigned-profile");
+        when(messageRepository.findLatestHistory(
+                eq(ROOM_ID),
+                eq(ChatMessageStatus.VISIBLE),
+                any(Pageable.class)
+        )).thenReturn(List.of(projection));
+
+        var response = service.getMessages(
+                USER_PUBLIC_ID,
+                ROOM_ID,
+                null,
+                null
+        );
+
+        assertThat(response.items().getFirst().sender().profileImageUrl())
+                .isEqualTo("https://example.com/presigned-profile");
     }
 
     @DisplayName("기준 메시지 이후의 새 메시지 20개와 다음 조회 기준을 반환한다")

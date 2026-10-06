@@ -10,7 +10,7 @@ import com.planit.domain.TextChatMessage;
 import com.planit.domain.User;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
-import com.planit.image.config.ImageProperties;
+import com.planit.image.storage.ImageStorage;
 import com.planit.repository.ChatMessageRepository;
 import com.planit.repository.ChatPolicyConsentRepository;
 import com.planit.repository.ChatPolicyVersionRepository;
@@ -24,8 +24,6 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import java.net.URI;
-import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -54,6 +52,7 @@ class ChatMessageTransactionServiceTest {
     private ChatPolicyConsentRepository policyConsentRepository;
     private ChatMessageRepository messageRepository;
     private TextChatMessageRepository textMessageRepository;
+    private ImageStorage imageStorage;
     private ChatMessageTransactionService service;
     private User user;
     private RegionalChatRoom room;
@@ -67,6 +66,7 @@ class ChatMessageTransactionServiceTest {
         policyConsentRepository = mock(ChatPolicyConsentRepository.class);
         messageRepository = mock(ChatMessageRepository.class);
         textMessageRepository = mock(TextChatMessageRepository.class);
+        imageStorage = mock(ImageStorage.class);
         service = new ChatMessageTransactionService(
                 userRepository,
                 roomRepository,
@@ -76,17 +76,9 @@ class ChatMessageTransactionServiceTest {
                 messageRepository,
                 textMessageRepository,
                 new ChatTextNormalizer(),
-                new ImageProperties(
-                        URI.create("https://example.com/profile.svg"),
-                        "test-bucket",
-                        "ap-northeast-2",
-                        Duration.ofMinutes(5),
-                        5_242_880,
-                        Duration.ofSeconds(3),
-                        Duration.ofSeconds(5)
-                )
+                imageStorage
         );
-        user = new User(mock(ImageFile.class), USER_PUBLIC_ID, "플랜잇사용자");
+        user = new User(null, USER_PUBLIC_ID, "플랜잇사용자");
         room = mock(RegionalChatRoom.class);
         ChatPolicyVersion policy = mock(ChatPolicyVersion.class);
 
@@ -124,11 +116,33 @@ class ChatMessageTransactionServiceTest {
         assertThat(result.message().text()).isEqualTo("경주 맛집");
         assertThat(result.message().sender().publicId())
                 .isEqualTo(USER_PUBLIC_ID.toString());
+        assertThat(result.message().sender().profileImageUrl()).isNull();
         ArgumentCaptor<TextChatMessage> textCaptor = ArgumentCaptor.forClass(
                 TextChatMessage.class
         );
         verify(textMessageRepository).saveAndFlush(textCaptor.capture());
         assertThat(textCaptor.getValue().getTextContent()).isEqualTo("경주 맛집");
+    }
+
+    @DisplayName("프로필 이미지가 있는 발신자는 이미지 URL을 반환한다")
+    @Test
+    void returnsSenderProfileImageUrl() {
+        ImageFile imageFile = mock(ImageFile.class);
+        user.changeProfileImage(imageFile);
+        when(imageFile.getImageKey())
+                .thenReturn("profiles/user/profile.jpg");
+        when(imageStorage.createReadUrl(
+                "profiles/user/profile.jpg"
+        )).thenReturn("https://example.com/presigned-profile");
+
+        ChatMessageSendResult result = service.createOrFind(
+                USER_PUBLIC_ID.toString(),
+                ROOM_ID,
+                request("경주 맛집")
+        );
+
+        assertThat(result.message().sender().profileImageUrl())
+                .isEqualTo("https://example.com/presigned-profile");
     }
 
     @DisplayName("같은 메시지가 재전송되면 기존 결과를 반환하고 재방송하지 않는다")

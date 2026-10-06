@@ -5,7 +5,7 @@ import com.planit.auth.token.TokenHasher;
 import com.planit.domain.*;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
-import com.planit.image.config.ImageProperties;
+import com.planit.image.storage.ImageStorage;
 import com.planit.repository.RegionRepository;
 import com.planit.repository.TripInvitationRepository;
 import com.planit.repository.TripMemberRepository;
@@ -52,7 +52,7 @@ public class TripServiceImpl implements TripService {
 
     private final TokenHasher tokenHasher;
     private final TripListCursorCodec tripListCursorCodec;
-    private final ImageProperties imageProperties;
+    private final ImageStorage imageStorage;
     private final SchedulePersistenceService schedulePersistenceService;
 
     private static final int MAX_TRIP_LIST_SIZE = 10;
@@ -188,8 +188,7 @@ public class TripServiceImpl implements TripService {
                         .map(member ->
                                 new TripInvitationPreviewResponse.Member(
                                         member.getUser().getUsername(),
-                                        imageProperties.defaultProfileUrl()
-                                                .toString()
+                                        profileImageUrl(member.getUser())
                                 ))
                         .toList();
         boolean alreadyJoined = tripMemberRepository
@@ -225,7 +224,7 @@ public class TripServiceImpl implements TripService {
                 new TripInvitationPreviewResponse.Inviter(
                         host.getUser().getPublicId(),
                         host.getUser().getUsername(),
-                        imageProperties.defaultProfileUrl().toString()
+                        profileImageUrl(host.getUser())
                 ),
                 memberResponses,
                 alreadyJoined,
@@ -516,7 +515,7 @@ public class TripServiceImpl implements TripService {
         List<TripListResponse.MemberSummary> memberResponses = members.stream()
                 .map(member -> new TripListResponse.MemberSummary(
                         member.getUser().getUsername(),
-                        imageProperties.defaultProfileUrl().toString()
+                        profileImageUrl(member.getUser())
                 ))
                 .toList();
 
@@ -557,9 +556,16 @@ public class TripServiceImpl implements TripService {
                 member.getId().toString(),
                 withdrawn ? null : member.getUser().getPublicId(),
                 withdrawn ? WITHDRAWN_USER_NAME : member.getUser().getUsername(),
-                imageProperties.defaultProfileUrl().toString(),
+                withdrawn ? null : profileImageUrl(member.getUser()),
                 member.getRole()
         );
+    }
+
+    private String profileImageUrl(User user) {
+        ImageFile imageFile = user.getImageFile();
+        return imageFile == null
+                ? null
+                : imageStorage.createReadUrl(imageFile.getImageKey());
     }
 
     private Trip findActiveTrip(Long tripId) {
