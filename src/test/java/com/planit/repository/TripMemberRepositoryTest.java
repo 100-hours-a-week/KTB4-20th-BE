@@ -1,6 +1,5 @@
 package com.planit.repository;
 
-import com.planit.domain.ImageFile;
 import com.planit.domain.Region;
 import com.planit.domain.Trip;
 import com.planit.domain.TripMember;
@@ -28,9 +27,6 @@ class TripMemberRepositoryTest {
 
     private static final LocalDate TRIP_DATE =
             LocalDate.of(2026, 12, 1);
-
-    @Autowired
-    private ImageFileRepository imageFileRepository;
 
     @Autowired
     private UserRepository userRepository;
@@ -393,12 +389,8 @@ class TripMemberRepositoryTest {
     }
 
     private User createUser() {
-        ImageFile imageFile = imageFileRepository.findAll().stream()
-                .findFirst()
-                .orElseThrow();
-
         return userRepository.save(new User(
-                imageFile,
+                null,
                 UUID.randomUUID(),
                 "여행테스트사용자"
         ));
