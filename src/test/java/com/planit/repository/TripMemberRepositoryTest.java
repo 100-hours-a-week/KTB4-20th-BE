@@ -4,6 +4,8 @@ import com.planit.domain.Region;
 import com.planit.domain.Trip;
 import com.planit.domain.TripMember;
 import com.planit.domain.User;
+import com.planit.trip.dto.TripListResponse;
+import com.planit.trip.service.TripService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.UUID;
 import java.util.List;
 
@@ -39,6 +42,9 @@ class TripMemberRepositoryTest {
 
     @Autowired
     private TripMemberRepository tripMemberRepository;
+
+    @Autowired
+    private TripService tripService;
 
     @DisplayName("여행 기간의 시작일과 종료일이 겹치면 중복으로 계산한다")
     @Test
@@ -133,33 +139,43 @@ class TripMemberRepositoryTest {
         assertThat(count).isZero();
     }
 
-    @DisplayName("예정된 여행을 지난 여행보다 먼저 조회한다")
+    @DisplayName("여행 중, 예정, 완료 순으로 여행을 조회한다")
     @Test
-    void listsUpcomingTripsBeforePastTrips() {
+    void listsTripsByProgressOrder() {
         LocalDate referenceDate = LocalDate.of(2026, 9, 23);
         User user = createUser();
         Trip upcomingLater = createTrip(
                 "부산 여행",
-                referenceDate.plusDays(2)
+                referenceDate.plusDays(2),
+                referenceDate.plusDays(4)
         );
-        Trip pastRecent = createTrip(
-                "서울 여행",
+        Trip completedRecent = createTrip(
+                "전주 여행",
+                referenceDate.minusDays(3),
                 referenceDate.minusDays(1)
         );
         Trip upcomingSoon = createTrip(
                 "경주 여행",
+                referenceDate.plusDays(1),
+                referenceDate.plusDays(3)
+        );
+        Trip inProgress = createTrip(
+                "서울 여행",
+                referenceDate.minusDays(1),
                 referenceDate.plusDays(1)
         );
-        Trip pastOlder = createTrip(
+        Trip completedOlder = createTrip(
                 "제주 여행",
+                referenceDate.minusDays(5),
                 referenceDate.minusDays(2)
         );
 
         tripMemberRepository.saveAll(List.of(
                 TripMember.createMember(upcomingLater, user),
-                TripMember.createMember(pastRecent, user),
+                TripMember.createMember(completedRecent, user),
                 TripMember.createMember(upcomingSoon, user),
-                TripMember.createMember(pastOlder, user)
+                TripMember.createMember(inProgress, user),
+                TripMember.createMember(completedOlder, user)
         ));
 
         List<TripMember> memberships =
@@ -172,10 +188,11 @@ class TripMemberRepositoryTest {
         assertThat(memberships)
                 .extracting(TripMember::getTrip)
                 .containsExactly(
+                        inProgress,
                         upcomingSoon,
                         upcomingLater,
-                        pastOlder,
-                        pastRecent
+                        completedRecent,
+                        completedOlder
                 );
     }
 
@@ -184,6 +201,11 @@ class TripMemberRepositoryTest {
     void listsTripsAfterUpcomingCursorAcrossSections() {
         LocalDate referenceDate = LocalDate.of(2026, 9, 23);
         User user = createUser();
+        Trip inProgress = createTrip(
+                "서울 여행",
+                referenceDate.minusDays(1),
+                referenceDate.plusDays(1)
+        );
         Trip upcomingSoon = createTrip(
                 "경주 여행",
                 referenceDate.plusDays(1)
@@ -192,42 +214,47 @@ class TripMemberRepositoryTest {
                 "부산 여행",
                 referenceDate.plusDays(2)
         );
-        Trip pastTrip = createTrip(
+        Trip completedTrip = createTrip(
                 "제주 여행",
+                referenceDate.minusDays(3),
                 referenceDate.minusDays(1)
         );
 
         tripMemberRepository.saveAll(List.of(
+                TripMember.createMember(inProgress, user),
                 TripMember.createMember(upcomingSoon, user),
                 TripMember.createMember(upcomingLater, user),
-                TripMember.createMember(pastTrip, user)
+                TripMember.createMember(completedTrip, user)
         ));
 
         List<TripMember> memberships =
                 tripMemberRepository.findActiveTripMembershipsAfter(
                         user,
                         referenceDate,
-                        0,
+                        1,
                         upcomingSoon.getStartDate(),
+                        upcomingSoon.getId(),
                         PageRequest.of(0, 10)
                 );
 
         assertThat(memberships)
                 .extracting(TripMember::getTrip)
-                .containsExactly(upcomingLater, pastTrip);
+                .containsExactly(upcomingLater, completedTrip);
     }
 
-    @DisplayName("지난 여행 커서 이후의 여행을 조회한다")
+    @DisplayName("최근 완료 여행 커서 이후의 여행을 조회한다")
     @Test
     void listsPastTripsAfterPastCursor() {
         LocalDate referenceDate = LocalDate.of(2026, 9, 23);
         User user = createUser();
         Trip olderTrip = createTrip(
                 "제주 여행",
-                referenceDate.minusDays(2)
+                referenceDate.minusDays(5),
+                referenceDate.minusDays(3)
         );
         Trip recentTrip = createTrip(
                 "서울 여행",
+                referenceDate.minusDays(2),
                 referenceDate.minusDays(1)
         );
 
@@ -240,14 +267,85 @@ class TripMemberRepositoryTest {
                 tripMemberRepository.findActiveTripMembershipsAfter(
                         user,
                         referenceDate,
-                        1,
-                        olderTrip.getStartDate(),
+                        2,
+                        recentTrip.getEndDate(),
+                        recentTrip.getId(),
                         PageRequest.of(0, 10)
                 );
 
         assertThat(memberships)
                 .extracting(TripMember::getTrip)
-                .containsExactly(recentTrip);
+                .containsExactly(olderTrip);
+    }
+
+    @DisplayName("커서로 모든 여행을 중복과 누락 없이 조회한다")
+    @Test
+    void pagesTripsWithoutDuplicatesOrOmissions() {
+        LocalDate referenceDate = LocalDate.now();
+        User user = createUser();
+        Trip inProgress = createTrip(
+                "서울 여행",
+                referenceDate.minusDays(1),
+                referenceDate.plusDays(1)
+        );
+        Trip upcomingFirst = createTrip(
+                "부산 여행",
+                referenceDate.plusDays(2),
+                referenceDate.plusDays(4)
+        );
+        Trip upcomingSecond = createTrip(
+                "경주 여행",
+                referenceDate.plusDays(2),
+                referenceDate.plusDays(4)
+        );
+        Trip completedFirst = createTrip(
+                "전주 여행",
+                referenceDate.minusDays(3),
+                referenceDate.minusDays(1)
+        );
+        Trip completedSecond = createTrip(
+                "대구 여행",
+                referenceDate.minusDays(2),
+                referenceDate.minusDays(1)
+        );
+        Trip completedOlder = createTrip(
+                "제주 여행",
+                referenceDate.minusDays(6),
+                referenceDate.minusDays(4)
+        );
+
+        tripMemberRepository.saveAll(List.of(
+                TripMember.createMember(inProgress, user),
+                TripMember.createMember(upcomingFirst, user),
+                TripMember.createMember(upcomingSecond, user),
+                TripMember.createMember(completedFirst, user),
+                TripMember.createMember(completedSecond, user),
+                TripMember.createMember(completedOlder, user)
+        ));
+
+        List<String> tripIds = new ArrayList<>();
+        String cursor = null;
+        for (int page = 0; page < 3; page++) {
+            TripListResponse response = tripService.getTrips(
+                    user.getPublicId().toString(),
+                    cursor,
+                    2
+            );
+            tripIds.addAll(response.trips().stream()
+                    .map(TripListResponse.TripSummary::tripId)
+                    .toList());
+            cursor = response.nextCursor();
+        }
+
+        assertThat(tripIds).containsExactly(
+                inProgress.getId().toString(),
+                upcomingFirst.getId().toString(),
+                upcomingSecond.getId().toString(),
+                completedFirst.getId().toString(),
+                completedSecond.getId().toString(),
+                completedOlder.getId().toString()
+        );
+        assertThat(cursor).isNull();
     }
 
     @DisplayName("탈퇴한 사용자를 여행 멤버 목록에서 제외한다")
@@ -403,16 +501,24 @@ class TripMemberRepositoryTest {
     }
 
     private Trip createTrip(String name, LocalDate tripDate) {
+        return createTrip(name, tripDate, tripDate.plusDays(2));
+    }
+
+    private Trip createTrip(
+            String name,
+            LocalDate startDate,
+            LocalDate endDate
+    ) {
         Region region = regionRepository.findById(1L)
                 .orElseThrow();
 
         return tripRepository.save(new Trip(
                 region,
                 name,
-                tripDate,
-                tripDate.plusDays(2),
+                startDate,
+                endDate,
                 (byte) 4,
-                tripDate.minusDays(1)
+                startDate.minusDays(1)
                         .atTime(23, 59, 59, 999_999_000)
         ));
     }

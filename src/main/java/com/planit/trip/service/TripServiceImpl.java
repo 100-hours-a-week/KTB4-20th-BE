@@ -511,8 +511,9 @@ public class TripServiceImpl implements TripService {
         return tripMemberRepository.findActiveTripMembershipsAfter(
                 user,
                 referenceDate,
-                cursor.startDate().isBefore(referenceDate) ? 1 : 0,
-                cursor.startDate(),
+                cursor.sectionOrder(),
+                cursor.sortDate(),
+                cursor.tripId(),
                 pageRequest
         );
     }
@@ -551,10 +552,23 @@ public class TripServiceImpl implements TripService {
             LocalDate referenceDate
     ) {
         Trip trip = lastMembership.getTrip();
+        int sectionOrder = tripSectionOrder(trip, referenceDate);
         return tripListCursorCodec.encode(new Cursor(
                 referenceDate,
-                trip.getStartDate()
+                sectionOrder,
+                sectionOrder == 2
+                        ? trip.getEndDate()
+                        : trip.getStartDate(),
+                trip.getId()
         ));
+    }
+
+    private int tripSectionOrder(Trip trip, LocalDate referenceDate) {
+        if (!referenceDate.isBefore(trip.getStartDate())
+                && !referenceDate.isAfter(trip.getEndDate())) {
+            return 0;
+        }
+        return referenceDate.isBefore(trip.getStartDate()) ? 1 : 2;
     }
 
     private void validateTripListSize(int size) {
