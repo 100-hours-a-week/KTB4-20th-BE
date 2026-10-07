@@ -53,13 +53,14 @@ public class Trip {
             Region region,
             String name,
             LocalDate startDate,
+            LocalDate endDate,
             byte capacity,
             LocalDateTime surveyDeadlineAt
     ) {
         this.region = region;
         this.name = name;
         this.startDate = startDate;
-        this.endDate = startDate;
+        this.endDate = endDate;
         this.capacity = capacity;
         this.surveyDeadlineAt = surveyDeadlineAt;
         this.createdAt = LocalDateTime.now();

@@ -132,11 +132,12 @@ class TripServiceImplTest {
     void createsTripHostMembershipAndInvitation() {
         LocalDate today = LocalDate.now(SEOUL_ZONE);
         LocalDate startDate = today.plusDays(5);
+        LocalDate endDate = startDate.plusDays(2);
         LocalDate deadlineDate = today.plusDays(1);
 
         TripCreateResponse response = tripService.createTrip(
                 USER_PUBLIC_ID.toString(),
-                request(startDate, deadlineDate)
+                request(startDate, endDate, deadlineDate)
         );
 
         ArgumentCaptor<Trip> tripCaptor = ArgumentCaptor.forClass(Trip.class);
@@ -144,7 +145,7 @@ class TripServiceImplTest {
         Trip savedTrip = tripCaptor.getValue();
         assertThat(response.tripId()).isEqualTo("100");
         assertThat(savedTrip.getStartDate()).isEqualTo(startDate);
-        assertThat(savedTrip.getEndDate()).isEqualTo(startDate);
+        assertThat(savedTrip.getEndDate()).isEqualTo(endDate);
         assertThat(savedTrip.getSurveyDeadlineAt()).isEqualTo(
                 deadlineDate.atTime(23, 59, 59, 999_999_000)
         );
@@ -176,6 +177,7 @@ class TripServiceImplTest {
                 "  제주 여행  ",
                 1L,
                 startDate,
+                startDate.plusDays(2),
                 4,
                 null
         );
@@ -195,6 +197,7 @@ class TripServiceImplTest {
                 "제주 여행",
                 1L,
                 startDate,
+                startDate.plusDays(2),
                 null,
                 null
         );
@@ -331,9 +334,11 @@ class TripServiceImplTest {
     @DisplayName("종료된 여행의 초대 링크를 거부한다")
     @Test
     void rejectsExpiredInvitation() {
+        LocalDate yesterday = LocalDate.now(SEOUL_ZONE).minusDays(1);
         Trip trip = trip(
                 1001L,
-                LocalDate.now(SEOUL_ZONE).minusDays(1)
+                yesterday.minusDays(2),
+                yesterday
         );
         when(tripInvitationRepository.findByTokenHash(
                 INVITATION_TOKEN_HASH
@@ -442,6 +447,8 @@ class TripServiceImplTest {
         assertThat(response.trips()).hasSize(2);
         assertThat(response.trips().getFirst().tripId())
                 .isEqualTo("101");
+        assertThat(response.trips().getFirst().endDate())
+                .isEqualTo(referenceDate.plusDays(3));
         assertThat(response.trips().getFirst().members().getFirst().userName())
                 .isEqualTo("사용자A");
         assertThat(response.trips().getFirst().members().getFirst()
@@ -454,7 +461,9 @@ class TripServiceImplTest {
         );
         assertThat(nextCursor).isEqualTo(new Cursor(
                 referenceDate,
-                referenceDate.plusDays(2)
+                1,
+                referenceDate.plusDays(2),
+                102L
         ));
     }
 
@@ -464,7 +473,9 @@ class TripServiceImplTest {
         LocalDate referenceDate = LocalDate.now(SEOUL_ZONE);
         Cursor cursor = new Cursor(
                 referenceDate,
-                referenceDate.plusDays(1)
+                1,
+                referenceDate.plusDays(1),
+                101L
         );
         Trip nextTrip = trip(102L, referenceDate.plusDays(2));
         TripMember nextMembership =
@@ -473,8 +484,9 @@ class TripServiceImplTest {
         when(tripMemberRepository.findActiveTripMembershipsAfter(
                 user,
                 referenceDate,
-                0,
-                cursor.startDate(),
+                cursor.sectionOrder(),
+                cursor.sortDate(),
+                cursor.tripId(),
                 org.springframework.data.domain.PageRequest.of(0, 6)
         )).thenReturn(List.of(nextMembership));
         when(tripMemberRepository.findActiveMembersByTripIds(
@@ -494,19 +506,41 @@ class TripServiceImplTest {
         assertThat(response.nextCursor()).isNull();
     }
 
-    @DisplayName("각 여행의 진행 상태를 계산해 반환한다")
+    @DisplayName("여행 시작 전과 여행 기간 및 종료 후의 진행 상태를 계산해 반환한다")
     @Test
     void returnsProgressStatusForEachTrip() {
         LocalDate today = LocalDate.now(SEOUL_ZONE);
-        Trip surveyTrip = trip(101L, today.plusDays(1));
-        Trip scheduledTrip = trip(102L, today.plusDays(2));
-        Trip ongoingTrip = trip(103L, today);
-        Trip completedTrip = trip(104L, today.minusDays(1));
+        Trip surveyTrip = trip(
+                101L,
+                today.plusDays(1),
+                today.plusDays(3)
+        );
+        Trip scheduledTrip = trip(
+                102L,
+                today.plusDays(2),
+                today.plusDays(4)
+        );
+        Trip middleOfTrip = trip(
+                103L,
+                today.minusDays(1),
+                today.plusDays(1)
+        );
+        Trip endingTodayTrip = trip(
+                104L,
+                today.minusDays(2),
+                today
+        );
+        Trip completedTrip = trip(
+                105L,
+                today.minusDays(2),
+                today.minusDays(1)
+        );
 
         List<TripMember> memberships = List.of(
                 TripMember.createMember(surveyTrip, user),
                 TripMember.createMember(scheduledTrip, user),
-                TripMember.createMember(ongoingTrip, user),
+                TripMember.createMember(middleOfTrip, user),
+                TripMember.createMember(endingTodayTrip, user),
                 TripMember.createMember(completedTrip, user)
         );
 
@@ -516,16 +550,16 @@ class TripServiceImplTest {
                 any()
         )).thenReturn(memberships);
         when(tripMemberRepository.findActiveMembersByTripIds(
-                List.of(101L, 102L, 103L, 104L)
+                List.of(101L, 102L, 103L, 104L, 105L)
         )).thenReturn(memberships);
         when(tripRepository.findIdsWithActiveConfirmedSchedule(
-                List.of(101L, 102L, 103L, 104L)
+                List.of(101L, 102L, 103L, 104L, 105L)
         )).thenReturn(List.of(102L));
 
         TripListResponse response = tripService.getTrips(
                 USER_PUBLIC_ID.toString(),
                 null,
-                4
+                5
         );
 
         assertThat(response.trips())
@@ -533,6 +567,7 @@ class TripServiceImplTest {
                 .containsExactly(
                         TripProgressStatus.SURVEY_IN_PROGRESS,
                         TripProgressStatus.SCHEDULE_COMPLETED,
+                        TripProgressStatus.TRIP_IN_PROGRESS,
                         TripProgressStatus.TRIP_IN_PROGRESS,
                         TripProgressStatus.TRIP_COMPLETED
                 );
@@ -1405,16 +1440,17 @@ class TripServiceImplTest {
     @Test
     void rejectsDateOverlappingActiveTrip() {
         LocalDate startDate = LocalDate.now(SEOUL_ZONE).plusDays(5);
+        LocalDate endDate = startDate.plusDays(2);
         when(tripMemberRepository.countActiveTripsOverlapping(
                 user,
                 startDate,
-                startDate
+                endDate
         )).thenReturn(1L);
 
         assertError(
                 () -> tripService.createTrip(
                         USER_PUBLIC_ID.toString(),
-                        request(startDate, null)
+                        request(startDate, endDate, null)
                 ),
                 ErrorCode.TRIP_DATE_CONFLICT
         );
@@ -1423,14 +1459,91 @@ class TripServiceImplTest {
         verify(tripMemberRepository, never()).save(any());
     }
 
+    @DisplayName("종료일이 시작일보다 빠른 여행 생성을 거부한다")
+    @Test
+    void rejectsEndDateBeforeStartDate() {
+        LocalDate startDate = LocalDate.now(SEOUL_ZONE).plusDays(5);
+
+        assertError(
+                () -> tripService.createTrip(
+                        USER_PUBLIC_ID.toString(),
+                        request(startDate, startDate.minusDays(1), null)
+                ),
+                ErrorCode.INVALID_REQUEST
+        );
+
+        verify(tripRepository, never()).save(any());
+    }
+
+    @DisplayName("10일을 초과하는 여행 생성을 거부한다")
+    @Test
+    void rejectsTripLongerThanTenDays() {
+        LocalDate startDate = LocalDate.now(SEOUL_ZONE).plusDays(5);
+
+        assertError(
+                () -> tripService.createTrip(
+                        USER_PUBLIC_ID.toString(),
+                        request(startDate, startDate.plusDays(10), null)
+                ),
+                ErrorCode.INVALID_REQUEST
+        );
+
+        verify(tripRepository, never()).save(any());
+    }
+
+    @DisplayName("10일 여행 생성을 허용한다")
+    @Test
+    void allowsTenDayTrip() {
+        LocalDate startDate = LocalDate.now(SEOUL_ZONE).plusDays(5);
+        LocalDate endDate = startDate.plusDays(9);
+
+        tripService.createTrip(
+                USER_PUBLIC_ID.toString(),
+                request(startDate, endDate, null)
+        );
+
+        ArgumentCaptor<Trip> captor = ArgumentCaptor.forClass(Trip.class);
+        verify(tripRepository).save(captor.capture());
+        assertThat(captor.getValue().getEndDate()).isEqualTo(endDate);
+    }
+
+    @DisplayName("시작일과 종료일이 같은 당일 여행 생성을 허용한다")
+    @Test
+    void allowsDayTrip() {
+        LocalDate tripDate = LocalDate.now(SEOUL_ZONE).plusDays(5);
+
+        tripService.createTrip(
+                USER_PUBLIC_ID.toString(),
+                request(tripDate, tripDate, null)
+        );
+
+        ArgumentCaptor<Trip> captor = ArgumentCaptor.forClass(Trip.class);
+        verify(tripRepository).save(captor.capture());
+        assertThat(captor.getValue().getStartDate()).isEqualTo(tripDate);
+        assertThat(captor.getValue().getEndDate()).isEqualTo(tripDate);
+    }
+
     private TripCreateRequest request(
             LocalDate startDate,
+            LocalDate surveyDeadlineDate
+    ) {
+        return request(
+                startDate,
+                startDate.plusDays(2),
+                surveyDeadlineDate
+        );
+    }
+
+    private TripCreateRequest request(
+            LocalDate startDate,
+            LocalDate endDate,
             LocalDate surveyDeadlineDate
     ) {
         return new TripCreateRequest(
                 "제주 여행",
                 1L,
                 startDate,
+                endDate,
                 4,
                 surveyDeadlineDate
         );
@@ -1442,10 +1555,19 @@ class TripServiceImplTest {
     }
 
     private Trip trip(Long id, LocalDate startDate) {
+        return trip(id, startDate, startDate.plusDays(2));
+    }
+
+    private Trip trip(
+            Long id,
+            LocalDate startDate,
+            LocalDate endDate
+    ) {
         Trip trip = new Trip(
                 region,
                 "제주 여행",
                 startDate,
+                endDate,
                 (byte) 4,
                 startDate.minusDays(1).atTime(23, 59, 59)
         );

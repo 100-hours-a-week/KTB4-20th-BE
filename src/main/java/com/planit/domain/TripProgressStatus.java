@@ -10,18 +10,22 @@ public enum TripProgressStatus {
 
     public static TripProgressStatus resolve(
             LocalDate startDate,
+            LocalDate endDate,
             boolean hasConfirmedSchedule,
             LocalDate today
     ) {
-        if (startDate.isBefore(today)) {
+        if (today.isAfter(endDate)) {
             return TRIP_COMPLETED;
         }
-        if (startDate.isEqual(today)) {
+
+        if (!today.isBefore(startDate)) {
             return TRIP_IN_PROGRESS;
         }
+
         if (hasConfirmedSchedule) {
             return SCHEDULE_COMPLETED;
         }
+
         return SURVEY_IN_PROGRESS;
     }
 }

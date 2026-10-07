@@ -110,8 +110,15 @@ public interface TripMemberRepository
               AND member.leftAt IS NULL
               AND trip.deletedAt IS NULL
             ORDER BY
-              CASE WHEN trip.startDate >= :referenceDate THEN 0 ELSE 1 END,
-              trip.startDate
+              CASE
+                WHEN trip.startDate <= :referenceDate
+                  AND trip.endDate >= :referenceDate THEN 0
+                WHEN trip.startDate > :referenceDate THEN 1
+                ELSE 2
+              END,
+              CASE WHEN trip.endDate >= :referenceDate THEN trip.startDate END ASC,
+              CASE WHEN trip.endDate < :referenceDate THEN trip.endDate END DESC,
+              trip.id ASC
             """)
     List<TripMember> findActiveTripMemberships(
             @Param("user") User user,
@@ -128,23 +135,60 @@ public interface TripMemberRepository
               AND member.leftAt IS NULL
               AND trip.deletedAt IS NULL
               AND (
-                CASE WHEN trip.startDate >= :referenceDate THEN 0 ELSE 1 END
-                    > :cursorSectionOrder
+                CASE
+                  WHEN trip.startDate <= :referenceDate
+                    AND trip.endDate >= :referenceDate THEN 0
+                  WHEN trip.startDate > :referenceDate THEN 1
+                  ELSE 2
+                END > :cursorSectionOrder
                 OR (
-                  CASE WHEN trip.startDate >= :referenceDate THEN 0 ELSE 1 END
-                      = :cursorSectionOrder
-                  AND trip.startDate > :cursorStartDate
+                  CASE
+                    WHEN trip.startDate <= :referenceDate
+                      AND trip.endDate >= :referenceDate THEN 0
+                    WHEN trip.startDate > :referenceDate THEN 1
+                    ELSE 2
+                  END = :cursorSectionOrder
+                  AND (
+                    (
+                      :cursorSectionOrder = 2
+                      AND (
+                        trip.endDate < :cursorSortDate
+                        OR (
+                          trip.endDate = :cursorSortDate
+                          AND trip.id > :cursorTripId
+                        )
+                      )
+                    )
+                    OR (
+                      :cursorSectionOrder <> 2
+                      AND (
+                        trip.startDate > :cursorSortDate
+                        OR (
+                          trip.startDate = :cursorSortDate
+                          AND trip.id > :cursorTripId
+                        )
+                      )
+                    )
+                  )
                 )
               )
             ORDER BY
-              CASE WHEN trip.startDate >= :referenceDate THEN 0 ELSE 1 END,
-              trip.startDate
+              CASE
+                WHEN trip.startDate <= :referenceDate
+                  AND trip.endDate >= :referenceDate THEN 0
+                WHEN trip.startDate > :referenceDate THEN 1
+                ELSE 2
+              END,
+              CASE WHEN trip.endDate >= :referenceDate THEN trip.startDate END ASC,
+              CASE WHEN trip.endDate < :referenceDate THEN trip.endDate END DESC,
+              trip.id ASC
             """)
     List<TripMember> findActiveTripMembershipsAfter(
             @Param("user") User user,
             @Param("referenceDate") LocalDate referenceDate,
             @Param("cursorSectionOrder") int cursorSectionOrder,
-            @Param("cursorStartDate") LocalDate cursorStartDate,
+            @Param("cursorSortDate") LocalDate cursorSortDate,
+            @Param("cursorTripId") Long cursorTripId,
             Pageable pageable
     );
 

@@ -136,9 +136,13 @@ class ScheduleGenerationServiceTest {
                 .thenReturn(aiResponse());
     }
 
-    @DisplayName("당일 여행에 사용할 장소를 선정한다")
+    @DisplayName("여행 기간에 사용할 장소를 선정한다")
     @Test
-    void selectsPlacesForDayTrip() {
+    void selectsPlacesForTripPeriod() {
+        when(trip.getEndDate()).thenReturn(LocalDate.of(2026, 10, 3));
+        when(aiTripClient.selectPlaces(any()))
+                .thenReturn(aiResponse(3, 6));
+
         SchedulePlaceSelectionResponse response = service.generate(
                 USER_ID.toString(),
                 TRIP_ID
@@ -152,7 +156,8 @@ class ScheduleGenerationServiceTest {
         assertThat(request.region()).isEqualTo("서울");
         assertThat(request.startDate())
                 .isEqualTo(LocalDate.of(2026, 10, 1));
-        assertThat(request.endDate()).isEqualTo(request.startDate());
+        assertThat(request.endDate())
+                .isEqualTo(LocalDate.of(2026, 10, 3));
         assertThat(request.members()).hasSize(1);
         assertThat(request.members().getFirst().surveyResult())
                 .containsExactly(
@@ -163,8 +168,9 @@ class ScheduleGenerationServiceTest {
         assertThat(request.members().getFirst().dealBreakers())
                 .containsExactly("해산물");
         assertThat(response.tripId()).isEqualTo("100");
-        assertThat(response.places()).hasSize(1);
-        assertThat(response.places().getFirst()).hasSize(6);
+        assertThat(response.places()).hasSize(3);
+        assertThat(response.places())
+                .allSatisfy(places -> assertThat(places).hasSize(6));
         verify(schedulePersistenceService).save(
                 org.mockito.ArgumentMatchers.eq(TRIP_ID),
                 any()

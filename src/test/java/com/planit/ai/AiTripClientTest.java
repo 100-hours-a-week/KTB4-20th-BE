@@ -47,7 +47,7 @@ class AiTripClientTest {
         AiPlaceSelectionRequest request = new AiPlaceSelectionRequest(
                 "제주",
                 LocalDate.of(2026, 10, 1),
-                LocalDate.of(2026, 10, 1),
+                LocalDate.of(2026, 10, 3),
                 List.of(new AiPlaceSelectionRequest.MemberSurvey(
                         new AiPlaceSelectionRequest.User("user-1"),
                         List.of(
@@ -71,7 +71,7 @@ class AiTripClientTest {
                         {
                           "region": "제주",
                           "start_date": "2026-10-01",
-                          "end_date": "2026-10-01",
+                          "end_date": "2026-10-03",
                           "members": [
                             {
                               "user": {"user_id": "user-1"},

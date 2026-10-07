@@ -21,7 +21,9 @@ class TripListCursorCodecTest {
     void restoresEncodedCursor() {
         Cursor cursor = new Cursor(
                 LocalDate.of(2026, 9, 23),
-                LocalDate.of(2026, 9, 26)
+                1,
+                LocalDate.of(2026, 9, 26),
+                123L
         );
 
         String encoded = codec.encode(cursor);
