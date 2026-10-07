@@ -44,7 +44,7 @@ class ScheduleGenerationControllerTest {
         when(service.generate(USER_PUBLIC_ID, 100L))
                 .thenReturn(new SchedulePlaceSelectionResponse(
                         "100",
-                        List.of(new AiPlaceSelectionResponse.Place(
+                        List.of(List.of(new AiPlaceSelectionResponse.Place(
                                 "google-place-1",
                                 new AiPlaceSelectionResponse.DisplayName(
                                         "경복궁",
@@ -60,7 +60,7 @@ class ScheduleGenerationControllerTest {
                                 null,
                                 List.of("user_id_1", "user_id_3"),
                                 List.of("HISTORY_CULTURE")
-                        ))
+                        )))
                 ));
 
         mockMvc.perform(post("/api/trips/100/schedule-generation")
@@ -72,12 +72,12 @@ class ScheduleGenerationControllerTest {
                 .andExpect(jsonPath("$.code")
                         .value("SCHEDULE_PLACE_SELECTION_COMPLETED"))
                 .andExpect(jsonPath("$.data.tripId").value("100"))
-                .andExpect(jsonPath("$.data.places[0].id")
+                .andExpect(jsonPath("$.data.places[0][0].id")
                         .value("google-place-1"))
-                .andExpect(jsonPath("$.data.places[0].selected_for[0]")
+                .andExpect(jsonPath("$.data.places[0][0].selected_for[0]")
                         .value("user_id_1"))
                 .andExpect(jsonPath(
-                        "$.data.places[0].matched_preferences[0]"
+                        "$.data.places[0][0].matched_preferences[0]"
                 ).value("HISTORY_CULTURE"));
 
         verify(service).generate(USER_PUBLIC_ID, 100L);

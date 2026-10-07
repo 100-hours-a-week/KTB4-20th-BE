@@ -103,6 +103,7 @@ class ScheduleGenerationServiceTest {
                 .thenReturn(Optional.of(trip));
         when(trip.getId()).thenReturn(TRIP_ID);
         when(trip.getStartDate()).thenReturn(LocalDate.of(2026, 10, 1));
+        when(trip.getEndDate()).thenReturn(LocalDate.of(2026, 10, 1));
         when(trip.getSurveyDeadlineAt())
                 .thenReturn(LocalDateTime.now().plusDays(1));
         when(trip.getRegion()).thenReturn(region);
@@ -162,11 +163,43 @@ class ScheduleGenerationServiceTest {
         assertThat(request.members().getFirst().dealBreakers())
                 .containsExactly("해산물");
         assertThat(response.tripId()).isEqualTo("100");
-        assertThat(response.places()).hasSize(6);
+        assertThat(response.places()).hasSize(1);
+        assertThat(response.places().getFirst()).hasSize(6);
         verify(schedulePersistenceService).save(
                 org.mockito.ArgumentMatchers.eq(TRIP_ID),
                 any()
         );
+    }
+
+    @DisplayName("여행 기간과 같은 개수의 날짜별 장소 목록을 생성한다")
+    @Test
+    void selectsPlacesForEachTripDay() {
+        when(trip.getEndDate()).thenReturn(LocalDate.of(2026, 10, 2));
+        when(aiTripClient.selectPlaces(any()))
+                .thenReturn(aiResponse(2, 5));
+
+        SchedulePlaceSelectionResponse response = service.generate(
+                USER_ID.toString(),
+                TRIP_ID
+        );
+
+        assertThat(response.places()).hasSize(2);
+        assertThat(response.places())
+                .allSatisfy(places -> assertThat(places).hasSize(5));
+        verify(schedulePersistenceService).save(
+                org.mockito.ArgumentMatchers.eq(TRIP_ID),
+                any()
+        );
+    }
+
+    @DisplayName("여행 일수와 AI의 날짜별 장소 목록 수가 다르면 거부한다")
+    @Test
+    void rejectsAiResponseWithMismatchedDayCount() {
+        when(trip.getEndDate()).thenReturn(LocalDate.of(2026, 10, 2));
+
+        assertError(ErrorCode.AI_SCHEDULE_GENERATION_FAILED);
+
+        verify(schedulePersistenceService, never()).save(any(Long.class), any());
     }
 
     @DisplayName("방장이 아닌 사용자의 일정 생성을 거부한다")
@@ -291,7 +324,8 @@ class ScheduleGenerationServiceTest {
                 TRIP_ID
         );
 
-        assertThat(response.places()).hasSize(5);
+        assertThat(response.places()).hasSize(1);
+        assertThat(response.places().getFirst()).hasSize(5);
     }
 
     @DisplayName("필수 정보가 누락된 AI 추천 장소를 거부한다")
@@ -313,7 +347,7 @@ class ScheduleGenerationServiceTest {
                 .thenReturn(new AiPlaceSelectionResponse(
                         200,
                         new AiPlaceSelectionResponse.Data(
-                                List.of(invalidPlace)
+                                List.of(List.of(invalidPlace))
                         )
                 ));
 
@@ -356,29 +390,41 @@ class ScheduleGenerationServiceTest {
     }
 
     private AiPlaceSelectionResponse aiResponse(int placeCount) {
-        List<AiPlaceSelectionResponse.Place> places = new ArrayList<>();
-        for (int index = 1; index <= placeCount; index++) {
-            places.add(new AiPlaceSelectionResponse.Place(
-                    "google-place-" + index,
-                    new AiPlaceSelectionResponse.DisplayName(
-                            "장소 " + index,
-                            "ko"
-                    ),
-                    new AiPlaceSelectionResponse.Location(
-                            37.5796 + index * 0.001,
-                            126.9770 + index * 0.001
-                    ),
-                    List.of("historical_landmark", "museum"),
-                    4.6,
-                    4820,
-                    null,
-                    List.of("user_id_1", "user_id_3"),
-                    List.of("HISTORY_CULTURE")
-            ));
+        return aiResponse(1, placeCount);
+    }
+
+    private AiPlaceSelectionResponse aiResponse(
+            int dayCount,
+            int placeCount
+    ) {
+        List<List<AiPlaceSelectionResponse.Place>> dailyPlaces =
+                new ArrayList<>();
+        for (int day = 1; day <= dayCount; day++) {
+            List<AiPlaceSelectionResponse.Place> places = new ArrayList<>();
+            for (int index = 1; index <= placeCount; index++) {
+                places.add(new AiPlaceSelectionResponse.Place(
+                        "day-" + day + "-google-place-" + index,
+                        new AiPlaceSelectionResponse.DisplayName(
+                                "장소 " + index,
+                                "ko"
+                        ),
+                        new AiPlaceSelectionResponse.Location(
+                                37.5796 + index * 0.001,
+                                126.9770 + index * 0.001
+                        ),
+                        List.of("historical_landmark", "museum"),
+                        4.6,
+                        4820,
+                        null,
+                        List.of("user_id_1", "user_id_3"),
+                        List.of("HISTORY_CULTURE")
+                ));
+            }
+            dailyPlaces.add(places);
         }
         return new AiPlaceSelectionResponse(
                 200,
-                new AiPlaceSelectionResponse.Data(places)
+                new AiPlaceSelectionResponse.Data(dailyPlaces)
         );
     }
 }

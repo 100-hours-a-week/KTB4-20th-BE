@@ -19,6 +19,7 @@ import com.planit.schedule.route.PlaceCategoryGroup;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
@@ -69,6 +70,7 @@ class SchedulePersistenceServiceTest {
         when(region.getId()).thenReturn(10L);
         when(trip.getRegion()).thenReturn(region);
         when(trip.getStartDate()).thenReturn(LocalDate.of(2026, 10, 1));
+        when(trip.getEndDate()).thenReturn(LocalDate.of(2026, 10, 1));
         when(tripRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(trip));
 
         AtomicLong placeId = new AtomicLong(100);
@@ -82,9 +84,10 @@ class SchedulePersistenceServiceTest {
             ReflectionTestUtils.setField(schedule, "id", 200L);
             return schedule;
         });
+        AtomicLong dayId = new AtomicLong(300);
         when(dayRepository.save(any(ScheduleDay.class))).thenAnswer(invocation -> {
             ScheduleDay day = invocation.getArgument(0);
-            ReflectionTestUtils.setField(day, "id", 300L);
+            ReflectionTestUtils.setField(day, "id", dayId.getAndIncrement());
             return day;
         });
         AtomicLong visitId = new AtomicLong(400);
@@ -101,10 +104,13 @@ class SchedulePersistenceServiceTest {
     @DisplayName("하루 일정에 여섯 방문 장소와 다섯 이동 구간을 저장한다")
     @Test
     void savesOneDaySixVisitsAndFiveLegs() {
-        GeneratedScheduleResult result = service.save(1L, recommendations());
+        GeneratedScheduleResult result = service.save(
+                1L,
+                List.of(recommendations())
+        );
 
         assertThat(result.scheduleId()).isEqualTo("200");
-        assertThat(result.dayId()).isEqualTo("300");
+        assertThat(result.dayIds()).containsExactly("300");
         assertThat(result.placeCount()).isEqualTo(6);
         assertThat(result.legCount()).isEqualTo(5);
         verify(placeRepository, times(6)).save(any(Place.class));
@@ -115,13 +121,55 @@ class SchedulePersistenceServiceTest {
     @DisplayName("AI가 다섯 장소만 반환하면 다섯 방문 장소와 네 이동 구간을 저장한다")
     @Test
     void savesOneDayFiveVisitsAndFourLegsWhenAiFallsShortOfSix() {
-        GeneratedScheduleResult result = service.save(1L, recommendations(5));
+        GeneratedScheduleResult result = service.save(
+                1L,
+                List.of(recommendations(5))
+        );
 
         assertThat(result.placeCount()).isEqualTo(5);
         assertThat(result.legCount()).isEqualTo(4);
         verify(placeRepository, times(5)).save(any(Place.class));
         verify(visitRepository, times(5)).save(any(ScheduleVisit.class));
         verify(legRepository, times(4)).save(any(ScheduleLeg.class));
+    }
+
+    @DisplayName("여행 날짜마다 독립된 일정 일차와 동선을 저장한다")
+    @Test
+    void savesRouteForEachTripDay() {
+        when(trip.getEndDate()).thenReturn(LocalDate.of(2026, 10, 2));
+
+        GeneratedScheduleResult result = service.save(
+                1L,
+                List.of(
+                        recommendations("day-1", 5),
+                        recommendations("day-2", 5)
+                )
+        );
+
+        assertThat(result.dayIds()).containsExactly("300", "301");
+        assertThat(result.placeCount()).isEqualTo(10);
+        assertThat(result.legCount()).isEqualTo(8);
+        verify(visitRepository, times(10)).save(any(ScheduleVisit.class));
+        verify(legRepository, times(8)).save(any(ScheduleLeg.class));
+
+        ArgumentCaptor<ScheduleDay> dayCaptor =
+                ArgumentCaptor.forClass(ScheduleDay.class);
+        verify(dayRepository, times(2)).save(dayCaptor.capture());
+        assertThat(dayCaptor.getAllValues())
+                .extracting(
+                        ScheduleDay::getDayNumber,
+                        ScheduleDay::getScheduleDate
+                )
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(
+                                (byte) 1,
+                                LocalDate.of(2026, 10, 1)
+                        ),
+                        org.assertj.core.groups.Tuple.tuple(
+                                (byte) 2,
+                                LocalDate.of(2026, 10, 2)
+                        )
+                );
     }
 
     @DisplayName("이미 활성 일정이 있는 여행의 일정 저장을 거부한다")
@@ -132,7 +180,10 @@ class SchedulePersistenceServiceTest {
                 (byte) 1
         )).thenReturn(true);
 
-        assertThatThrownBy(() -> service.save(1L, recommendations()))
+        assertThatThrownBy(() -> service.save(
+                1L,
+                List.of(recommendations())
+        ))
                 .isInstanceOfSatisfying(
                         BusinessException.class,
                         exception -> assertThat(exception.getErrorCode())
@@ -151,9 +202,16 @@ class SchedulePersistenceServiceTest {
     }
 
     private List<RecommendedPlace> recommendations(int count) {
+        return recommendations("google", count);
+    }
+
+    private List<RecommendedPlace> recommendations(
+            String prefix,
+            int count
+    ) {
         return IntStream.rangeClosed(1, count)
                 .mapToObj(index -> new RecommendedPlace(
-                        "google-" + index,
+                        prefix + "-" + index,
                         "장소 " + index,
                         35.0,
                         129.0 + index * 0.01,

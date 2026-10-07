@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -63,7 +64,7 @@ public class SchedulePersistenceService {
     @Transactional
     public GeneratedScheduleResult save(
             long tripId,
-            List<RecommendedPlace> recommendations
+            List<List<RecommendedPlace>> dailyRecommendations
     ) {
         Trip trip = tripRepository.findByIdForUpdate(tripId)
                 .filter(value -> value.getDeletedAt() == null)
@@ -76,69 +77,44 @@ public class SchedulePersistenceService {
         }
 
         LocalDateTime now = LocalDateTime.now();
-        Map<Long, RecommendedPlace> recommendationByPlaceId = new HashMap<>();
-        List<RoutePlace> routePlaces = new ArrayList<>();
         try {
-            for (RecommendedPlace recommendation : recommendations) {
-                Place place = placeRepository
-                        .findByRegion_IdAndGooglePlaceId(
-                                trip.getRegion().getId(),
-                                recommendation.googlePlaceId()
-                        )
-                        .map(existing -> {
-                            existing.update(recommendation, now);
-                            return existing;
-                        })
-                        .orElseGet(() -> placeRepository.save(
-                                new Place(trip.getRegion(), recommendation, now)
-                        ));
-                recommendationByPlaceId.put(place.getId(), recommendation);
-                routePlaces.add(new RoutePlace(
-                        place.getId(),
-                        recommendation.latitude(),
-                        recommendation.longitude(),
-                        recommendation.categoryGroup()
-                ));
+            long tripDayCount = ChronoUnit.DAYS.between(
+                    trip.getStartDate(),
+                    trip.getEndDate()
+            ) + 1;
+            if (dailyRecommendations == null
+                    || dailyRecommendations.size() != tripDayCount) {
+                throw new BusinessException(INVALID_AI_PLACE_RESULT);
             }
 
-            RoutePlan plan = calculator.calculate(routePlaces);
             Schedule schedule = scheduleRepository.save(new Schedule(trip, now));
-            ScheduleDay day = dayRepository.save(
-                    new ScheduleDay(schedule, trip.getStartDate())
-            );
-            Map<Long, ScheduleVisit> visitByPlaceId = new HashMap<>();
-            for (int index = 0; index < plan.places().size(); index++) {
-                RoutePlace routePlace = plan.places().get(index);
-                Place place = placeRepository.getReferenceById(
-                        routePlace.placeId()
-                );
-                RecommendedPlace recommendation = recommendationByPlaceId.get(
-                        routePlace.placeId()
-                );
-                ScheduleVisit visit = visitRepository.save(new ScheduleVisit(
-                        day,
-                        place,
-                        index + 1,
-                        recommendation.editorialSummary(),
+            List<String> dayIds = new ArrayList<>();
+            long totalDistanceMeters = 0;
+            int placeCount = 0;
+            int legCount = 0;
+
+            for (int dayIndex = 0;
+                    dayIndex < dailyRecommendations.size();
+                    dayIndex++) {
+                SavedDayResult dayResult = saveDay(
+                        trip,
+                        schedule,
+                        (byte) (dayIndex + 1),
+                        dailyRecommendations.get(dayIndex),
                         now
-                ));
-                visitByPlaceId.put(routePlace.placeId(), visit);
+                );
+                dayIds.add(dayResult.dayId());
+                totalDistanceMeters += dayResult.totalDistanceMeters();
+                placeCount += dayResult.placeCount();
+                legCount += dayResult.legCount();
             }
-            for (RouteLeg leg : plan.legs()) {
-                legRepository.save(new ScheduleLeg(
-                        day,
-                        visitByPlaceId.get(leg.fromPlaceId()),
-                        visitByPlaceId.get(leg.toPlaceId()),
-                        leg.order(),
-                        leg.distanceMeters()
-                ));
-            }
+
             return new GeneratedScheduleResult(
                     schedule.getId().toString(),
-                    day.getId().toString(),
-                    plan.totalDistanceMeters(),
-                    plan.places().size(),
-                    plan.legs().size()
+                    dayIds,
+                    totalDistanceMeters,
+                    placeCount,
+                    legCount
             );
         } catch (RouteCalculationException exception) {
             if (exception.getReason()
@@ -149,6 +125,117 @@ public class SchedulePersistenceService {
         } catch (NullPointerException exception) {
             throw new BusinessException(INVALID_AI_PLACE_RESULT, exception);
         }
+    }
+
+    private SavedDayResult saveDay(
+            Trip trip,
+            Schedule schedule,
+            byte dayNumber,
+            List<RecommendedPlace> recommendations,
+            LocalDateTime now
+    ) {
+        Map<Long, RecommendedPlace> recommendationByPlaceId = new HashMap<>();
+        List<RoutePlace> routePlaces = new ArrayList<>();
+        for (RecommendedPlace recommendation : recommendations) {
+            Place place = upsertPlace(trip, recommendation, now);
+            recommendationByPlaceId.put(place.getId(), recommendation);
+            routePlaces.add(new RoutePlace(
+                    place.getId(),
+                    recommendation.latitude(),
+                    recommendation.longitude(),
+                    recommendation.categoryGroup()
+            ));
+        }
+
+        RoutePlan plan = calculator.calculate(routePlaces);
+        ScheduleDay day = dayRepository.save(new ScheduleDay(
+                schedule,
+                dayNumber,
+                trip.getStartDate().plusDays(dayNumber - 1L)
+        ));
+        Map<Long, ScheduleVisit> visitByPlaceId = saveVisits(
+                day,
+                plan,
+                recommendationByPlaceId,
+                now
+        );
+        saveLegs(day, plan, visitByPlaceId);
+
+        return new SavedDayResult(
+                day.getId().toString(),
+                plan.totalDistanceMeters(),
+                plan.places().size(),
+                plan.legs().size()
+        );
+    }
+
+    private Place upsertPlace(
+            Trip trip,
+            RecommendedPlace recommendation,
+            LocalDateTime now
+    ) {
+        return placeRepository.findByRegion_IdAndGooglePlaceId(
+                        trip.getRegion().getId(),
+                        recommendation.googlePlaceId()
+                )
+                .map(existing -> {
+                    existing.update(recommendation, now);
+                    return existing;
+                })
+                .orElseGet(() -> placeRepository.save(
+                        new Place(trip.getRegion(), recommendation, now)
+                ));
+    }
+
+    private Map<Long, ScheduleVisit> saveVisits(
+            ScheduleDay day,
+            RoutePlan plan,
+            Map<Long, RecommendedPlace> recommendationByPlaceId,
+            LocalDateTime now
+    ) {
+        Map<Long, ScheduleVisit> visitByPlaceId = new HashMap<>();
+        for (int index = 0; index < plan.places().size(); index++) {
+            RoutePlace routePlace = plan.places().get(index);
+            Place place = placeRepository.getReferenceById(
+                    routePlace.placeId()
+            );
+            RecommendedPlace recommendation = recommendationByPlaceId.get(
+                    routePlace.placeId()
+            );
+            ScheduleVisit visit = visitRepository.save(new ScheduleVisit(
+                    day,
+                    place,
+                    index + 1,
+                    recommendation.editorialSummary(),
+                    now
+            ));
+            visitByPlaceId.put(routePlace.placeId(), visit);
+        }
+        return visitByPlaceId;
+    }
+
+    private void saveLegs(
+            ScheduleDay day,
+            RoutePlan plan,
+            Map<Long, ScheduleVisit> visitByPlaceId
+    ) {
+        for (RouteLeg leg : plan.legs()) {
+            legRepository.save(new ScheduleLeg(
+                    day,
+                    visitByPlaceId.get(leg.fromPlaceId()),
+                    visitByPlaceId.get(leg.toPlaceId()),
+                    leg.order(),
+                    leg.distanceMeters()
+            ));
+        }
+    }
+
+    private record SavedDayResult(
+            String dayId,
+            long totalDistanceMeters,
+            int placeCount,
+            int legCount
+    ) {
     }
 
     /**
