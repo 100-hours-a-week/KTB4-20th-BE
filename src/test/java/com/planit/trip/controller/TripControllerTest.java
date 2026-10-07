@@ -3,8 +3,10 @@ package com.planit.trip.controller;
 import com.planit.domain.TripMemberRole;
 import com.planit.domain.TripProgressStatus;
 import com.planit.global.error.GlobalExceptionHandler;
+import com.planit.trip.exception.TripDateConflictException;
 import com.planit.trip.dto.TripCreateRequest;
 import com.planit.trip.dto.TripCreateResponse;
+import com.planit.trip.dto.TripConflictResponse;
 import com.planit.trip.dto.TripDetailResponse;
 import com.planit.trip.dto.TripJoinRequest;
 import com.planit.trip.dto.TripJoinResponse;
@@ -97,6 +99,50 @@ class TripControllerTest {
                 org.mockito.ArgumentMatchers.eq(USER_PUBLIC_ID),
                 any(TripCreateRequest.class)
         );
+    }
+
+    @DisplayName("여행 생성 기간이 겹치면 충돌 여행 정보를 반환한다")
+    @Test
+    void returnsConflictingTripWhenCreationPeriodOverlaps()
+            throws Exception {
+        when(tripService.createTrip(
+                org.mockito.ArgumentMatchers.eq(USER_PUBLIC_ID),
+                any(TripCreateRequest.class)
+        )).thenThrow(new TripDateConflictException(
+                new TripConflictResponse(
+                        "200",
+                        "제주 여행",
+                        LocalDate.of(2026, 10, 1),
+                        LocalDate.of(2026, 10, 3),
+                        true
+                )
+        ));
+
+        mockMvc.perform(post("/api/trips")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        ))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "부산 여행",
+                                  "regionId": 1,
+                                  "startDate": "2026-10-02",
+                                  "endDate": "2026-10-04",
+                                  "capacity": 4
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code")
+                        .value("TRIP_DATE_CONFLICT"))
+                .andExpect(jsonPath("$.data.tripId").value("200"))
+                .andExpect(jsonPath("$.data.name").value("제주 여행"))
+                .andExpect(jsonPath("$.data.startDate")
+                        .value("2026-10-01"))
+                .andExpect(jsonPath("$.data.endDate")
+                        .value("2026-10-03"))
+                .andExpect(jsonPath("$.data.canLeave").value(true));
     }
 
     @DisplayName("초대 토큰을 사용해 여행에 참여한다")

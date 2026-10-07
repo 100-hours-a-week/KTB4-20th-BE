@@ -94,6 +94,33 @@ class TripMemberRepositoryTest {
         assertThat(result).containsExactly(overlappingMembership);
     }
 
+    @DisplayName("생성할 여행과 기간이 겹치는 여행을 조회한다")
+    @Test
+    void findsTripOverlappingCreationPeriod() {
+        User user = createUser();
+        Trip overlappingTrip = createTrip("경주 여행", TRIP_DATE);
+        Trip differentDateTrip = createTrip(
+                "제주 여행",
+                TRIP_DATE.plusDays(3)
+        );
+        TripMember overlappingMembership =
+                TripMember.createMember(overlappingTrip, user);
+
+        tripMemberRepository.saveAll(List.of(
+                overlappingMembership,
+                TripMember.createMember(differentDateTrip, user)
+        ));
+
+        List<TripMember> result =
+                tripMemberRepository.findActiveTripsOverlapping(
+                        user,
+                        TRIP_DATE.minusDays(1),
+                        TRIP_DATE
+                );
+
+        assertThat(result).containsExactly(overlappingMembership);
+    }
+
     @DisplayName("사용자가 탈퇴한 멤버십은 일정 중복 검사에서 제외한다")
     @Test
     void excludesMembershipThatUserLeft() {
