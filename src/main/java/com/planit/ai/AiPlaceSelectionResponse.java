@@ -10,7 +10,7 @@ public record AiPlaceSelectionResponse(
         Data data
 ) {
 
-    public record Data(List<Place> places) {
+    public record Data(List<List<Place>> places) {
     }
 
     public record Place(

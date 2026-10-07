@@ -67,7 +67,7 @@ public class ScheduleGenerationServiceImpl
         AiPlaceSelectionRequest request = new AiPlaceSelectionRequest(
                 resolveAiRegion(trip.getRegion()),
                 trip.getStartDate(),
-                trip.getStartDate(),
+                trip.getEndDate(),
                 submittedSurveys.stream()
                         .map(this::toMemberSurvey)
                         .toList()
@@ -92,7 +92,7 @@ public class ScheduleGenerationServiceImpl
         try {
             schedulePersistenceService.save(
                     tripId,
-                    recommendedPlaceMapper.map(response)
+                    recommendedPlaceMapper.mapDailyPlaces(response)
             );
         } catch (RouteCalculationException exception) {
             throw new BusinessException(
