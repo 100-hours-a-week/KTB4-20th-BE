@@ -101,6 +101,14 @@ public class Mission {
         updatedAt = closedAt;
     }
 
+    public boolean isPersonal() {
+        return scope == MissionScope.PERSONAL;
+    }
+
+    public boolean isGroup() {
+        return scope == MissionScope.GROUP;
+    }
+
     public Long getId() {
         return id;
     }
