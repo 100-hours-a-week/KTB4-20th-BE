@@ -24,6 +24,9 @@ public record TripCreateRequest(
         @NotNull
         LocalDate startDate,
 
+        @NotNull
+        LocalDate endDate,
+
         @Min(2)
         @Max(8)
         Integer capacity,

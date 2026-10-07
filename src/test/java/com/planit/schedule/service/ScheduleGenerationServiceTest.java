@@ -103,6 +103,7 @@ class ScheduleGenerationServiceTest {
                 .thenReturn(Optional.of(trip));
         when(trip.getId()).thenReturn(TRIP_ID);
         when(trip.getStartDate()).thenReturn(LocalDate.of(2026, 10, 1));
+        when(trip.getEndDate()).thenReturn(LocalDate.of(2026, 10, 3));
         when(trip.getSurveyDeadlineAt())
                 .thenReturn(LocalDateTime.now().plusDays(1));
         when(trip.getRegion()).thenReturn(region);
@@ -135,9 +136,9 @@ class ScheduleGenerationServiceTest {
                 .thenReturn(aiResponse());
     }
 
-    @DisplayName("당일 여행에 사용할 장소를 선정한다")
+    @DisplayName("여행 기간에 사용할 장소를 선정한다")
     @Test
-    void selectsPlacesForDayTrip() {
+    void selectsPlacesForTripPeriod() {
         SchedulePlaceSelectionResponse response = service.generate(
                 USER_ID.toString(),
                 TRIP_ID
@@ -151,7 +152,8 @@ class ScheduleGenerationServiceTest {
         assertThat(request.region()).isEqualTo("서울");
         assertThat(request.startDate())
                 .isEqualTo(LocalDate.of(2026, 10, 1));
-        assertThat(request.endDate()).isEqualTo(request.startDate());
+        assertThat(request.endDate())
+                .isEqualTo(LocalDate.of(2026, 10, 3));
         assertThat(request.members()).hasSize(1);
         assertThat(request.members().getFirst().surveyResult())
                 .containsExactly(

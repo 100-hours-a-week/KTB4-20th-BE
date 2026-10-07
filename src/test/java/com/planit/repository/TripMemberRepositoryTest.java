@@ -40,20 +40,22 @@ class TripMemberRepositoryTest {
     @Autowired
     private TripMemberRepository tripMemberRepository;
 
-    @DisplayName("겹치는 날짜에 참여 중인 여행 수를 계산한다")
+    @DisplayName("여행 기간의 시작일과 종료일이 겹치면 중복으로 계산한다")
     @Test
-    void countsActiveTripOnOverlappingDate() {
+    void countsTripOverlappingPeriodBoundaries() {
         User user = createUser();
         Trip trip = createTrip();
         tripMemberRepository.save(TripMember.createMember(trip, user));
 
-        long count = tripMemberRepository.countActiveTripsOverlapping(
-                user,
-                TRIP_DATE,
-                TRIP_DATE
-        );
-
-        assertThat(count).isEqualTo(1);
+        assertThat(tripMemberRepository.countActiveTripsOverlapping(
+                user, TRIP_DATE.minusDays(1), TRIP_DATE
+        )).isEqualTo(1);
+        assertThat(tripMemberRepository.countActiveTripsOverlapping(
+                user, TRIP_DATE.plusDays(2), TRIP_DATE.plusDays(3)
+        )).isEqualTo(1);
+        assertThat(tripMemberRepository.countActiveTripsOverlapping(
+                user, TRIP_DATE.plusDays(3), TRIP_DATE.plusDays(4)
+        )).isZero();
     }
 
     @DisplayName("초대받은 여행을 제외하고 일정이 겹치는 여행을 조회한다")
@@ -64,7 +66,7 @@ class TripMemberRepositoryTest {
         Trip overlappingTrip = createTrip("경주 여행", TRIP_DATE);
         Trip differentDateTrip = createTrip(
                 "제주 여행",
-                TRIP_DATE.plusDays(1)
+                TRIP_DATE.plusDays(3)
         );
         TripMember overlappingMembership =
                 TripMember.createMember(overlappingTrip, user);
@@ -78,8 +80,8 @@ class TripMemberRepositoryTest {
         List<TripMember> result =
                 tripMemberRepository.findActiveTripsOverlappingExcept(
                         user,
-                        TRIP_DATE,
-                        TRIP_DATE,
+                        TRIP_DATE.plusDays(1),
+                        TRIP_DATE.plusDays(1),
                         invitationTrip.getId()
                 );
 
@@ -102,8 +104,8 @@ class TripMemberRepositoryTest {
 
         long count = tripMemberRepository.countActiveTripsOverlapping(
                 user,
-                TRIP_DATE,
-                TRIP_DATE
+                TRIP_DATE.plusDays(1),
+                TRIP_DATE.plusDays(1)
         );
 
         assertThat(count).isZero();
@@ -124,8 +126,8 @@ class TripMemberRepositoryTest {
 
         long count = tripMemberRepository.countActiveTripsOverlapping(
                 user,
-                TRIP_DATE,
-                TRIP_DATE
+                TRIP_DATE.plusDays(1),
+                TRIP_DATE.plusDays(1)
         );
 
         assertThat(count).isZero();
@@ -408,6 +410,7 @@ class TripMemberRepositoryTest {
                 region,
                 name,
                 tripDate,
+                tripDate.plusDays(2),
                 (byte) 4,
                 tripDate.minusDays(1)
                         .atTime(23, 59, 59, 999_999_000)

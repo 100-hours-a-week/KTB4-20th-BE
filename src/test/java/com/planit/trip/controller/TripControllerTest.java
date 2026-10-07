@@ -80,6 +80,7 @@ class TripControllerTest {
                                   "name": "제주 여행",
                                   "regionId": 1,
                                   "startDate": "2026-10-01",
+                                  "endDate": "2026-10-03",
                                   "capacity": 4,
                                   "surveyDeadlineDate": "2026-09-30"
                                 }
@@ -139,6 +140,7 @@ class TripControllerTest {
                                 "100",
                                 "경주 여행",
                                 LocalDate.of(2026, 9, 26),
+                                LocalDate.of(2026, 9, 28),
                                 TripProgressStatus.SURVEY_IN_PROGRESS,
                                 1,
                                 List.of(new TripListResponse.MemberSummary(
@@ -166,6 +168,8 @@ class TripControllerTest {
                         .value("100"))
                 .andExpect(jsonPath("$.data.trips[0].name")
                         .value("경주 여행"))
+                .andExpect(jsonPath("$.data.trips[0].endDate")
+                        .value("2026-09-28"))
                 .andExpect(jsonPath("$.data.trips[0].status")
                         .value("SURVEY_IN_PROGRESS"))
                 .andExpect(jsonPath("$.data.trips[0].memberCount")
@@ -306,7 +310,8 @@ class TripControllerTest {
                                 {
                                   "name": "부산 여행",
                                   "regionId": 1,
-                                  "startDate": "2026-10-01"
+                                  "startDate": "2026-10-01",
+                                  "endDate": "2026-10-03"
                                 }
                                 """))
                 .andExpect(status().isCreated());
@@ -335,6 +340,7 @@ class TripControllerTest {
                                   "name": "제주여행!",
                                   "regionId": 1,
                                   "startDate": "2026-10-01",
+                                  "endDate": "2026-10-03",
                                   "capacity": 4
                                 }
                                 """))

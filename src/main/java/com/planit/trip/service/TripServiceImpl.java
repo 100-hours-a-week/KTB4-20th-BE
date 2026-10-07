@@ -57,6 +57,7 @@ public class TripServiceImpl implements TripService {
 
     private static final int MAX_TRIP_LIST_SIZE = 10;
     private static final int DEFAULT_TRIP_CAPACITY = 4;
+    private static final int MAX_TRIP_DURATION_DAYS = 10;
     private static final String WITHDRAWN_USER_NAME = "탈퇴한 사용자";
 
     @Override
@@ -70,14 +71,23 @@ public class TripServiceImpl implements TripService {
 
         LocalDate today = LocalDate.now(SEOUL_ZONE);
 
-        validateStartDate(request.startDate(), today);
-        validateNoDateConflict(user, request.startDate());
+        validateTripPeriod(
+                request.startDate(),
+                request.endDate(),
+                today
+        );
+        validateNoDateConflict(
+                user,
+                request.startDate(),
+                request.endDate()
+        );
 
         LocalDateTime surveyDeadlineAt = resolveSurveyDeadline(
                 request.startDate(),
                 request.surveyDeadlineDate(),
                 today
         );
+
         String tripName = request.name().trim();
         int capacity = request.capacity() == null
                 ? DEFAULT_TRIP_CAPACITY
@@ -87,6 +97,7 @@ public class TripServiceImpl implements TripService {
                 region,
                 tripName,
                 request.startDate(),
+                request.endDate(),
                 (byte) capacity,
                 surveyDeadlineAt
         );
@@ -523,8 +534,10 @@ public class TripServiceImpl implements TripService {
                 trip.getId().toString(),
                 trip.getName(),
                 trip.getStartDate(),
+                trip.getEndDate(),
                 TripProgressStatus.resolve(
                         trip.getStartDate(),
+                        trip.getEndDate(),
                         hasConfirmedSchedule,
                         referenceDate
                 ),
@@ -672,8 +685,9 @@ public class TripServiceImpl implements TripService {
                 );
     }
 
-    private void validateStartDate(
+    private void validateTripPeriod(
             LocalDate startDate,
+            LocalDate endDate,
             LocalDate today
     ) {
         // 당일 여행은 생성 즉시 진행 중으로 판단돼 설문·일정 생성·나가기가 막히므로 내일부터만 허용한다.
@@ -682,17 +696,32 @@ public class TripServiceImpl implements TripService {
                     ErrorCode.INVALID_REQUEST
             );
         }
+
+        if (endDate.isBefore(startDate)) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST
+            );
+        }
+
+        LocalDate latestEndDate =
+                startDate.plusDays(MAX_TRIP_DURATION_DAYS - 1);
+        if (endDate.isAfter(latestEndDate)) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST
+            );
+        }
     }
 
     private void validateNoDateConflict(
             User user,
-            LocalDate startDate
+            LocalDate startDate,
+            LocalDate endDate
     ) {
         long overlappingTripCount = tripMemberRepository
                 .countActiveTripsOverlapping(
                         user,
                         startDate,
-                        startDate
+                        endDate
                 );
 
         if (overlappingTripCount > 0) {

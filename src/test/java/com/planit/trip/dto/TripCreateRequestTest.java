@@ -16,6 +16,9 @@ class TripCreateRequestTest {
     private static final LocalDate START_DATE =
             LocalDate.of(2026, 10, 1);
 
+    private static final LocalDate END_DATE =
+            LocalDate.of(2026, 10, 3);
+
     private static final LocalDate SURVEY_DEADLINE_DATE =
             LocalDate.of(2026, 9, 30);
 
@@ -30,6 +33,7 @@ class TripCreateRequestTest {
                 "제주 Trip",
                 1L,
                 START_DATE,
+                END_DATE,
                 4,
                 SURVEY_DEADLINE_DATE
         );
@@ -44,6 +48,7 @@ class TripCreateRequestTest {
                 "부산 여행",
                 1L,
                 START_DATE,
+                END_DATE,
                 4,
                 null
         );
@@ -58,6 +63,7 @@ class TripCreateRequestTest {
                 "   ",
                 1L,
                 START_DATE,
+                END_DATE,
                 4,
                 SURVEY_DEADLINE_DATE
         );
@@ -72,6 +78,7 @@ class TripCreateRequestTest {
                 "ABCDEFGHIJKLM",
                 1L,
                 START_DATE,
+                END_DATE,
                 4,
                 SURVEY_DEADLINE_DATE
         );
@@ -86,6 +93,7 @@ class TripCreateRequestTest {
                 "제주여행!",
                 1L,
                 START_DATE,
+                END_DATE,
                 4,
                 SURVEY_DEADLINE_DATE
         );
@@ -100,6 +108,7 @@ class TripCreateRequestTest {
                 "제주 여행",
                 null,
                 START_DATE,
+                END_DATE,
                 4,
                 SURVEY_DEADLINE_DATE
         );
@@ -114,6 +123,7 @@ class TripCreateRequestTest {
                 "제주 여행",
                 0L,
                 START_DATE,
+                END_DATE,
                 4,
                 SURVEY_DEADLINE_DATE
         );
@@ -128,11 +138,27 @@ class TripCreateRequestTest {
                 "제주 여행",
                 1L,
                 null,
+                END_DATE,
                 4,
                 SURVEY_DEADLINE_DATE
         );
 
         assertInvalidField(request, "startDate");
+    }
+
+    @DisplayName("여행 종료일이 없는 요청을 거부한다")
+    @Test
+    void rejectsMissingEndDate() {
+        TripCreateRequest request = new TripCreateRequest(
+                "제주 여행",
+                1L,
+                START_DATE,
+                null,
+                4,
+                SURVEY_DEADLINE_DATE
+        );
+
+        assertInvalidField(request, "endDate");
     }
 
     @DisplayName("허용 범위를 벗어난 여행 정원을 거부한다")
@@ -143,6 +169,7 @@ class TripCreateRequestTest {
                 "제주 여행",
                 1L,
                 START_DATE,
+                END_DATE,
                 capacity,
                 SURVEY_DEADLINE_DATE
         );
@@ -158,6 +185,7 @@ class TripCreateRequestTest {
                 "제주 여행",
                 1L,
                 START_DATE,
+                END_DATE,
                 capacity,
                 SURVEY_DEADLINE_DATE
         );
