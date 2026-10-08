@@ -108,6 +108,24 @@ class MissionParticipationTest {
         assertThat(participation.getCompletedAt()).isEqualTo(completedAt);
     }
 
+    @DisplayName("남은 성공 사진이 없으면 개인 AI 완료 상태를 되돌린다")
+    @Test
+    void reopensAfterDeletingLastSuccessPhoto() {
+        MissionParticipation participation = MissionParticipation.create(
+                personalMission(),
+                mock(TripMember.class),
+                now()
+        );
+        participation.completeByAi(now());
+
+        participation.reflectPhotoDeletion(false, now().plusMinutes(1));
+
+        assertThat(participation.getStatus())
+                .isEqualTo(MissionCompletionStatus.PENDING);
+        assertThat(participation.getCompletionMethod()).isNull();
+        assertThat(participation.getCompletedAt()).isNull();
+    }
+
     private Mission personalMission() {
         return mission(MissionScope.PERSONAL);
     }

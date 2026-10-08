@@ -108,6 +108,22 @@ public class MissionParticipation {
         complete(MissionCompletionMethod.MANUAL, completedAt);
     }
 
+    public void reflectPhotoDeletion(
+            boolean hasRemainingSuccessPhoto,
+            LocalDateTime updatedAt
+    ) {
+        if (status != MissionCompletionStatus.COMPLETED
+                || completionMethod != MissionCompletionMethod.AI
+                || hasRemainingSuccessPhoto) {
+            return;
+        }
+
+        status = MissionCompletionStatus.PENDING;
+        completionMethod = null;
+        completedAt = null;
+        this.updatedAt = updatedAt;
+    }
+
     private void complete(
             MissionCompletionMethod method,
             LocalDateTime completedAt
