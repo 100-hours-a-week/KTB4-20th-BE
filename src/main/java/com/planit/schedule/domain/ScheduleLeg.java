@@ -29,4 +29,8 @@ public class ScheduleLeg {
     public void moveForward() {
         this.legOrder--;
     }
+
+    public void moveBackward() {
+        this.legOrder++;
+    }
 }
