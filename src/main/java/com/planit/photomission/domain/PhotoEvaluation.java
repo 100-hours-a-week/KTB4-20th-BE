@@ -78,9 +78,9 @@ public class PhotoEvaluation {
             int attemptNo,
             LocalDateTime requestedAt
     ) {
-        if (attemptNo < 1 || attemptNo > 3) {
+        if (attemptNo < 1 || attemptNo > Byte.MAX_VALUE) {
             throw new IllegalArgumentException(
-                    "사진 판정 시도 번호는 1부터 3까지입니다"
+                    "사진 판정 시도 번호는 1 이상이어야 합니다"
             );
         }
 
@@ -107,7 +107,8 @@ public class PhotoEvaluation {
         validateScore(matchScore);
         validateDetectedLabels(detectedLabelsJson);
         validateReason(result, reason);
-        validateLandmarkConfidence(landmarkConfidence);
+        BigDecimal normalizedLandmarkConfidence =
+                normalizeLandmarkConfidence(landmarkConfidence);
         validateRetryHint(result, retryHint);
 
         executionStatus = PhotoEvaluationExecutionStatus.SUCCEEDED;
@@ -115,7 +116,7 @@ public class PhotoEvaluation {
         this.reason = reason;
         this.matchScore = matchScore;
         this.detectedLabelsJson = detectedLabelsJson;
-        this.landmarkConfidence = landmarkConfidence;
+        this.landmarkConfidence = normalizedLandmarkConfidence;
         this.retryHint = retryHint;
         this.evaluatedAt = evaluatedAt;
     }
@@ -167,16 +168,20 @@ public class PhotoEvaluation {
         }
     }
 
-    private void validateLandmarkConfidence(BigDecimal confidence) {
+    private BigDecimal normalizeLandmarkConfidence(BigDecimal confidence) {
         if (confidence == null) {
-            return;
+            return null;
         }
-        if (confidence.compareTo(BigDecimal.valueOf(60)) < 0
+        if (confidence.compareTo(BigDecimal.ZERO) < 0
                 || confidence.compareTo(BigDecimal.valueOf(100)) > 0) {
             throw new IllegalArgumentException(
-                    "랜드마크 신뢰도는 60 이상 100 이하만 저장합니다"
+                    "랜드마크 신뢰도는 0부터 100까지입니다"
             );
         }
+        if (confidence.compareTo(BigDecimal.valueOf(60)) < 0) {
+            return null;
+        }
+        return confidence;
     }
 
     private void validateRetryHint(

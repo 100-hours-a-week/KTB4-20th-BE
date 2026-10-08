@@ -28,6 +28,20 @@ class PhotoEvaluationTest {
         assertThat(evaluation.getEvaluatedAt()).isNull();
     }
 
+    @DisplayName("AI 실행 오류는 별도 이력이므로 네 번째 실행도 기록할 수 있다")
+    @Test
+    void allowsExecutionAttemptsBeyondBusinessRetryLimit() {
+        PhotoEvaluation evaluation = PhotoEvaluation.start(
+                mock(MissionPhoto.class),
+                4,
+                now()
+        );
+
+        assertThat(evaluation.getAttemptNo()).isEqualTo(4);
+        assertThat(evaluation.getExecutionStatus())
+                .isEqualTo(PhotoEvaluationExecutionStatus.RUNNING);
+    }
+
     @DisplayName("정상 AI 응답의 재시도 판정과 안내 문구를 기록한다")
     @Test
     void succeedsWithRetryResult() {
@@ -74,6 +88,24 @@ class PhotoEvaluationTest {
                 .isEqualTo(PhotoEvaluationResult.FAIL);
         assertThat(evaluation.getReason())
                 .isEqualTo(PhotoEvaluationReason.LOCATION_MISMATCH);
+    }
+
+    @DisplayName("60 미만 랜드마크 신뢰도는 저장하지 않는다")
+    @Test
+    void normalizesLowLandmarkConfidenceToNull() {
+        PhotoEvaluation evaluation = runningEvaluation();
+
+        evaluation.succeed(
+                PhotoEvaluationResult.SUCCESS,
+                null,
+                new BigDecimal("95.00"),
+                "[]",
+                new BigDecimal("59.00"),
+                null,
+                now().plusSeconds(1)
+        );
+
+        assertThat(evaluation.getLandmarkConfidence()).isNull();
     }
 
     @DisplayName("AI 호출 오류는 판정 결과 없이 실행 실패로 기록한다")
