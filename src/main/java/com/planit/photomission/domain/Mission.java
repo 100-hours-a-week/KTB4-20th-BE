@@ -51,18 +51,11 @@ public class Mission {
     @Column(name = "conditions_json", nullable = false, columnDefinition = "json")
     private String conditionsJson;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false, length = 20)
-    private MissionStatus status;
-
     @Column(name = "expires_at", nullable = false)
     private LocalDateTime expiresAt;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
-
-    @Column(name = "updated_at", nullable = false)
-    private LocalDateTime updatedAt;
 
     protected Mission() {
     }
@@ -87,18 +80,15 @@ public class Mission {
         mission.title = title;
         mission.description = description;
         mission.conditionsJson = conditionsJson;
-        mission.status = MissionStatus.ACTIVE;
         mission.expiresAt = trip.getEndDate()
                 .plusDays(1)
                 .atStartOfDay();
         mission.createdAt = now;
-        mission.updatedAt = now;
         return mission;
     }
 
-    public void close(LocalDateTime closedAt) {
-        status = MissionStatus.CLOSED;
-        updatedAt = closedAt;
+    public boolean isExpired(LocalDateTime now) {
+        return !now.isBefore(expiresAt);
     }
 
     public boolean isPersonal() {
@@ -145,10 +135,6 @@ public class Mission {
         return conditionsJson;
     }
 
-    public MissionStatus getStatus() {
-        return status;
-    }
-
     public LocalDateTime getExpiresAt() {
         return expiresAt;
     }
@@ -157,7 +143,4 @@ public class Mission {
         return createdAt;
     }
 
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
 }

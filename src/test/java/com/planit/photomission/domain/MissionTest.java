@@ -5,17 +5,17 @@ import com.planit.schedule.domain.ScheduleDay;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import java.time.LocalDateTime;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 class MissionTest {
 
-    @DisplayName("개인·단체 공통 미션 정보를 활성 상태로 생성한다")
+    @DisplayName("개인·단체 공통 미션 정보와 마감 시각을 생성한다")
     @Test
-    void createsActiveMission() {
+    void createsMission() {
         Trip trip = mock(Trip.class);
         ScheduleDay scheduleDay = mock(ScheduleDay.class);
         LocalDateTime now =
@@ -40,24 +40,22 @@ class MissionTest {
         assertThat(mission.getScheduleDay()).isSameAs(scheduleDay);
         assertThat(mission.getMissionOrder()).isEqualTo((byte) 1);
         assertThat(mission.getScope()).isEqualTo(MissionScope.GROUP);
-        assertThat(mission.getStatus()).isEqualTo(MissionStatus.ACTIVE);
         assertThat(mission.getExpiresAt())
                 .isEqualTo(LocalDateTime.of(2026, 10, 9, 0, 0));
         assertThat(mission.getCreatedAt()).isEqualTo(now);
-        assertThat(mission.getUpdatedAt()).isEqualTo(now);
     }
 
-    @DisplayName("미션을 종료 상태로 변경한다")
+    @DisplayName("마감 시각 전에는 수행 가능하고 마감 시각부터 만료된다")
     @Test
-    void closesMission() {
+    void determinesExpirationAtBoundary() {
         Mission mission = createMission();
-        LocalDateTime closedAt =
-                LocalDateTime.of(2026, 10, 8, 0, 0);
 
-        mission.close(closedAt);
-
-        assertThat(mission.getStatus()).isEqualTo(MissionStatus.CLOSED);
-        assertThat(mission.getUpdatedAt()).isEqualTo(closedAt);
+        assertThat(mission.isExpired(
+                LocalDateTime.of(2026, 10, 8, 23, 59, 59)
+        )).isFalse();
+        assertThat(mission.isExpired(
+                LocalDateTime.of(2026, 10, 9, 0, 0)
+        )).isTrue();
     }
 
     private Mission createMission() {

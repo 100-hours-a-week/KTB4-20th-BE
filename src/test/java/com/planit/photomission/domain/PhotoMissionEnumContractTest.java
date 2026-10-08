@@ -17,14 +17,9 @@ class PhotoMissionEnumContractTest {
                 );
     }
 
-    @DisplayName("미션과 완료 상태를 정의한다")
+    @DisplayName("미션 완료 상태와 완료 방식을 정의한다")
     @Test
-    void definesMissionStatuses() {
-        assertThat(MissionStatus.values())
-                .containsExactly(
-                        MissionStatus.ACTIVE,
-                        MissionStatus.CLOSED
-                );
+    void definesMissionCompletionTypes() {
         assertThat(MissionCompletionStatus.values())
                 .containsExactly(
                         MissionCompletionStatus.PENDING,
