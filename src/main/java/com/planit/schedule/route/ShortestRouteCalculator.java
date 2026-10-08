@@ -6,13 +6,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import static com.planit.schedule.route.HaversineDistanceCalculator.distanceMeters;
 import static com.planit.schedule.route.RouteCalculationException.Reason.INVALID_PLACE_RESULT;
 import static com.planit.schedule.route.RouteCalculationException.Reason.ROUTE_NOT_FOUND;
 
 public final class ShortestRouteCalculator {
 
     private static final int REQUIRED_PLACE_MIN_COUNT = 5;
-    private static final double EARTH_RADIUS_METERS = 6_371_000.0;
 
     public RoutePlan calculate(List<RoutePlace> places) {
         validate(places);
@@ -102,7 +102,12 @@ public final class ShortestRouteCalculator {
         for (int index = 0; index < route.size() - 1; index++) {
             RoutePlace from = route.get(index);
             RoutePlace to = route.get(index + 1);
-            long distance = distanceMeters(from, to);
+            long distance = distanceMeters(
+                    from.latitude(),
+                    from.longitude(),
+                    to.latitude(),
+                    to.longitude()
+            );
             totalDistance += distance;
             legs.add(new RouteLeg(
                     from.placeId(),
@@ -118,32 +123,16 @@ public final class ShortestRouteCalculator {
     private long totalDistance(List<RoutePlace> route) {
         long totalDistance = 0;
         for (int index = 0; index < route.size() - 1; index++) {
+            RoutePlace from = route.get(index);
+            RoutePlace to = route.get(index + 1);
             totalDistance += distanceMeters(
-                    route.get(index),
-                    route.get(index + 1)
+                    from.latitude(),
+                    from.longitude(),
+                    to.latitude(),
+                    to.longitude()
             );
         }
         return totalDistance;
-    }
-
-    private long distanceMeters(RoutePlace from, RoutePlace to) {
-        double fromLatitude = Math.toRadians(from.latitude());
-        double toLatitude = Math.toRadians(to.latitude());
-        double latitudeDelta = toLatitude - fromLatitude;
-        double longitudeDelta = Math.toRadians(
-                to.longitude() - from.longitude()
-        );
-
-        double haversine = Math.pow(Math.sin(latitudeDelta / 2), 2)
-                + Math.cos(fromLatitude)
-                * Math.cos(toLatitude)
-                * Math.pow(Math.sin(longitudeDelta / 2), 2);
-        double boundedHaversine = Math.min(1.0, Math.max(0.0, haversine));
-        double centralAngle = 2 * Math.atan2(
-                Math.sqrt(boundedHaversine),
-                Math.sqrt(1 - boundedHaversine)
-        );
-        return Math.round(EARTH_RADIUS_METERS * centralAngle);
     }
 
     private void validate(List<RoutePlace> places) {

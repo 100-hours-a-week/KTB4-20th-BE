@@ -24,6 +24,7 @@ public class Schedule {
         this.confirmedAt = now; this.createdAt = now;
     }
     public Long getId() { return id; }
+    public Trip getTrip() { return trip; }
     public String getStrategy() { return strategy; }
     public String getStatus() { return status; }
     public LocalDateTime getCreatedAt() { return createdAt; }

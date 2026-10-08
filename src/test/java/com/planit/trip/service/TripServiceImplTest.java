@@ -98,6 +98,7 @@ class TripServiceImplTest {
                 regionRepository,
                 tripRepository,
                 tripMemberRepository,
+                new TripMemberAccessService(tripMemberRepository),
                 tripInvitationRepository,
                 tokenHasher,
                 tripListCursorCodec,

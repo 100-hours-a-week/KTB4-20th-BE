@@ -13,17 +13,23 @@ import com.planit.schedule.domain.ScheduleDay;
 import com.planit.schedule.domain.ScheduleLeg;
 import com.planit.schedule.domain.ScheduleVisit;
 import com.planit.schedule.dto.ScheduleDetailResponse;
+import com.planit.schedule.dto.ScheduleStopDeleteResponse;
 import com.planit.schedule.repository.ScheduleDayRepository;
 import com.planit.schedule.repository.ScheduleLegRepository;
 import com.planit.schedule.repository.ScheduleRepository;
 import com.planit.schedule.repository.ScheduleVisitRepository;
+import com.planit.trip.service.TripMemberAccessService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.ZoneId;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+
+import static com.planit.schedule.route.HaversineDistanceCalculator.distanceMeters;
 
 @Service
 @RequiredArgsConstructor
@@ -36,6 +42,7 @@ public class ScheduleServiceImpl implements ScheduleService {
     private final UserRepository userRepository;
     private final TripRepository tripRepository;
     private final TripMemberRepository tripMemberRepository;
+    private final TripMemberAccessService tripMemberAccessService;
     private final ScheduleRepository scheduleRepository;
     private final ScheduleDayRepository scheduleDayRepository;
     private final ScheduleVisitRepository scheduleVisitRepository;
@@ -78,9 +85,139 @@ public class ScheduleServiceImpl implements ScheduleService {
         );
     }
 
+    @Override
+    @Transactional
+    public ScheduleStopDeleteResponse deleteStop(
+            String userPublicId,
+            Long tripId,
+            Long stopId
+    ) {
+        User user = findActiveUser(userPublicId);
+        Trip trip = tripRepository.findByIdForUpdate(tripId)
+                .filter(value -> value.getDeletedAt() == null)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.TRIP_NOT_FOUND
+                ));
+        tripMemberAccessService.findActiveHost(
+                trip,
+                user,
+                ErrorCode.TRIP_HOST_REQUIRED
+        );
+        if (!LocalDate.now(SEOUL_ZONE).isBefore(trip.getStartDate())) {
+            throw new BusinessException(ErrorCode.SCHEDULE_CHANGE_NOT_ALLOWED);
+        }
+
+        Schedule schedule = scheduleRepository
+                .findByTripIdAndActiveConfirmedSlot(
+                        tripId,
+                        ACTIVE_CONFIRMED_SLOT
+                )
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.ACTIVE_SCHEDULE_NOT_FOUND
+                ));
+        ScheduleVisit target = scheduleVisitRepository
+                .findWithDayAndScheduleById(stopId)
+                .filter(visit -> visit.getDay().getSchedule().getId()
+                        .equals(schedule.getId()))
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.SCHEDULE_STOP_NOT_FOUND
+                ));
+        ScheduleDay day = target.getDay();
+
+        if ("REMOVED".equals(target.getStatus())) {
+            return deleteResponse(schedule, target, day);
+        }
+        if (scheduleVisitRepository.countByDay_Schedule_IdAndStatus(
+                schedule.getId(),
+                "ACTIVE"
+        ) <= 3) {
+            throw new BusinessException(
+                    ErrorCode.SCHEDULE_MINIMUM_STOPS_REQUIRED
+            );
+        }
+
+        List<ScheduleVisit> visits = scheduleVisitRepository
+                .findByDayIdAndStatusOrderByVisitOrderAsc(
+                        day.getId(),
+                        "ACTIVE"
+                );
+        int targetIndex = findVisitIndex(visits, target.getId());
+        if (targetIndex < 0) {
+            throw new BusinessException(ErrorCode.SCHEDULE_STOP_NOT_FOUND);
+        }
+
+        updateLegsForDeletion(day, visits, targetIndex);
+        target.remove(LocalDateTime.now());
+        visits.subList(targetIndex + 1, visits.size())
+                .forEach(ScheduleVisit::moveForward);
+
+        return deleteResponse(schedule, target, day);
+    }
+
+    private int findVisitIndex(List<ScheduleVisit> visits, Long visitId) {
+        for (int index = 0; index < visits.size(); index++) {
+            if (visits.get(index).getId().equals(visitId)) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private void updateLegsForDeletion(
+            ScheduleDay day,
+            List<ScheduleVisit> visits,
+            int targetIndex
+    ) {
+        ScheduleVisit target = visits.get(targetIndex);
+        List<ScheduleLeg> legs = scheduleLegRepository
+                .findByDayIdOrderByLegOrderAsc(day.getId());
+        List<ScheduleLeg> connectedLegs = legs.stream()
+                .filter(leg -> leg.getFromVisit().getId().equals(target.getId())
+                        || leg.getToVisit().getId().equals(target.getId()))
+                .toList();
+        scheduleLegRepository.deleteAll(connectedLegs);
+
+        if (targetIndex > 0 && targetIndex < visits.size() - 1) {
+            ScheduleVisit previous = visits.get(targetIndex - 1);
+            ScheduleVisit next = visits.get(targetIndex + 1);
+            scheduleLegRepository.save(new ScheduleLeg(
+                    day,
+                    previous,
+                    next,
+                    targetIndex,
+                    distanceMeters(
+                            previous.getPlace().getLatitude(),
+                            previous.getPlace().getLongitude(),
+                            next.getPlace().getLatitude(),
+                            next.getPlace().getLongitude()
+                    )
+            ));
+        }
+
+        legs.stream()
+                .filter(leg -> !connectedLegs.contains(leg))
+                .filter(leg -> leg.getLegOrder() > targetIndex)
+                .forEach(ScheduleLeg::moveForward);
+    }
+
+    private ScheduleStopDeleteResponse deleteResponse(
+            Schedule schedule,
+            ScheduleVisit deletedVisit,
+            ScheduleDay day
+    ) {
+        return new ScheduleStopDeleteResponse(
+                schedule.getId().toString(),
+                deletedVisit.getId().toString(),
+                toDayResponse(day)
+        );
+    }
+
     private ScheduleDetailResponse.Day toDayResponse(ScheduleDay day) {
         List<ScheduleVisit> visits = scheduleVisitRepository
-                .findByDayIdOrderByVisitOrderAsc(day.getId());
+                .findByDayIdAndStatusOrderByVisitOrderAsc(
+                        day.getId(),
+                        "ACTIVE"
+                );
         List<ScheduleLeg> legs = scheduleLegRepository
                 .findByDayIdOrderByLegOrderAsc(day.getId());
 

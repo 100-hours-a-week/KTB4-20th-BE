@@ -2,10 +2,12 @@ package com.planit.schedule.controller;
 
 import com.planit.global.response.ApiResponse;
 import com.planit.schedule.dto.ScheduleDetailResponse;
+import com.planit.schedule.dto.ScheduleStopDeleteResponse;
 import com.planit.schedule.service.ScheduleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -34,6 +36,23 @@ public class ScheduleController {
                 SUCCESS_CODE,
                 SUCCESS_MESSAGE,
                 response
+        );
+    }
+
+    @DeleteMapping("/{tripId}/schedule/stops/{stopId}")
+    public ApiResponse<ScheduleStopDeleteResponse> deleteStop(
+            Authentication authentication,
+            @PathVariable Long tripId,
+            @PathVariable Long stopId
+    ) {
+        return ApiResponse.success(
+                "SCHEDULE_STOP_DELETED",
+                "일정에서 장소를 삭제했습니다.",
+                scheduleService.deleteStop(
+                        authentication.getName(),
+                        tripId,
+                        stopId
+                )
         );
     }
 }
