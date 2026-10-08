@@ -7,7 +7,6 @@ import com.planit.domain.Region;
 import com.planit.domain.Survey;
 import com.planit.domain.Trip;
 import com.planit.domain.TripMember;
-import com.planit.domain.TripMemberRole;
 import com.planit.domain.User;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
@@ -20,6 +19,7 @@ import com.planit.repository.UserRepository;
 import com.planit.schedule.dto.SchedulePlaceSelectionResponse;
 import com.planit.schedule.ai.AiRecommendedPlaceMapper;
 import com.planit.schedule.route.RouteCalculationException;
+import com.planit.trip.service.TripMemberAccessService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,6 +42,7 @@ public class ScheduleGenerationServiceImpl
     private final UserRepository userRepository;
     private final TripRepository tripRepository;
     private final TripMemberRepository tripMemberRepository;
+    private final TripMemberAccessService tripMemberAccessService;
     private final SurveyRepository surveyRepository;
     private final SurveyAnswerRepository surveyAnswerRepository;
     private final SurveyExcludedCategoryRepository excludedCategoryRepository;
@@ -57,7 +58,11 @@ public class ScheduleGenerationServiceImpl
     ) {
         User user = findActiveUser(userPublicId);
         Trip trip = findActiveTrip(tripId);
-        TripMember host = findActiveHost(trip, user);
+        TripMember host = tripMemberAccessService.findActiveHost(
+                trip,
+                user,
+                ErrorCode.TRIP_HOST_REQUIRED
+        );
 
         List<TripMember> activeMembers =
                 tripMemberRepository.findActiveMembersByTrip(trip);
@@ -220,20 +225,6 @@ public class ScheduleGenerationServiceImpl
                     ErrorCode.UNSUPPORTED_TRIP_REGION
             );
         };
-    }
-
-    private TripMember findActiveHost(Trip trip, User user) {
-        TripMember member = tripMemberRepository
-                .findByTripAndUserAndLeftAtIsNull(trip, user)
-                .filter(found -> found.getActiveSlot() != null
-                        && found.getActiveSlot() == 1)
-                .orElseThrow(() -> new BusinessException(
-                        ErrorCode.TRIP_MEMBER_REQUIRED
-                ));
-        if (member.getRole() != TripMemberRole.HOST) {
-            throw new BusinessException(ErrorCode.ACCESS_DENIED);
-        }
-        return member;
     }
 
     private Trip findActiveTrip(Long tripId) {

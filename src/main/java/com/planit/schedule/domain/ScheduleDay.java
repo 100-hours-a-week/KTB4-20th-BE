@@ -17,6 +17,7 @@ public class ScheduleDay {
         this.scheduleDate = date;
     }
     public Long getId() { return id; }
+    public Schedule getSchedule() { return schedule; }
     public byte getDayNumber() { return dayNumber; }
     public LocalDate getScheduleDate() { return scheduleDate; }
 }

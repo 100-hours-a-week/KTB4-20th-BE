@@ -16,6 +16,7 @@ public class ScheduleVisit {
     @Column(nullable = false, length = 20) private String status;
     @Column(name = "created_at", nullable = false) private LocalDateTime createdAt;
     @Column(name = "updated_at", nullable = false) private LocalDateTime updatedAt;
+    @Column(name = "removed_at") private LocalDateTime removedAt;
     @Column(length = 20) private String source;
     @Column(name = "selection_reason", length = 500) private String selectionReason;
     protected ScheduleVisit() {}
@@ -26,9 +27,22 @@ public class ScheduleVisit {
         this.createdAt = now; this.updatedAt = now;
     }
     public Long getId() { return id; }
+    public ScheduleDay getDay() { return day; }
     public Place getPlace() { return place; }
     public short getVisitOrder() { return visitOrder; }
     public String getPlaceNameSnapshot() { return placeNameSnapshot; }
     public String getAddressSnapshot() { return addressSnapshot; }
+    public String getStatus() { return status; }
+    public LocalDateTime getRemovedAt() { return removedAt; }
     public String getSelectionReason() { return selectionReason; }
+
+    public void remove(LocalDateTime now) {
+        this.status = "REMOVED";
+        this.removedAt = now;
+        this.updatedAt = now;
+    }
+
+    public void moveForward() {
+        this.visitOrder--;
+    }
 }

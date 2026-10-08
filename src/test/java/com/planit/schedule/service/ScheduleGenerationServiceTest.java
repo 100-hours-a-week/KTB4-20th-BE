@@ -22,6 +22,7 @@ import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
 import com.planit.schedule.dto.SchedulePlaceSelectionResponse;
 import com.planit.schedule.ai.AiRecommendedPlaceMapper;
+import com.planit.trip.service.TripMemberAccessService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -82,6 +83,7 @@ class ScheduleGenerationServiceTest {
                 userRepository,
                 tripRepository,
                 tripMemberRepository,
+                new TripMemberAccessService(tripMemberRepository),
                 surveyRepository,
                 surveyAnswerRepository,
                 excludedCategoryRepository,
@@ -110,6 +112,9 @@ class ScheduleGenerationServiceTest {
         when(region.getCode()).thenReturn("REGION-SEOUL");
         when(host.getRole()).thenReturn(TripMemberRole.HOST);
         when(host.getActiveSlot()).thenReturn((byte) 1);
+        when(host.getHostSlot()).thenReturn((byte) 1);
+        when(host.isActive()).thenReturn(true);
+        when(host.isCurrentHost()).thenReturn(true);
         when(host.getUser()).thenReturn(user);
         when(host.getTrip()).thenReturn(trip);
         when(tripMemberRepository.findByTripAndUserAndLeftAtIsNull(
@@ -211,9 +216,10 @@ class ScheduleGenerationServiceTest {
     @DisplayName("방장이 아닌 사용자의 일정 생성을 거부한다")
     @Test
     void rejectsNonHost() {
-        when(host.getRole()).thenReturn(TripMemberRole.MEMBER);
+        when(host.getHostSlot()).thenReturn(null);
+        when(host.isCurrentHost()).thenReturn(false);
 
-        assertError(ErrorCode.ACCESS_DENIED);
+        assertError(ErrorCode.TRIP_HOST_REQUIRED);
 
         verify(aiTripClient, never()).selectPlaces(any());
     }

@@ -1,0 +1,307 @@
+package com.planit.schedule.service;
+
+import com.planit.domain.Region;
+import com.planit.domain.Trip;
+import com.planit.domain.TripMember;
+import com.planit.domain.User;
+import com.planit.global.error.BusinessException;
+import com.planit.global.error.ErrorCode;
+import com.planit.repository.TripMemberRepository;
+import com.planit.repository.TripRepository;
+import com.planit.repository.UserRepository;
+import com.planit.schedule.ai.RecommendedPlace;
+import com.planit.schedule.domain.Place;
+import com.planit.schedule.domain.Schedule;
+import com.planit.schedule.domain.ScheduleDay;
+import com.planit.schedule.domain.ScheduleLeg;
+import com.planit.schedule.domain.ScheduleVisit;
+import com.planit.schedule.dto.ScheduleStopDeleteResponse;
+import com.planit.schedule.repository.ScheduleDayRepository;
+import com.planit.schedule.repository.ScheduleLegRepository;
+import com.planit.schedule.repository.ScheduleRepository;
+import com.planit.schedule.repository.ScheduleVisitRepository;
+import com.planit.schedule.route.PlaceCategoryGroup;
+import com.planit.trip.service.TripMemberAccessService;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+class ScheduleServiceImplTest {
+
+    private static final UUID USER_PUBLIC_ID = UUID.fromString(
+            "01991f6e-7300-7b21-a3cc-1436db3df95e"
+    );
+
+    private UserRepository userRepository;
+    private TripRepository tripRepository;
+    private TripMemberRepository tripMemberRepository;
+    private ScheduleRepository scheduleRepository;
+    private ScheduleDayRepository dayRepository;
+    private ScheduleVisitRepository visitRepository;
+    private ScheduleLegRepository legRepository;
+    private ScheduleServiceImpl service;
+    private User user;
+    private Trip trip;
+    private Schedule schedule;
+    private ScheduleDay day;
+    private List<ScheduleVisit> visits;
+    private List<ScheduleLeg> legs;
+
+    @BeforeEach
+    void setUp() {
+        userRepository = mock(UserRepository.class);
+        tripRepository = mock(TripRepository.class);
+        tripMemberRepository = mock(TripMemberRepository.class);
+        scheduleRepository = mock(ScheduleRepository.class);
+        dayRepository = mock(ScheduleDayRepository.class);
+        visitRepository = mock(ScheduleVisitRepository.class);
+        legRepository = mock(ScheduleLegRepository.class);
+        service = new ScheduleServiceImpl(
+                userRepository,
+                tripRepository,
+                tripMemberRepository,
+                new TripMemberAccessService(tripMemberRepository),
+                scheduleRepository,
+                dayRepository,
+                visitRepository,
+                legRepository
+        );
+
+        user = mock(User.class);
+        trip = mock(Trip.class);
+        when(trip.getStartDate()).thenReturn(LocalDate.now().plusDays(10));
+        when(tripRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(trip));
+        when(userRepository.findByPublicIdAndDeletedAtIsNull(USER_PUBLIC_ID))
+                .thenReturn(Optional.of(user));
+
+        TripMember host = mock(TripMember.class);
+        when(host.getActiveSlot()).thenReturn((byte) 1);
+        when(host.getHostSlot()).thenReturn((byte) 1);
+        when(host.isActive()).thenReturn(true);
+        when(host.isCurrentHost()).thenReturn(true);
+        when(tripMemberRepository.findByTripAndUserAndLeftAtIsNull(trip, user))
+                .thenReturn(Optional.of(host));
+
+        schedule = new Schedule(trip, LocalDateTime.now());
+        ReflectionTestUtils.setField(schedule, "id", 10L);
+        day = new ScheduleDay(schedule, (byte) 1, LocalDate.now().plusDays(10));
+        ReflectionTestUtils.setField(day, "id", 20L);
+        when(scheduleRepository.findByTripIdAndActiveConfirmedSlot(1L, (byte) 1))
+                .thenReturn(Optional.of(schedule));
+
+        visits = List.of(
+                visit(101L, 201L, 1, 35.0, 129.0),
+                visit(102L, 202L, 2, 35.1, 129.1),
+                visit(103L, 203L, 3, 35.2, 129.2),
+                visit(104L, 204L, 4, 35.3, 129.3)
+        );
+        legs = List.of(
+                leg(301L, visits.get(0), visits.get(1), 1),
+                leg(302L, visits.get(1), visits.get(2), 2),
+                leg(303L, visits.get(2), visits.get(3), 3)
+        );
+        when(visitRepository.countByDay_Schedule_IdAndStatus(10L, "ACTIVE"))
+                .thenReturn(4L);
+        when(legRepository.findByDayIdOrderByLegOrderAsc(20L))
+                .thenReturn(legs, List.of());
+        when(legRepository.save(any(ScheduleLeg.class)))
+                .thenAnswer(invocation -> {
+                    ScheduleLeg leg = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(leg, "id", 999L);
+                    return leg;
+                });
+    }
+
+    @DisplayName("가운데 장소를 삭제하고 양옆 장소를 새 구간으로 연결한다")
+    @Test
+    void deletesMiddleStopAndReconnectsAdjacentStops() {
+        ScheduleVisit target = visits.get(1);
+        when(visitRepository.findWithDayAndScheduleById(102L))
+                .thenReturn(Optional.of(target));
+        when(visitRepository.findByDayIdAndStatusOrderByVisitOrderAsc(20L, "ACTIVE"))
+                .thenReturn(visits, List.of(visits.get(0), visits.get(2), visits.get(3)));
+
+        ScheduleStopDeleteResponse response = service.deleteStop(
+                USER_PUBLIC_ID.toString(),
+                1L,
+                102L
+        );
+
+        assertThat(response.deletedStopId()).isEqualTo("102");
+        assertThat(target.getStatus()).isEqualTo("REMOVED");
+        assertThat(target.getRemovedAt()).isNotNull();
+        assertThat(visits.get(2).getVisitOrder()).isEqualTo((short) 2);
+        assertThat(visits.get(3).getVisitOrder()).isEqualTo((short) 3);
+        assertThat(legs.get(2).getLegOrder()).isEqualTo((short) 2);
+
+        verify(legRepository).deleteAll(List.of(legs.get(0), legs.get(1)));
+        ArgumentCaptor<ScheduleLeg> bridgeCaptor =
+                ArgumentCaptor.forClass(ScheduleLeg.class);
+        verify(legRepository).save(bridgeCaptor.capture());
+        ScheduleLeg bridge = bridgeCaptor.getValue();
+        assertThat(bridge.getFromVisit()).isSameAs(visits.get(0));
+        assertThat(bridge.getToVisit()).isSameAs(visits.get(2));
+        assertThat(bridge.getLegOrder()).isEqualTo((short) 1);
+        assertThat(bridge.getDistanceMeters()).isPositive();
+    }
+
+    @DisplayName("이미 삭제된 장소를 다시 삭제하면 현재 결과를 반환한다")
+    @Test
+    void returnsCurrentResultWhenStopIsAlreadyRemoved() {
+        ScheduleVisit target = visits.get(1);
+        target.remove(LocalDateTime.now().minusMinutes(1));
+        when(visitRepository.findWithDayAndScheduleById(102L))
+                .thenReturn(Optional.of(target));
+        when(visitRepository.findByDayIdAndStatusOrderByVisitOrderAsc(20L, "ACTIVE"))
+                .thenReturn(List.of(visits.get(0), visits.get(2), visits.get(3)));
+        when(legRepository.findByDayIdOrderByLegOrderAsc(20L))
+                .thenReturn(List.of());
+
+        ScheduleStopDeleteResponse response = service.deleteStop(
+                USER_PUBLIC_ID.toString(),
+                1L,
+                102L
+        );
+
+        assertThat(response.deletedStopId()).isEqualTo("102");
+        verify(legRepository, never()).deleteAll(any());
+    }
+
+    @DisplayName("첫 장소를 삭제하면 첫 구간을 제거하고 이후 순서를 당긴다")
+    @Test
+    void deletesFirstStop() {
+        when(visitRepository.findWithDayAndScheduleById(101L))
+                .thenReturn(Optional.of(visits.get(0)));
+        when(visitRepository.findByDayIdAndStatusOrderByVisitOrderAsc(20L, "ACTIVE"))
+                .thenReturn(visits, visits.subList(1, visits.size()));
+
+        service.deleteStop(USER_PUBLIC_ID.toString(), 1L, 101L);
+
+        verify(legRepository).deleteAll(List.of(legs.get(0)));
+        verify(legRepository, never()).save(any(ScheduleLeg.class));
+        assertThat(visits.get(1).getVisitOrder()).isEqualTo((short) 1);
+        assertThat(legs.get(1).getLegOrder()).isEqualTo((short) 1);
+    }
+
+    @DisplayName("마지막 장소를 삭제하면 마지막 구간만 제거한다")
+    @Test
+    void deletesLastStop() {
+        when(visitRepository.findWithDayAndScheduleById(104L))
+                .thenReturn(Optional.of(visits.get(3)));
+        when(visitRepository.findByDayIdAndStatusOrderByVisitOrderAsc(20L, "ACTIVE"))
+                .thenReturn(visits, visits.subList(0, 3));
+
+        service.deleteStop(USER_PUBLIC_ID.toString(), 1L, 104L);
+
+        verify(legRepository).deleteAll(List.of(legs.get(2)));
+        verify(legRepository, never()).save(any(ScheduleLeg.class));
+        assertThat(visits.get(2).getVisitOrder()).isEqualTo((short) 3);
+    }
+
+    @DisplayName("방장이 아니면 일정 장소를 삭제할 수 없다")
+    @Test
+    void rejectsNonHost() {
+        TripMember member = mock(TripMember.class);
+        when(member.getActiveSlot()).thenReturn((byte) 1);
+        when(member.isActive()).thenReturn(true);
+        when(member.isCurrentHost()).thenReturn(false);
+        when(tripMemberRepository.findByTripAndUserAndLeftAtIsNull(trip, user))
+                .thenReturn(Optional.of(member));
+
+        assertError(ErrorCode.TRIP_HOST_REQUIRED);
+    }
+
+    @DisplayName("여행 시작일부터는 일정 장소를 삭제할 수 없다")
+    @Test
+    void rejectsDeletionOnOrAfterTripStart() {
+        when(trip.getStartDate()).thenReturn(LocalDate.now());
+
+        assertError(ErrorCode.SCHEDULE_CHANGE_NOT_ALLOWED);
+    }
+
+    @DisplayName("전체 일정 장소가 세 개이면 더 삭제할 수 없다")
+    @Test
+    void preservesMinimumStopCount() {
+        when(visitRepository.findWithDayAndScheduleById(102L))
+                .thenReturn(Optional.of(visits.get(1)));
+        when(visitRepository.countByDay_Schedule_IdAndStatus(10L, "ACTIVE"))
+                .thenReturn(3L);
+
+        assertError(ErrorCode.SCHEDULE_MINIMUM_STOPS_REQUIRED);
+        verify(legRepository, never()).deleteAll(any());
+    }
+
+    private void assertError(ErrorCode errorCode) {
+        assertThatThrownBy(() -> service.deleteStop(
+                USER_PUBLIC_ID.toString(),
+                1L,
+                102L
+        )).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(errorCode)
+        );
+    }
+
+    private ScheduleVisit visit(
+            long visitId,
+            long placeId,
+            int order,
+            double latitude,
+            double longitude
+    ) {
+        Region region = mock(Region.class);
+        Place place = new Place(
+                region,
+                new RecommendedPlace(
+                        "google-" + placeId,
+                        "장소 " + placeId,
+                        latitude,
+                        longitude,
+                        "관광명소",
+                        PlaceCategoryGroup.TOURISM_CULTURE,
+                        null,
+                        List.of(),
+                        List.of()
+                ),
+                LocalDateTime.now()
+        );
+        ReflectionTestUtils.setField(place, "id", placeId);
+        ScheduleVisit visit = new ScheduleVisit(
+                day,
+                place,
+                order,
+                "추천 이유",
+                LocalDateTime.now()
+        );
+        ReflectionTestUtils.setField(visit, "id", visitId);
+        return visit;
+    }
+
+    private ScheduleLeg leg(
+            long id,
+            ScheduleVisit from,
+            ScheduleVisit to,
+            int order
+    ) {
+        ScheduleLeg leg = new ScheduleLeg(day, from, to, order, 100);
+        ReflectionTestUtils.setField(leg, "id", id);
+        return leg;
+    }
+}
