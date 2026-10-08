@@ -14,6 +14,7 @@ import com.planit.repository.UserRepository;
 import com.planit.schedule.service.SchedulePersistenceService;
 import com.planit.trip.dto.TripCreateRequest;
 import com.planit.trip.dto.TripCreateResponse;
+import com.planit.trip.dto.TripConflictResponse;
 import com.planit.trip.dto.TripDetailResponse;
 import com.planit.trip.dto.TripJoinRequest;
 import com.planit.trip.dto.TripJoinResponse;
@@ -22,6 +23,7 @@ import com.planit.trip.dto.TripLeaveResponse;
 import com.planit.trip.dto.TripListResponse;
 import com.planit.trip.pagination.TripListCursorCodec;
 import com.planit.trip.pagination.TripListCursorCodec.Cursor;
+import com.planit.trip.exception.TripDateConflictException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -80,7 +82,8 @@ public class TripServiceImpl implements TripService {
         validateNoDateConflict(
                 user,
                 request.startDate(),
-                request.endDate()
+                request.endDate(),
+                today
         );
 
         LocalDateTime surveyDeadlineAt = resolveSurveyDeadline(
@@ -205,7 +208,7 @@ public class TripServiceImpl implements TripService {
                         .toList();
         boolean alreadyJoined = tripMemberRepository
                 .existsByTripAndUserAndLeftAtIsNull(trip, user);
-        TripInvitationPreviewResponse.ConflictingTrip conflictingTrip =
+        TripConflictResponse conflictingTrip =
                 tripMemberRepository.findActiveTripsOverlappingExcept(
                                 user,
                                 trip.getStartDate(),
@@ -213,10 +216,14 @@ public class TripServiceImpl implements TripService {
                                 trip.getId()
                         ).stream()
                         .findFirst()
-                        .map(member -> new TripInvitationPreviewResponse
-                                .ConflictingTrip(
+                        .map(member -> new TripConflictResponse(
                                         member.getTrip().getId().toString(),
-                                        member.getTrip().getName()
+                                        member.getTrip().getName(),
+                                        member.getTrip().getStartDate(),
+                                        member.getTrip().getEndDate(),
+                                        today.isBefore(
+                                                member.getTrip().getStartDate()
+                                        )
                                 ))
                         .orElse(null);
 
@@ -730,20 +737,27 @@ public class TripServiceImpl implements TripService {
     private void validateNoDateConflict(
             User user,
             LocalDate startDate,
-            LocalDate endDate
+            LocalDate endDate,
+            LocalDate today
     ) {
-        long overlappingTripCount = tripMemberRepository
-                .countActiveTripsOverlapping(
+        tripMemberRepository.findActiveTripsOverlapping(
                         user,
                         startDate,
                         endDate
-                );
-
-        if (overlappingTripCount > 0) {
-            throw new BusinessException(
-                    ErrorCode.TRIP_DATE_CONFLICT
-            );
-        }
+                ).stream()
+                .findFirst()
+                .ifPresent(member -> {
+                    Trip trip = member.getTrip();
+                    throw new TripDateConflictException(
+                            new TripConflictResponse(
+                                    trip.getId().toString(),
+                                    trip.getName(),
+                                    trip.getStartDate(),
+                                    trip.getEndDate(),
+                                    today.isBefore(trip.getStartDate())
+                            )
+                    );
+                });
     }
 
     private LocalDateTime resolveSurveyDeadline(

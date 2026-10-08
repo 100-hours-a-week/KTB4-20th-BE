@@ -89,6 +89,24 @@ public interface TripMemberRepository
               AND tm.activeSlot = 1
               AND tm.leftAt IS NULL
               AND trip.deletedAt IS NULL
+              AND trip.startDate <= :endDate
+              AND trip.endDate >= :startDate
+            ORDER BY trip.startDate, trip.id
+            """)
+    List<TripMember> findActiveTripsOverlapping(
+            @Param("user") User user,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate
+    );
+
+    @Query("""
+            SELECT tm
+            FROM TripMember tm
+            JOIN FETCH tm.trip trip
+            WHERE tm.user = :user
+              AND tm.activeSlot = 1
+              AND tm.leftAt IS NULL
+              AND trip.deletedAt IS NULL
               AND trip.id <> :excludedTripId
               AND trip.startDate <= :endDate
               AND trip.endDate >= :startDate

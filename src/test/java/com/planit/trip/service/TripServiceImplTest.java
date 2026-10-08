@@ -21,6 +21,7 @@ import com.planit.repository.UserRepository;
 import com.planit.schedule.service.SchedulePersistenceService;
 import com.planit.trip.dto.TripCreateRequest;
 import com.planit.trip.dto.TripCreateResponse;
+import com.planit.trip.dto.TripConflictResponse;
 import com.planit.trip.dto.TripDetailResponse;
 import com.planit.trip.dto.TripJoinRequest;
 import com.planit.trip.dto.TripJoinResponse;
@@ -29,6 +30,7 @@ import com.planit.trip.dto.TripLeaveResponse;
 import com.planit.trip.dto.TripListResponse;
 import com.planit.trip.pagination.TripListCursorCodec;
 import com.planit.trip.pagination.TripListCursorCodec.Cursor;
+import com.planit.trip.exception.TripDateConflictException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -265,6 +267,11 @@ class TripServiceImplTest {
         assertThat(response.alreadyJoined()).isTrue();
         assertThat(response.conflictingTrip().tripId())
                 .isEqualTo("1002");
+        assertThat(response.conflictingTrip().startDate())
+                .isEqualTo(conflictingTrip.getStartDate());
+        assertThat(response.conflictingTrip().endDate())
+                .isEqualTo(conflictingTrip.getEndDate());
+        assertThat(response.conflictingTrip().canLeave()).isTrue();
     }
 
     @DisplayName("존재하지 않는 초대 토큰을 거부한다")
@@ -1442,19 +1449,35 @@ class TripServiceImplTest {
     void rejectsDateOverlappingActiveTrip() {
         LocalDate startDate = LocalDate.now(SEOUL_ZONE).plusDays(5);
         LocalDate endDate = startDate.plusDays(2);
-        when(tripMemberRepository.countActiveTripsOverlapping(
+        Trip conflictingTrip = trip(
+                300L,
+                LocalDate.now(SEOUL_ZONE).minusDays(1),
+                startDate
+        );
+        TripMember conflictingMembership =
+                TripMember.createMember(conflictingTrip, user);
+        when(tripMemberRepository.findActiveTripsOverlapping(
                 user,
                 startDate,
                 endDate
-        )).thenReturn(1L);
+        )).thenReturn(List.of(conflictingMembership));
 
-        assertError(
-                () -> tripService.createTrip(
-                        USER_PUBLIC_ID.toString(),
-                        request(startDate, endDate, null)
-                ),
-                ErrorCode.TRIP_DATE_CONFLICT
-        );
+        assertThatThrownBy(() -> tripService.createTrip(
+                USER_PUBLIC_ID.toString(),
+                request(startDate, endDate, null)
+        )).isInstanceOf(TripDateConflictException.class)
+                .satisfies(exception -> {
+                    TripConflictResponse conflict =
+                            ((TripDateConflictException) exception)
+                                    .getConflict();
+                    assertThat(conflict.tripId()).isEqualTo("300");
+                    assertThat(conflict.name()).isEqualTo("제주 여행");
+                    assertThat(conflict.startDate())
+                            .isEqualTo(conflictingTrip.getStartDate());
+                    assertThat(conflict.endDate())
+                            .isEqualTo(conflictingTrip.getEndDate());
+                    assertThat(conflict.canLeave()).isFalse();
+                });
 
         verify(tripRepository, never()).save(any());
         verify(tripMemberRepository, never()).save(any());
