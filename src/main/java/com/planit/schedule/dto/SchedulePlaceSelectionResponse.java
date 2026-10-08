@@ -6,9 +6,11 @@ import java.util.List;
 
 public record SchedulePlaceSelectionResponse(
         String tripId,
-        List<AiPlaceSelectionResponse.Place> places
+        List<List<AiPlaceSelectionResponse.Place>> places
 ) {
     public SchedulePlaceSelectionResponse {
-        places = List.copyOf(places);
+        places = places.stream()
+                .map(List::copyOf)
+                .toList();
     }
 }

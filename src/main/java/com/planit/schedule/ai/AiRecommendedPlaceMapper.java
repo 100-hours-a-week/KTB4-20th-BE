@@ -17,65 +17,44 @@ public final class AiRecommendedPlaceMapper {
 
     private static final int REQUIRED_PLACE_MIN_COUNT = 5;
 
-    public List<RecommendedPlace> map(AiPlaceSelectionResponse response) {
-        if (response == null) {
-            throw invalid("AI 추천 장소 응답은 성공 상태와 장소 5개 이상을 포함해야 합니다.");
-        }
-        AiPlaceRecommendationResponse converted =
-                new AiPlaceRecommendationResponse(
-                        response.statusCode(),
-                        response.data() == null
-                                ? null
-                                : new AiPlaceRecommendationResponse.Data(
-                                        response.data().places() == null
-                                                ? null
-                                                : response.data().places()
-                                                .stream()
-                                                .map(this::convert)
-                                                .toList()
-                                )
-                );
-        return map(converted);
-    }
-
-    public List<RecommendedPlace> map(
-            AiPlaceRecommendationResponse response
+    public List<List<RecommendedPlace>> mapDailyPlaces(
+            AiPlaceSelectionResponse response
     ) {
         if (response == null
                 || response.statusCode() != 200
                 || response.data() == null
                 || response.data().places() == null
-                || response.data().places().size() < REQUIRED_PLACE_MIN_COUNT) {
-            throw invalid("AI 추천 장소 응답은 성공 상태와 장소 5개 이상을 포함해야 합니다.");
+                || response.data().places().isEmpty()) {
+            throw invalid("AI 추천 장소 응답은 날짜별 장소 목록을 포함해야 합니다.");
+        }
+
+        return response.data().places().stream()
+                .map(this::mapDay)
+                .toList();
+    }
+
+    private List<RecommendedPlace> mapDay(
+            List<AiPlaceSelectionResponse.Place> places
+    ) {
+        if (places == null
+                || places.size() < REQUIRED_PLACE_MIN_COUNT) {
+            throw invalid("날짜별 AI 추천 장소는 5개 이상이어야 합니다.");
         }
 
         Set<String> googlePlaceIds = new HashSet<>();
-        return response.data().places().stream()
+        return places.stream()
                 .map(place -> mapPlace(place, googlePlaceIds))
                 .toList();
     }
 
     private RecommendedPlace mapPlace(
-            AiPlaceRecommendationResponse.Place place,
+            AiPlaceSelectionResponse.Place place,
             Set<String> googlePlaceIds
     ) {
-        if (place == null
-                || isBlank(place.id())
-                || !googlePlaceIds.add(place.id())
-                || place.displayName() == null
-                || isBlank(place.displayName().text())
-                || place.location() == null) {
-            throw invalid("AI 추천 장소의 식별값, 이름과 좌표는 필수입니다.");
-        }
+        validatePlace(place, googlePlaceIds);
 
         double latitude = place.location().latitude();
         double longitude = place.location().longitude();
-        if (!Double.isFinite(latitude) || latitude < -90 || latitude > 90
-                || !Double.isFinite(longitude)
-                || longitude < -180 || longitude > 180) {
-            throw invalid("AI 추천 장소의 좌표가 유효하지 않습니다.");
-        }
-
         List<String> types = safeList(place.types());
         List<String> matchedPreferences = safeList(
                 place.matchedPreferences()
@@ -102,38 +81,26 @@ public final class AiRecommendedPlaceMapper {
         );
     }
 
-    private AiPlaceRecommendationResponse.Place convert(
-            AiPlaceSelectionResponse.Place place
+    private void validatePlace(
+            AiPlaceSelectionResponse.Place place,
+            Set<String> googlePlaceIds
     ) {
-        if (place == null) {
-            return null;
+        if (place == null
+                || isBlank(place.id())
+                || !googlePlaceIds.add(place.id())
+                || place.displayName() == null
+                || isBlank(place.displayName().text())
+                || place.location() == null) {
+            throw invalid("AI 추천 장소의 식별값, 이름과 좌표는 필수입니다.");
         }
-        return new AiPlaceRecommendationResponse.Place(
-                place.id(),
-                place.displayName() == null
-                        ? null
-                        : new AiPlaceRecommendationResponse.DisplayName(
-                                place.displayName().text(),
-                                place.displayName().languageCode()
-                        ),
-                place.location() == null
-                        ? null
-                        : new AiPlaceRecommendationResponse.Location(
-                                place.location().latitude(),
-                                place.location().longitude()
-                        ),
-                place.types(),
-                place.rating(),
-                (long) place.userRatingCount(),
-                place.editorialSummary() == null
-                        ? null
-                        : new AiPlaceRecommendationResponse.EditorialSummary(
-                                place.editorialSummary().text(),
-                                place.editorialSummary().languageCode()
-                        ),
-                place.selectedFor(),
-                place.matchedPreferences()
-        );
+
+        double latitude = place.location().latitude();
+        double longitude = place.location().longitude();
+        if (!Double.isFinite(latitude) || latitude < -90 || latitude > 90
+                || !Double.isFinite(longitude)
+                || longitude < -180 || longitude > 180) {
+            throw invalid("AI 추천 장소의 좌표가 유효하지 않습니다.");
+        }
     }
 
     private PlaceCategoryGroup categoryGroup(

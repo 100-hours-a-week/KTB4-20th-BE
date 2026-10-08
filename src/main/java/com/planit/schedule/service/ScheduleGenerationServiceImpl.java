@@ -27,6 +27,7 @@ import org.springframework.web.client.RestClientException;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
@@ -83,7 +84,7 @@ public class ScheduleGenerationServiceImpl
             );
         }
 
-        if (!isValidResponse(response)) {
+        if (!isValidResponse(response, trip)) {
             throw new BusinessException(
                     ErrorCode.AI_SCHEDULE_GENERATION_FAILED
             );
@@ -92,7 +93,7 @@ public class ScheduleGenerationServiceImpl
         try {
             schedulePersistenceService.save(
                     tripId,
-                    recommendedPlaceMapper.map(response)
+                    recommendedPlaceMapper.mapDailyPlaces(response)
             );
         } catch (RouteCalculationException exception) {
             throw new BusinessException(
@@ -141,17 +142,37 @@ public class ScheduleGenerationServiceImpl
         );
     }
 
-    private boolean isValidResponse(AiPlaceSelectionResponse response) {
-        return response.statusCode() == 200
-                && response.data() != null
-                && response.data().places() != null
-                && response.data().places().size() >= REQUIRED_PLACE_MIN_COUNT
+    private boolean isValidResponse(
+            AiPlaceSelectionResponse response,
+            Trip trip
+    ) {
+        if (response == null
+                || response.statusCode() != 200
+                || response.data() == null
+                || response.data().places() == null) {
+            return false;
+        }
+
+        long tripDayCount = ChronoUnit.DAYS.between(
+                trip.getStartDate(),
+                trip.getEndDate()
+        ) + 1;
+        return response.data().places().size() == tripDayCount
                 && response.data().places().stream()
-                .allMatch(this::isValidPlace);
+                .allMatch(this::isValidDailyPlaces);
+    }
+
+    private boolean isValidDailyPlaces(
+            List<AiPlaceSelectionResponse.Place> places
+    ) {
+        return places != null
+                && places.size() >= REQUIRED_PLACE_MIN_COUNT
+                && places.stream().allMatch(this::isValidPlace);
     }
 
     private boolean isValidPlace(AiPlaceSelectionResponse.Place place) {
-        return place.id() != null
+        return place != null
+                && place.id() != null
                 && !place.id().isBlank()
                 && place.displayName() != null
                 && place.displayName().text() != null
