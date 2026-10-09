@@ -5,6 +5,7 @@ import com.planit.global.error.BusinessException;
 import com.planit.repository.TripRepository;
 import com.planit.schedule.ai.RecommendedPlace;
 import com.planit.schedule.domain.Place;
+import com.planit.schedule.domain.PlaceDetails;
 import com.planit.schedule.domain.Schedule;
 import com.planit.schedule.domain.ScheduleDay;
 import com.planit.schedule.domain.ScheduleLeg;
@@ -22,6 +23,7 @@ import com.planit.schedule.route.ShortestRouteCalculator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -174,17 +176,32 @@ public class SchedulePersistenceService {
             RecommendedPlace recommendation,
             LocalDateTime now
     ) {
+        PlaceDetails details = toPlaceDetails(recommendation);
         return placeRepository.findByRegion_IdAndGooglePlaceId(
                         trip.getRegion().getId(),
                         recommendation.googlePlaceId()
                 )
                 .map(existing -> {
-                    existing.update(recommendation, now);
+                    existing.update(details, now);
                     return existing;
                 })
                 .orElseGet(() -> placeRepository.save(
-                        new Place(trip.getRegion(), recommendation, now)
+                        new Place(trip.getRegion(), details, now)
                 ));
+    }
+
+    private PlaceDetails toPlaceDetails(RecommendedPlace recommendation) {
+        return new PlaceDetails(
+                recommendation.googlePlaceId(),
+                recommendation.name(),
+                recommendation.categoryName(),
+                null,
+                null,
+                BigDecimal.valueOf(recommendation.longitude()),
+                BigDecimal.valueOf(recommendation.latitude()),
+                null,
+                null
+        );
     }
 
     private Map<Long, ScheduleVisit> saveVisits(

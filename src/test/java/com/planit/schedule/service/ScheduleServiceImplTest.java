@@ -9,18 +9,19 @@ import com.planit.global.error.ErrorCode;
 import com.planit.repository.TripMemberRepository;
 import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
-import com.planit.schedule.ai.RecommendedPlace;
 import com.planit.schedule.domain.Place;
+import com.planit.schedule.domain.PlaceDetails;
 import com.planit.schedule.domain.Schedule;
 import com.planit.schedule.domain.ScheduleDay;
 import com.planit.schedule.domain.ScheduleLeg;
 import com.planit.schedule.domain.ScheduleVisit;
 import com.planit.schedule.dto.ScheduleStopDeleteResponse;
+import com.planit.schedule.dto.ScheduleStopAddRequest;
 import com.planit.schedule.repository.ScheduleDayRepository;
 import com.planit.schedule.repository.ScheduleLegRepository;
+import com.planit.schedule.repository.PlaceRepository;
 import com.planit.schedule.repository.ScheduleRepository;
 import com.planit.schedule.repository.ScheduleVisitRepository;
-import com.planit.schedule.route.PlaceCategoryGroup;
 import com.planit.trip.service.TripMemberAccessService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -33,6 +34,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.math.BigDecimal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -52,6 +54,7 @@ class ScheduleServiceImplTest {
     private TripRepository tripRepository;
     private TripMemberRepository tripMemberRepository;
     private ScheduleRepository scheduleRepository;
+    private PlaceRepository placeRepository;
     private ScheduleDayRepository dayRepository;
     private ScheduleVisitRepository visitRepository;
     private ScheduleLegRepository legRepository;
@@ -69,6 +72,7 @@ class ScheduleServiceImplTest {
         tripRepository = mock(TripRepository.class);
         tripMemberRepository = mock(TripMemberRepository.class);
         scheduleRepository = mock(ScheduleRepository.class);
+        placeRepository = mock(PlaceRepository.class);
         dayRepository = mock(ScheduleDayRepository.class);
         visitRepository = mock(ScheduleVisitRepository.class);
         legRepository = mock(ScheduleLegRepository.class);
@@ -77,6 +81,7 @@ class ScheduleServiceImplTest {
                 tripRepository,
                 tripMemberRepository,
                 new TripMemberAccessService(tripMemberRepository),
+                placeRepository,
                 scheduleRepository,
                 dayRepository,
                 visitRepository,
@@ -214,6 +219,207 @@ class ScheduleServiceImplTest {
         assertThat(visits.get(2).getVisitOrder()).isEqualTo((short) 3);
     }
 
+    @DisplayName("기존 장소를 가운데에 추가하고 기존 구간을 두 구간으로 교체한다")
+    @Test
+    void addsExistingPlaceBetweenStops() {
+        Region region = mock(Region.class);
+        when(region.getId()).thenReturn(30L);
+        when(trip.getRegion()).thenReturn(region);
+        when(dayRepository.findByIdAndSchedule_Id(20L, 10L))
+                .thenReturn(Optional.of(day));
+        when(visitRepository.findByDayIdAndStatusOrderByVisitOrderAsc(
+                20L,
+                "ACTIVE"
+        )).thenReturn(visits, visits);
+
+        Place place = new Place(
+                region,
+                new PlaceDetails(
+                        "google-new",
+                        "이전 장소명",
+                        null,
+                        null,
+                        null,
+                        BigDecimal.valueOf(129.15),
+                        BigDecimal.valueOf(35.15),
+                        null,
+                        null
+                ),
+                LocalDateTime.now().minusDays(1)
+        );
+        ReflectionTestUtils.setField(place, "id", 999L);
+        when(placeRepository.findByRegion_IdAndGooglePlaceId(
+                30L,
+                "google-new"
+        )).thenReturn(Optional.of(place));
+        when(visitRepository.save(any(ScheduleVisit.class)))
+                .thenAnswer(invocation -> {
+                    ScheduleVisit visit = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(visit, "id", 888L);
+                    return visit;
+                });
+
+        service.addStop(
+                USER_PUBLIC_ID.toString(),
+                1L,
+                addRequest(3)
+        );
+
+        assertThat(place.getName()).isEqualTo("새 장소");
+        assertThat(place.getAddress()).isEqualTo("경주시 주소");
+        assertThat(visits.get(2).getVisitOrder()).isEqualTo((short) 4);
+        assertThat(visits.get(3).getVisitOrder()).isEqualTo((short) 5);
+        assertThat(legs.get(2).getLegOrder()).isEqualTo((short) 4);
+        verify(legRepository).delete(legs.get(1));
+
+        ArgumentCaptor<ScheduleVisit> visitCaptor =
+                ArgumentCaptor.forClass(ScheduleVisit.class);
+        verify(visitRepository).save(visitCaptor.capture());
+        ScheduleVisit added = visitCaptor.getValue();
+        assertThat(added.getVisitOrder()).isEqualTo((short) 3);
+        assertThat(added.getSource()).isEqualTo("MANUAL");
+        assertThat(added.getSelectionReason())
+                .isEqualTo("사용자가 직접 추가한 장소입니다.");
+
+        ArgumentCaptor<ScheduleLeg> legCaptor =
+                ArgumentCaptor.forClass(ScheduleLeg.class);
+        verify(legRepository, org.mockito.Mockito.times(2))
+                .save(legCaptor.capture());
+        assertThat(legCaptor.getAllValues())
+                .extracting(ScheduleLeg::getLegOrder)
+                .containsExactly((short) 2, (short) 3);
+    }
+
+    @DisplayName("첫 위치에 장소를 추가하면 기존 장소와 구간 순서를 뒤로 민다")
+    @Test
+    void addsStopAtFirstPosition() {
+        Place place = prepareExistingPlaceForAddition();
+        when(visitRepository.save(any(ScheduleVisit.class)))
+                .thenAnswer(invocation -> withId(
+                        invocation.getArgument(0),
+                        888L
+                ));
+
+        service.addStop(
+                USER_PUBLIC_ID.toString(),
+                1L,
+                addRequest(1)
+        );
+
+        assertThat(visits)
+                .extracting(ScheduleVisit::getVisitOrder)
+                .containsExactly((short) 2, (short) 3, (short) 4, (short) 5);
+        assertThat(legs)
+                .extracting(ScheduleLeg::getLegOrder)
+                .containsExactly((short) 2, (short) 3, (short) 4);
+        verify(legRepository, never()).delete(any(ScheduleLeg.class));
+
+        ArgumentCaptor<ScheduleLeg> legCaptor =
+                ArgumentCaptor.forClass(ScheduleLeg.class);
+        verify(legRepository).save(legCaptor.capture());
+        assertThat(legCaptor.getValue().getLegOrder()).isEqualTo((short) 1);
+        assertThat(legCaptor.getValue().getFromVisit().getPlace())
+                .isSameAs(place);
+        assertThat(legCaptor.getValue().getToVisit()).isSameAs(visits.getFirst());
+    }
+
+    @DisplayName("마지막 위치에 신규 장소를 저장하고 마지막 구간을 추가한다")
+    @Test
+    void addsNewPlaceAtLastPosition() {
+        prepareAdditionContext();
+        when(placeRepository.findByRegion_IdAndGooglePlaceId(
+                30L,
+                "google-new"
+        )).thenReturn(Optional.empty());
+        when(placeRepository.save(any(Place.class)))
+                .thenAnswer(invocation -> withId(
+                        invocation.getArgument(0),
+                        999L
+                ));
+        when(visitRepository.save(any(ScheduleVisit.class)))
+                .thenAnswer(invocation -> withId(
+                        invocation.getArgument(0),
+                        888L
+                ));
+
+        service.addStop(
+                USER_PUBLIC_ID.toString(),
+                1L,
+                addRequest(5)
+        );
+
+        ArgumentCaptor<Place> placeCaptor = ArgumentCaptor.forClass(Place.class);
+        verify(placeRepository).save(placeCaptor.capture());
+        Place savedPlace = placeCaptor.getValue();
+        assertThat(savedPlace.getGooglePlaceId()).isEqualTo("google-new");
+        assertThat(savedPlace.getName()).isEqualTo("새 장소");
+        assertThat(savedPlace.getAddress()).isEqualTo("경주시 주소");
+        assertThat(savedPlace.getPlaceUrl())
+                .isEqualTo("https://maps.example/place");
+        ArgumentCaptor<ScheduleLeg> legCaptor =
+                ArgumentCaptor.forClass(ScheduleLeg.class);
+        verify(legRepository).save(legCaptor.capture());
+        assertThat(legCaptor.getValue().getLegOrder()).isEqualTo((short) 4);
+        assertThat(legCaptor.getValue().getFromVisit()).isSameAs(visits.getLast());
+        assertThat(legCaptor.getValue().getToVisit().getPlace())
+                .isSameAs(savedPlace);
+    }
+
+    @DisplayName("전체 일정 장소가 열 개이면 추가할 수 없다")
+    @Test
+    void rejectsAdditionOverMaximumStopCount() {
+        when(dayRepository.findByIdAndSchedule_Id(20L, 10L))
+                .thenReturn(Optional.of(day));
+        when(visitRepository.countByDay_Schedule_IdAndStatus(10L, "ACTIVE"))
+                .thenReturn(10L);
+
+        assertThatThrownBy(() -> service.addStop(
+                USER_PUBLIC_ID.toString(),
+                1L,
+                addRequest(1)
+        )).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(ErrorCode.SCHEDULE_MAXIMUM_STOPS_EXCEEDED)
+        );
+        verify(placeRepository, never()).save(any(Place.class));
+    }
+
+    @DisplayName("같은 장소가 활성 일정에 있으면 중복 추가를 거부한다")
+    @Test
+    void rejectsDuplicatePlaceInSchedule() {
+        Region region = mock(Region.class);
+        when(region.getId()).thenReturn(30L);
+        when(trip.getRegion()).thenReturn(region);
+        when(dayRepository.findByIdAndSchedule_Id(20L, 10L))
+                .thenReturn(Optional.of(day));
+        when(visitRepository.findByDayIdAndStatusOrderByVisitOrderAsc(
+                20L,
+                "ACTIVE"
+        )).thenReturn(visits);
+        Place place = visits.getFirst().getPlace();
+        when(placeRepository.findByRegion_IdAndGooglePlaceId(
+                30L,
+                "google-new"
+        )).thenReturn(Optional.of(place));
+        when(visitRepository.existsByDay_Schedule_IdAndPlace_IdAndStatus(
+                10L,
+                place.getId(),
+                "ACTIVE"
+        )).thenReturn(true);
+
+        assertThatThrownBy(() -> service.addStop(
+                USER_PUBLIC_ID.toString(),
+                1L,
+                addRequest(1)
+        )).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(ErrorCode.SCHEDULE_PLACE_ALREADY_EXISTS)
+        );
+        verify(visitRepository, never()).save(any(ScheduleVisit.class));
+    }
+
     @DisplayName("방장이 아니면 일정 장소를 삭제할 수 없다")
     @Test
     void rejectsNonHost() {
@@ -269,16 +475,16 @@ class ScheduleServiceImplTest {
         Region region = mock(Region.class);
         Place place = new Place(
                 region,
-                new RecommendedPlace(
+                new PlaceDetails(
                         "google-" + placeId,
                         "장소 " + placeId,
-                        latitude,
-                        longitude,
                         "관광명소",
-                        PlaceCategoryGroup.TOURISM_CULTURE,
                         null,
-                        List.of(),
-                        List.of()
+                        null,
+                        BigDecimal.valueOf(longitude),
+                        BigDecimal.valueOf(latitude),
+                        null,
+                        null
                 ),
                 LocalDateTime.now()
         );
@@ -303,5 +509,66 @@ class ScheduleServiceImplTest {
         ScheduleLeg leg = new ScheduleLeg(day, from, to, order, 100);
         ReflectionTestUtils.setField(leg, "id", id);
         return leg;
+    }
+
+    private ScheduleStopAddRequest addRequest(int position) {
+        return new ScheduleStopAddRequest(
+                20L,
+                position,
+                new ScheduleStopAddRequest.Place(
+                        "google-new",
+                        " 새 장소 ",
+                        "카페",
+                        " 경주시 주소 ",
+                        null,
+                        BigDecimal.valueOf(129.15),
+                        BigDecimal.valueOf(35.15),
+                        "054-000-0000",
+                        "https://maps.example/place"
+                )
+        );
+    }
+
+    private Place prepareExistingPlaceForAddition() {
+        Region region = prepareAdditionContext();
+        Place place = new Place(
+                region,
+                new PlaceDetails(
+                        "google-new",
+                        "기존 장소",
+                        null,
+                        null,
+                        null,
+                        BigDecimal.valueOf(129.15),
+                        BigDecimal.valueOf(35.15),
+                        null,
+                        null
+                ),
+                LocalDateTime.now().minusDays(1)
+        );
+        ReflectionTestUtils.setField(place, "id", 999L);
+        when(placeRepository.findByRegion_IdAndGooglePlaceId(
+                30L,
+                "google-new"
+        )).thenReturn(Optional.of(place));
+        return place;
+    }
+
+    private Region prepareAdditionContext() {
+        Region region = mock(Region.class);
+        when(region.getId()).thenReturn(30L);
+        when(trip.getRegion()).thenReturn(region);
+        when(dayRepository.findByIdAndSchedule_Id(20L, 10L))
+                .thenReturn(Optional.of(day));
+        when(visitRepository.findByDayIdAndStatusOrderByVisitOrderAsc(
+                20L,
+                "ACTIVE"
+        )).thenReturn(visits, visits);
+        return region;
+    }
+
+    private <T> T withId(T entity, Long id) {
+        ReflectionTestUtils.setField(entity, "id", id);
+        return entity;
     }
 }
