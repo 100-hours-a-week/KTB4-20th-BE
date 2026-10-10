@@ -90,9 +90,9 @@ class PhotoEvaluationTest {
                 .isEqualTo(PhotoEvaluationReason.LOCATION_MISMATCH);
     }
 
-    @DisplayName("60 미만 랜드마크 신뢰도는 저장하지 않는다")
+    @DisplayName("AI가 반환한 랜드마크 신뢰도를 임계값 재판정 없이 저장한다")
     @Test
-    void normalizesLowLandmarkConfidenceToNull() {
+    void preservesLandmarkConfidenceFromAi() {
         PhotoEvaluation evaluation = runningEvaluation();
 
         evaluation.succeed(
@@ -105,7 +105,32 @@ class PhotoEvaluationTest {
                 now().plusSeconds(1)
         );
 
-        assertThat(evaluation.getLandmarkConfidence()).isNull();
+        assertThat(evaluation.getLandmarkConfidence())
+                .isEqualByComparingTo("59.00");
+    }
+
+    @DisplayName("랜드마크 신뢰도는 0부터 100까지만 허용한다")
+    @Test
+    void validatesLandmarkConfidenceRange() {
+        assertThatThrownBy(() -> runningEvaluation().succeed(
+                PhotoEvaluationResult.SUCCESS,
+                null,
+                new BigDecimal("95.00"),
+                "[]",
+                new BigDecimal("-0.01"),
+                null,
+                now()
+        )).isInstanceOf(IllegalArgumentException.class);
+
+        assertThatThrownBy(() -> runningEvaluation().succeed(
+                PhotoEvaluationResult.SUCCESS,
+                null,
+                new BigDecimal("95.00"),
+                "[]",
+                new BigDecimal("100.01"),
+                null,
+                now()
+        )).isInstanceOf(IllegalArgumentException.class);
     }
 
     @DisplayName("AI 호출 오류는 판정 결과 없이 실행 실패로 기록한다")

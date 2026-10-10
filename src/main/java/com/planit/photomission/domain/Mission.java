@@ -2,6 +2,7 @@ package com.planit.photomission.domain;
 
 import com.planit.domain.Trip;
 import com.planit.schedule.domain.ScheduleDay;
+import com.planit.schedule.domain.ScheduleVisit;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -24,9 +25,6 @@ public class Mission {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "mission_generation_job_id", nullable = false)
-    private Long missionGenerationJobId;
-
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "trip_id", nullable = false)
     private Trip trip;
@@ -35,6 +33,10 @@ public class Mission {
     @JoinColumn(name = "schedule_day_id", nullable = false)
     private ScheduleDay scheduleDay;
 
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "schedule_visit_id", nullable = false)
+    private ScheduleVisit scheduleVisit;
+
     @Column(name = "mission_order", nullable = false)
     private byte missionOrder;
 
@@ -42,14 +44,11 @@ public class Mission {
     @Column(name = "mission_scope", nullable = false, length = 20)
     private MissionScope scope;
 
-    @Column(name = "title", nullable = false, length = 200)
-    private String title;
-
     @Column(name = "description", nullable = false, length = 1000)
     private String description;
 
-    @Column(name = "conditions_json", nullable = false, columnDefinition = "json")
-    private String conditionsJson;
+    @Column(name = "primary_category", length = 50)
+    private String primaryCategory;
 
     @Column(name = "expires_at", nullable = false)
     private LocalDateTime expiresAt;
@@ -61,25 +60,34 @@ public class Mission {
     }
 
     public static Mission create(
-            Long missionGenerationJobId,
-            Trip trip,
-            ScheduleDay scheduleDay,
+            ScheduleVisit scheduleVisit,
             int missionOrder,
             MissionScope scope,
-            String title,
             String description,
-            String conditionsJson,
+            String primaryCategory,
             LocalDateTime now
     ) {
+        if (scheduleVisit == null) {
+            throw new IllegalArgumentException("미션 대상 방문 장소는 필수입니다");
+        }
+        ScheduleDay scheduleDay = scheduleVisit.getDay();
+        if (scheduleDay == null
+                || scheduleDay.getSchedule() == null
+                || scheduleDay.getSchedule().getTrip() == null) {
+            throw new IllegalArgumentException(
+                    "미션 대상 방문 장소의 여행 일정은 필수입니다"
+            );
+        }
+        Trip trip = scheduleDay.getSchedule().getTrip();
+
         Mission mission = new Mission();
-        mission.missionGenerationJobId = missionGenerationJobId;
         mission.trip = trip;
         mission.scheduleDay = scheduleDay;
+        mission.scheduleVisit = scheduleVisit;
         mission.missionOrder = (byte) missionOrder;
         mission.scope = scope;
-        mission.title = title;
         mission.description = description;
-        mission.conditionsJson = conditionsJson;
+        mission.primaryCategory = primaryCategory;
         mission.expiresAt = trip.getEndDate()
                 .plusDays(1)
                 .atStartOfDay();
@@ -103,16 +111,16 @@ public class Mission {
         return id;
     }
 
-    public Long getMissionGenerationJobId() {
-        return missionGenerationJobId;
-    }
-
     public Trip getTrip() {
         return trip;
     }
 
     public ScheduleDay getScheduleDay() {
         return scheduleDay;
+    }
+
+    public ScheduleVisit getScheduleVisit() {
+        return scheduleVisit;
     }
 
     public byte getMissionOrder() {
@@ -123,16 +131,12 @@ public class Mission {
         return scope;
     }
 
-    public String getTitle() {
-        return title;
-    }
-
     public String getDescription() {
         return description;
     }
 
-    public String getConditionsJson() {
-        return conditionsJson;
+    public String getPrimaryCategory() {
+        return primaryCategory;
     }
 
     public LocalDateTime getExpiresAt() {

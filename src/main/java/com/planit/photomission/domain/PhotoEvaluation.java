@@ -107,8 +107,7 @@ public class PhotoEvaluation {
         validateScore(matchScore);
         validateDetectedLabels(detectedLabelsJson);
         validateReason(result, reason);
-        BigDecimal normalizedLandmarkConfidence =
-                normalizeLandmarkConfidence(landmarkConfidence);
+        validateLandmarkConfidence(landmarkConfidence);
         validateRetryHint(result, retryHint);
 
         executionStatus = PhotoEvaluationExecutionStatus.SUCCEEDED;
@@ -116,7 +115,7 @@ public class PhotoEvaluation {
         this.reason = reason;
         this.matchScore = matchScore;
         this.detectedLabelsJson = detectedLabelsJson;
-        this.landmarkConfidence = normalizedLandmarkConfidence;
+        this.landmarkConfidence = landmarkConfidence;
         this.retryHint = retryHint;
         this.evaluatedAt = evaluatedAt;
     }
@@ -168,9 +167,9 @@ public class PhotoEvaluation {
         }
     }
 
-    private BigDecimal normalizeLandmarkConfidence(BigDecimal confidence) {
+    private void validateLandmarkConfidence(BigDecimal confidence) {
         if (confidence == null) {
-            return null;
+            return;
         }
         if (confidence.compareTo(BigDecimal.ZERO) < 0
                 || confidence.compareTo(BigDecimal.valueOf(100)) > 0) {
@@ -178,10 +177,6 @@ public class PhotoEvaluation {
                     "랜드마크 신뢰도는 0부터 100까지입니다"
             );
         }
-        if (confidence.compareTo(BigDecimal.valueOf(60)) < 0) {
-            return null;
-        }
-        return confidence;
     }
 
     private void validateRetryHint(

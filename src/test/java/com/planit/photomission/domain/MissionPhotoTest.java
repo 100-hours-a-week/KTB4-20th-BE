@@ -3,7 +3,9 @@ package com.planit.photomission.domain;
 import com.planit.domain.ImageFile;
 import com.planit.domain.Trip;
 import com.planit.domain.TripMember;
+import com.planit.schedule.domain.Schedule;
 import com.planit.schedule.domain.ScheduleDay;
+import com.planit.schedule.domain.ScheduleVisit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -115,15 +117,18 @@ class MissionPhotoTest {
     private Mission mission(MissionScope scope) {
         Trip trip = mock(Trip.class);
         when(trip.getEndDate()).thenReturn(LocalDate.of(2026, 10, 8));
+        Schedule schedule = mock(Schedule.class);
+        ScheduleDay scheduleDay = mock(ScheduleDay.class);
+        ScheduleVisit scheduleVisit = mock(ScheduleVisit.class);
+        when(scheduleVisit.getDay()).thenReturn(scheduleDay);
+        when(scheduleDay.getSchedule()).thenReturn(schedule);
+        when(schedule.getTrip()).thenReturn(trip);
         return Mission.create(
-                10L,
-                trip,
-                mock(ScheduleDay.class),
+                scheduleVisit,
                 1,
                 scope,
                 "포토 미션",
-                "미션 설명",
-                "{}",
+                "HISTORY_CULTURE",
                 now()
         );
     }
