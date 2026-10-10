@@ -50,6 +50,7 @@ public class TripServiceImpl implements TripService {
     private final RegionRepository regionRepository;
     private final TripRepository tripRepository;
     private final TripMemberRepository tripMemberRepository;
+    private final TripMemberAccessService tripMemberAccessService;
     private final TripInvitationRepository tripInvitationRepository;
 
     private final TokenHasher tokenHasher;
@@ -400,11 +401,11 @@ public class TripServiceImpl implements TripService {
     ) {
         User user = findActiveUser(userPublicId);
         Trip trip = findActiveTripForUpdate(tripId);
-        TripMember currentMember = findActiveMember(trip, user);
-
-        if (currentMember.getRole() != TripMemberRole.HOST) {
-            throw new BusinessException(ErrorCode.ACCESS_DENIED);
-        }
+        tripMemberAccessService.findActiveHost(
+                trip,
+                user,
+                ErrorCode.ACCESS_DENIED
+        );
 
         String invitationToken = generateInvitationToken(trip.getId());
         String invitationTokenHash = tokenHasher.sha256(invitationToken);

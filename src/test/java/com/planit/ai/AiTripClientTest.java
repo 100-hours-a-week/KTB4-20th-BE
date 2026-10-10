@@ -89,7 +89,7 @@ class AiTripClientTest {
                         {
                           "status_code": 200,
                           "data": {
-                            "places": [
+                            "places": [[
                               {
                                 "id": "ChIJT-dJpdYkcDURU4xGNLNrBdY",
                                 "displayName": {
@@ -130,7 +130,7 @@ class AiTripClientTest {
                                 "selected_for": ["user_id_2"],
                                 "matched_preferences": ["HISTORY_CULTURE"]
                               }
-                            ]
+                            ]]
                           }
                         }
                         """, MediaType.APPLICATION_JSON));
@@ -138,18 +138,23 @@ class AiTripClientTest {
         AiPlaceSelectionResponse response = client.selectPlaces(request);
 
         assertThat(response.statusCode()).isEqualTo(200);
-        assertThat(response.data().places()).hasSize(2);
-        assertThat(response.data().places().getFirst().id())
+        assertThat(response.data().places()).hasSize(1);
+        assertThat(response.data().places().getFirst()).hasSize(2);
+        assertThat(response.data().places().getFirst().getFirst().id())
                 .isEqualTo("ChIJT-dJpdYkcDURU4xGNLNrBdY");
-        assertThat(response.data().places().getFirst().displayName().text())
+        assertThat(response.data().places().getFirst().getFirst()
+                .displayName().text())
                 .isEqualTo("경복궁");
-        assertThat(response.data().places().getFirst().selectedFor())
+        assertThat(response.data().places().getFirst().getFirst().selectedFor())
                 .containsExactly("user_id_1", "user_id_3");
-        assertThat(response.data().places().getFirst().matchedPreferences())
+        assertThat(response.data().places().getFirst().getFirst()
+                .matchedPreferences())
                 .containsExactly("HISTORY_CULTURE");
-        assertThat(response.data().places().getFirst().editorialSummary())
+        assertThat(response.data().places().getFirst().getFirst()
+                .editorialSummary())
                 .isNull();
-        assertThat(response.data().places().get(1).editorialSummary().text())
+        assertThat(response.data().places().getFirst().get(1)
+                .editorialSummary().text())
                 .isEqualTo("전통 한옥이 밀집된 서울의 대표적인 역사 마을.");
         server.verify();
     }
