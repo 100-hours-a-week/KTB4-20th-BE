@@ -32,12 +32,13 @@ jobs:
 
       - name: Build Docker image
         env:
-          DOCKER_BUILDKIT: '1'
+          DOCKER_BUILDKIT: "1"
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: |
           set -euo pipefail
 
           APP_VERSION=$(sed -n "s/^version = '\(.*\)'$/\1/p" build.gradle)
+
           if [[ -z "$APP_VERSION" ]]; then
             echo "::error::build.gradle version is missing."
             exit 1
@@ -85,6 +86,7 @@ jobs:
           set -euo pipefail
 
           TAG="sha-${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
           DIGEST=$(aws ecr batch-get-image \
             --repository-name "$ECR_REPOSITORY" \
             --image-ids "imageTag=$TAG" \
@@ -171,36 +173,51 @@ jobs:
             --query 'taskDefinition.taskDefinitionArn' \
             --output text)
 
-          aws ecs update-service \
+          DEPLOYMENT_ID=$(aws ecs update-service \
             --cluster "$ECS_CLUSTER" \
             --service "$ECS_SERVICE" \
             --task-definition "$TASK_DEF_ARN" \
-            --query 'service.taskDefinition' \
-            --output text
+            --query "service.deployments[?taskDefinition=='${TASK_DEF_ARN}'] | [0].id" \
+            --output text)
+
+          if [[ -z "$DEPLOYMENT_ID" || "$DEPLOYMENT_ID" == "None" ]]; then
+            echo "::error::Failed to identify the ECS deployment ID."
+            exit 1
+          fi
+
+          DEPLOYMENT_COMPLETED=false
 
           for attempt in {1..40}; do
             STATE=$(aws ecs describe-services \
               --cluster "$ECS_CLUSTER" \
               --services "$ECS_SERVICE" \
-              --query "services[0].deployments[?status=='PRIMARY'].rolloutState | [0]" \
+              --query "services[0].deployments[?id=='${DEPLOYMENT_ID}'] | [0].rolloutState" \
               --output text)
 
-            echo "ECS primary deployment state: $STATE"
+            COMPLETED_EVENT=$(aws ecs describe-services \
+              --cluster "$ECS_CLUSTER" \
+              --services "$ECS_SERVICE" \
+              --query "services[0].events[?contains(message, 'deployment ${DEPLOYMENT_ID} deployment completed.')].message | [0]" \
+              --output text)
 
-            if [[ "$STATE" == "COMPLETED" ]]; then
+            echo "ECS deployment ID: $DEPLOYMENT_ID"
+            echo "ECS deployment state: $STATE"
+
+            if [[ "$STATE" == "COMPLETED" || "$COMPLETED_EVENT" != "None" ]]; then
+              DEPLOYMENT_COMPLETED=true
               break
             fi
 
             if [[ "$STATE" == "FAILED" ]]; then
-              echo "::error::ECS primary deployment failed."
+              echo "::error::ECS deployment failed."
               exit 1
             fi
 
             sleep 15
           done
 
-          if [[ "$STATE" != "COMPLETED" ]]; then
-            echo "::error::Timed out waiting for the ECS primary deployment."
+          if [[ "$DEPLOYMENT_COMPLETED" != "true" ]]; then
+            echo "::error::Timed out waiting for the ECS deployment."
             exit 1
           fi
 
@@ -208,6 +225,7 @@ jobs:
             echo "### Backend ECS deployment"
             echo "- Image: $IMAGE_URI"
             echo "- Task definition: $TASK_DEF_ARN"
+            echo "- ECS deployment: $DEPLOYMENT_ID"
             echo "- Commit: $GITHUB_SHA"
           } >> "$GITHUB_STEP_SUMMARY"
 
