@@ -178,9 +178,31 @@ jobs:
             --query 'service.taskDefinition' \
             --output text
 
-          aws ecs wait services-stable \
-            --cluster "$ECS_CLUSTER" \
-            --services "$ECS_SERVICE"
+          for attempt in {1..40}; do
+            STATE=$(aws ecs describe-services \
+              --cluster "$ECS_CLUSTER" \
+              --services "$ECS_SERVICE" \
+              --query "services[0].deployments[?status=='PRIMARY'].rolloutState | [0]" \
+              --output text)
+
+            echo "ECS primary deployment state: $STATE"
+
+            if [[ "$STATE" == "COMPLETED" ]]; then
+              break
+            fi
+
+            if [[ "$STATE" == "FAILED" ]]; then
+              echo "::error::ECS primary deployment failed."
+              exit 1
+            fi
+
+            sleep 15
+          done
+
+          if [[ "$STATE" != "COMPLETED" ]]; then
+            echo "::error::Timed out waiting for the ECS primary deployment."
+            exit 1
+          fi
 
           {
             echo "### Backend ECS deployment"
