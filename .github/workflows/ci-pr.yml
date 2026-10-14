@@ -42,7 +42,7 @@ jobs:
             github.event.pull_request.head.repo.full_name != github.repository ||
             (
               github.head_ref != 'dev' &&
-              github.head_ref != 'chore/ecs-be-cd'
+              github.head_ref != vars.MAIN_PR_EXCEPTION_BRANCH
             )
           )
         run: |
