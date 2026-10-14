@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build and Image Build
+    name: Test and Build Image
     runs-on: ubuntu-24.04
     timeout-minutes: 20
 
@@ -46,7 +46,7 @@ jobs:
             )
           )
         run: |
-          echo "::error::main에는 dev 또는 승인된 예외 브랜치에서 PR을 보내야 합니다."
+          echo "::error::main에는 같은 저장소의 dev 브랜치에서만 PR을 보낼 수 있습니다."
           exit 1
 
       - name: Checkout
@@ -58,25 +58,22 @@ jobs:
         uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: "21"
           cache: gradle
 
-      - name: Make Gradle wrapper executable
-        run: chmod +x gradlew
-
-      - name: Test and build backend
+      - name: Check backend
         env:
           DB_URL: jdbc:mysql://127.0.0.1:3306/planit?sslMode=DISABLED&allowPublicKeyRetrieval=true&connectionTimeZone=Asia/Seoul
           DB_USERNAME: planit_ci
           DB_PASSWORD: ${{ secrets.CI_MYSQL_PASSWORD }}
-          AUTH_COOKIE_SECURE: 'false'
+          AUTH_COOKIE_SECURE: "false"
           JWT_HS256_SECRET_BASE64: ${{ secrets.CI_JWT_HS256_SECRET_BASE64 }}
           KAKAO_REST_API_KEY: ci-client-id
           KAKAO_CLIENT_SECRET: ci-client-secret
           KAKAO_ADMIN_KEY: ci-admin-key
           IMAGE_S3_BUCKET: planit-ci-images
           AWS_REGION: ap-northeast-2
-        run: ./gradlew clean build --no-daemon
+        run: ./gradlew check --no-daemon
 
       - name: Build Docker image
         run: |

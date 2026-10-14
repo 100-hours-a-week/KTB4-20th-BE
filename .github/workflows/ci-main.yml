@@ -16,6 +16,10 @@ env:
   AWS_REGION: ${{ vars.AWS_REGION }}
   ECR_REPOSITORY: ${{ vars.BACKEND_ECR_REPOSITORY }}
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   publish:
     name: Build and Publish Image
@@ -32,7 +36,6 @@ jobs:
 
       - name: Build Docker image
         env:
-          DOCKER_BUILDKIT: "1"
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: |
           set -euo pipefail
@@ -61,7 +64,8 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Tag and push image
+      - name: Push image and resolve digest
+        id: image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
@@ -73,33 +77,19 @@ jobs:
           docker tag planit-backend:ci "$IMAGE_URI"
           docker push "$IMAGE_URI"
 
-          {
-            echo "### Published backend image"
-            echo "- Image: $IMAGE_URI"
-            echo "- Commit: $GITHUB_SHA"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Resolve published image digest
-        id: image
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          TAG="sha-${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-
           DIGEST=$(aws ecr batch-get-image \
             --repository-name "$ECR_REPOSITORY" \
-            --image-ids "imageTag=$TAG" \
+            --image-ids "imageTag=$IMAGE_TAG" \
             --query 'images[0].imageId.imageDigest' \
             --output text)
 
-          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || exit 1
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
 
   deploy:
     name: Deploy and Verify
     needs: publish
-    if: ${{ github.ref == 'refs/heads/main' && vars.CD_ENABLED == 'true' }}
+    if: ${{ vars.CD_ENABLED == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 
@@ -119,11 +109,10 @@ jobs:
           allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
 
       - name: Register and deploy ECS task definition
-        shell: bash
         run: |
           set -euo pipefail
 
-          [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || exit 1
 
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
           IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}@${IMAGE_DIGEST}"
@@ -173,64 +162,44 @@ jobs:
             --query 'taskDefinition.taskDefinitionArn' \
             --output text)
 
-          DEPLOYMENT_ID=$(aws ecs update-service \
+          aws ecs update-service \
             --cluster "$ECS_CLUSTER" \
             --service "$ECS_SERVICE" \
             --task-definition "$TASK_DEF_ARN" \
-            --query "service.deployments[?taskDefinition=='${TASK_DEF_ARN}'] | [0].id" \
-            --output text)
+            --query 'service.taskDefinition' \
+            --output text
 
-          if [[ -z "$DEPLOYMENT_ID" || "$DEPLOYMENT_ID" == "None" ]]; then
-            echo "::error::Failed to identify the ECS deployment ID."
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE"
+
+          aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE" \
+            --output json > "$RUNNER_TEMP/service.json"
+
+          jq -e --arg task_def "$TASK_DEF_ARN" '
+            (.failures | length) == 0 and
+            (.services | length) == 1 and
+            (.services[0] |
+              .taskDefinition == $task_def and
+              (.deployments | length) == 1 and
+              .deployments[0].taskDefinition == $task_def and
+              .deployments[0].rolloutState == "COMPLETED"
+            )
+          ' "$RUNNER_TEMP/service.json" > /dev/null || {
+            echo "::error::The target task definition did not complete deployment."
             exit 1
-          fi
-
-          DEPLOYMENT_COMPLETED=false
-
-          for attempt in {1..40}; do
-            STATE=$(aws ecs describe-services \
-              --cluster "$ECS_CLUSTER" \
-              --services "$ECS_SERVICE" \
-              --query "services[0].deployments[?id=='${DEPLOYMENT_ID}'] | [0].rolloutState" \
-              --output text)
-
-            COMPLETED_EVENT=$(aws ecs describe-services \
-              --cluster "$ECS_CLUSTER" \
-              --services "$ECS_SERVICE" \
-              --query "services[0].events[?contains(message, 'deployment ${DEPLOYMENT_ID} deployment completed.')].message | [0]" \
-              --output text)
-
-            echo "ECS deployment ID: $DEPLOYMENT_ID"
-            echo "ECS deployment state: $STATE"
-
-            if [[ "$STATE" == "COMPLETED" || "$COMPLETED_EVENT" != "None" ]]; then
-              DEPLOYMENT_COMPLETED=true
-              break
-            fi
-
-            if [[ "$STATE" == "FAILED" ]]; then
-              echo "::error::ECS deployment failed."
-              exit 1
-            fi
-
-            sleep 15
-          done
-
-          if [[ "$DEPLOYMENT_COMPLETED" != "true" ]]; then
-            echo "::error::Timed out waiting for the ECS deployment."
-            exit 1
-          fi
+          }
 
           {
             echo "### Backend ECS deployment"
             echo "- Image: $IMAGE_URI"
             echo "- Task definition: $TASK_DEF_ARN"
-            echo "- ECS deployment: $DEPLOYMENT_ID"
             echo "- Commit: $GITHUB_SHA"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify public health endpoint
-        shell: bash
         run: |
           set -euo pipefail
 
