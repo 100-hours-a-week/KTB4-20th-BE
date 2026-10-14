@@ -2,6 +2,8 @@ package com.planit.ai;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 
 public record AiWeatherPrecheckResponse(
@@ -11,10 +13,22 @@ public record AiWeatherPrecheckResponse(
 ) {
 
     public record Data(
+            @JsonProperty("generated_at")
+            Instant generatedAt,
+            List<Forecast> forecasts
+    ) {
+    }
+
+    public record Forecast(
+            LocalDate date,
+            List<RegionForecast> regions
+    ) {
+    }
+
+    public record RegionForecast(
+            String region,
             @JsonProperty("has_issue")
             boolean hasIssue,
-            @JsonProperty("affected_place_ids")
-            List<String> affectedPlaceIds,
             List<Reason> reasons
     ) {
     }

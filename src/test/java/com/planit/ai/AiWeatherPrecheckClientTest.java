@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.test.web.client.ResponseCreator;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
@@ -41,9 +42,9 @@ class AiWeatherPrecheckClientTest {
         );
     }
 
-    @DisplayName("AI 서버에 날씨 사전 점검을 요청한다")
+    @DisplayName("AI 서버에서 다음 날부터 9일간의 지역별 날씨를 조회한다")
     @Test
-    void requestsWeatherPrecheckFromAiServer() {
+    void requestsNineDayRegionalWeatherPrecheck() {
         server.expect(once(), requestTo(
                         "http://localhost:8000/precheck"
                 ))
@@ -52,61 +53,26 @@ class AiWeatherPrecheckClientTest {
                         "X-Internal-Token",
                         "test-internal-token"
                 ))
-                .andRespond(withSuccess("""
-                        {
-                          "status_code": 200,
-                          "data": {
-                            "has_issue": true,
-                            "affected_place_ids": [
-                              "place_123",
-                              "place_456"
-                            ],
-                            "reasons": [
-                              {
-                                "category": "weather_risk",
-                                "detail": "heavy_rain"
-                              }
-                            ]
-                          }
-                        }
-                        """, MediaType.APPLICATION_JSON));
+                .andRespond(successfulResponse(nineDayForecasts()));
 
         AiWeatherPrecheckResponse response = client.precheck();
 
         assertThat(response.statusCode()).isEqualTo(200);
-        assertThat(response.data().hasIssue()).isTrue();
-        assertThat(response.data().affectedPlaceIds())
-                .containsExactly("place_123", "place_456");
-        assertThat(response.data().reasons())
+        assertThat(response.data().generatedAt().toString())
+                .isEqualTo("2026-10-10T01:00:03Z");
+        assertThat(response.data().forecasts()).hasSize(9);
+        assertThat(response.data().forecasts().getFirst().date().toString())
+                .isEqualTo("2026-10-11");
+        assertThat(response.data().forecasts().getFirst().regions()
+                .getFirst().region()).isEqualTo("REGION-SEOUL");
+        assertThat(response.data().forecasts().getFirst().regions()
+                .getFirst().hasIssue()).isTrue();
+        assertThat(response.data().forecasts().getFirst().regions()
+                .getFirst().reasons())
                 .containsExactly(new AiWeatherPrecheckResponse.Reason(
                         "weather_risk",
                         "heavy_rain"
                 ));
-        server.verify();
-    }
-
-    @DisplayName("이상 상황이 없어도 정상 응답으로 처리한다")
-    @Test
-    void acceptsPrecheckWithoutWeatherIssue() {
-        server.expect(once(), requestTo(
-                        "http://localhost:8000/precheck"
-                ))
-                .andRespond(withSuccess("""
-                        {
-                          "status_code": 200,
-                          "data": {
-                            "has_issue": false,
-                            "affected_place_ids": [],
-                            "reasons": []
-                          }
-                        }
-                        """, MediaType.APPLICATION_JSON));
-
-        AiWeatherPrecheckResponse response = client.precheck();
-
-        assertThat(response.data().hasIssue()).isFalse();
-        assertThat(response.data().affectedPlaceIds()).isEmpty();
-        assertThat(response.data().reasons()).isEmpty();
         server.verify();
     }
 
@@ -133,11 +99,7 @@ class AiWeatherPrecheckClientTest {
                 .andRespond(withSuccess("""
                         {
                           "status_code": 500,
-                          "data": {
-                            "has_issue": false,
-                            "affected_place_ids": [],
-                            "reasons": []
-                          }
+                          "data": null
                         }
                         """, MediaType.APPLICATION_JSON));
 
@@ -149,20 +111,20 @@ class AiWeatherPrecheckClientTest {
         server.verify();
     }
 
-    @DisplayName("필수 응답 데이터가 없으면 실패한다")
+    @DisplayName("예보 날짜 청크가 9개가 아니면 실패한다")
     @Test
-    void rejectsIncompletePrecheckResponse() {
+    void rejectsForecastsWithInvalidDayCount() {
         server.expect(once(), requestTo(
                         "http://localhost:8000/precheck"
                 ))
-                .andRespond(withSuccess("""
-                        {
-                          "status_code": 200,
-                          "data": {
-                            "has_issue": true
+                .andRespond(successfulResponse("""
+                        [
+                          {
+                            "date": "2026-10-11",
+                            "regions": []
                           }
-                        }
-                        """, MediaType.APPLICATION_JSON));
+                        ]
+                        """));
 
         assertThatThrownBy(client::precheck)
                 .isInstanceOf(RestClientException.class)
@@ -170,5 +132,86 @@ class AiWeatherPrecheckClientTest {
                         "AI 날씨 사전 점검 응답 형식이 올바르지 않습니다."
                 );
         server.verify();
+    }
+
+    @DisplayName("예보 날짜가 생성일 다음 날부터 연속되지 않으면 실패한다")
+    @Test
+    void rejectsNonConsecutiveForecastDates() {
+        server.expect(once(), requestTo(
+                        "http://localhost:8000/precheck"
+                ))
+                .andRespond(successfulResponse(
+                        nineDayForecasts().replaceFirst(
+                                "2026-10-15",
+                                "2026-10-16"
+                        )
+                ));
+
+        assertThatThrownBy(client::precheck)
+                .isInstanceOf(RestClientException.class)
+                .hasMessage(
+                        "AI 날씨 사전 점검 응답 형식이 올바르지 않습니다."
+                );
+        server.verify();
+    }
+
+    @DisplayName("지역별 사유 배열이 없으면 실패한다")
+    @Test
+    void rejectsRegionForecastWithoutReasons() {
+        server.expect(once(), requestTo(
+                        "http://localhost:8000/precheck"
+                ))
+                .andRespond(successfulResponse(
+                        nineDayForecasts().replace(
+                                "\"reasons\": [{",
+                                "\"reasons\": null, "
+                                        + "\"discarded_reasons\": [{"
+                        )
+                ));
+
+        assertThatThrownBy(client::precheck)
+                .isInstanceOf(RestClientException.class)
+                .hasMessage(
+                        "AI 날씨 사전 점검 응답 형식이 올바르지 않습니다."
+                );
+        server.verify();
+    }
+
+    private static ResponseCreator successfulResponse(String forecasts) {
+        return withSuccess("""
+                {
+                  "status_code": 200,
+                  "data": {
+                    "generated_at": "2026-10-10T01:00:03Z",
+                    "forecasts": %s
+                  }
+                }
+                """.formatted(forecasts), MediaType.APPLICATION_JSON);
+    }
+
+    private static String nineDayForecasts() {
+        return """
+                [
+                  {
+                    "date": "2026-10-11",
+                    "regions": [{
+                      "region": "REGION-SEOUL",
+                      "has_issue": true,
+                      "reasons": [{
+                        "category": "weather_risk",
+                        "detail": "heavy_rain"
+                      }]
+                    }]
+                  },
+                  {"date": "2026-10-12", "regions": []},
+                  {"date": "2026-10-13", "regions": []},
+                  {"date": "2026-10-14", "regions": []},
+                  {"date": "2026-10-15", "regions": []},
+                  {"date": "2026-10-16", "regions": []},
+                  {"date": "2026-10-17", "regions": []},
+                  {"date": "2026-10-18", "regions": []},
+                  {"date": "2026-10-19", "regions": []}
+                ]
+                """;
     }
 }
