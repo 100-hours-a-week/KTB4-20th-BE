@@ -8,7 +8,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -16,7 +16,6 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
 @Transactional
@@ -26,11 +25,17 @@ class NotificationRepositoryTest {
     private NotificationRepository notificationRepository;
 
     @Autowired
+    private NotificationStore notificationStore;
+
+    @Autowired
     private UserRepository userRepository;
 
-    @DisplayName("중복 방지 키는 평문으로 저장되고 같은 키의 알림은 중복 저장되지 않는다")
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @DisplayName("같은 중복 방지 키의 알림은 최초 저장 내용을 유지한다")
     @Test
-    void persistsPlaintextDedupeKeyAndRejectsDuplicate() {
+    void idempotentlySavesNotification() {
         UUID recipientPublicId = UUID.randomUUID();
         User recipient = userRepository.save(new User(
                 null,
@@ -41,31 +46,108 @@ class NotificationRepositoryTest {
         LocalDateTime createdAt =
                 LocalDateTime.of(2026, 10, 14, 10, 0);
 
-        Notification saved = notificationRepository.saveAndFlush(notification(
+        Long firstId = notificationStore.saveIdempotently(notification(
                 recipient,
                 tripStartDate,
-                createdAt
+                createdAt,
+                "내일 여행이 시작돼요"
         ));
+        Long duplicateId = notificationStore.saveIdempotently(notification(
+                recipient,
+                tripStartDate,
+                createdAt.plusMinutes(30),
+                "재실행으로 변경된 제목"
+        ));
+        Notification saved = notificationRepository.findById(firstId)
+                .orElseThrow();
 
+        assertThat(duplicateId).isEqualTo(firstId);
+        assertThat(notificationRepository.count()).isEqualTo(1);
         assertThat(saved.getDedupeKey()).isEqualTo(
                 "TRIP_D1:1001:" + recipientPublicId + ":2026-10-15"
         );
-        assertThatThrownBy(() -> notificationRepository.saveAndFlush(
-                notification(recipient, tripStartDate, createdAt.plusMinutes(30))
-        )).isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(saved.getTitle()).isEqualTo("내일 여행이 시작돼요");
+        assertThat(saved.getCreatedAt()).isEqualTo(createdAt);
+    }
+
+    @DisplayName("알림 수신 ACK는 최초 시각을 유지하고 소유자가 아니면 처리하지 않는다")
+    @Test
+    void idempotentlyAcknowledgesOwnedNotification() {
+        User recipient = userRepository.save(new User(
+                null,
+                UUID.randomUUID(),
+                "알림수신자"
+        ));
+        User otherUser = userRepository.save(new User(
+                null,
+                UUID.randomUUID(),
+                "다른사용자"
+        ));
+        Long notificationId = notificationStore.saveIdempotently(notification(
+                recipient,
+                LocalDate.of(2026, 10, 15),
+                LocalDateTime.of(2026, 10, 14, 10, 0),
+                "내일 여행이 시작돼요"
+        ));
+        LocalDateTime firstAck =
+                LocalDateTime.of(2026, 10, 14, 10, 1);
+
+        assertThat(notificationStore.acknowledgeDelivery(
+                notificationId,
+                recipient.getId(),
+                firstAck
+        )).contains(firstAck);
+        assertThat(notificationStore.acknowledgeDelivery(
+                notificationId,
+                recipient.getId(),
+                firstAck.plusMinutes(1)
+        )).contains(firstAck);
+        assertThat(notificationStore.acknowledgeDelivery(
+                notificationId,
+                otherUser.getId(),
+                firstAck.plusMinutes(2)
+        )).isEmpty();
+    }
+
+    @DisplayName("소프트 삭제된 알림은 수신 ACK를 처리하지 않는다")
+    @Test
+    void doesNotAcknowledgeDeletedNotification() {
+        User recipient = userRepository.save(new User(
+                null,
+                UUID.randomUUID(),
+                "삭제알림수신자"
+        ));
+        Long notificationId = notificationStore.saveIdempotently(notification(
+                recipient,
+                LocalDate.of(2026, 10, 15),
+                LocalDateTime.of(2026, 10, 14, 10, 0),
+                "내일 여행이 시작돼요"
+        ));
+        jdbcTemplate.update(
+                "UPDATE notifications SET deleted_at = ? WHERE id = ?",
+                LocalDateTime.of(2026, 10, 14, 10, 1),
+                notificationId
+        );
+
+        assertThat(notificationStore.acknowledgeDelivery(
+                notificationId,
+                recipient.getId(),
+                LocalDateTime.of(2026, 10, 14, 10, 2)
+        )).isEmpty();
     }
 
     private Notification notification(
             User recipient,
             LocalDate tripStartDate,
-            LocalDateTime createdAt
+            LocalDateTime createdAt,
+            String title
     ) {
         return Notification.createTripNotification(
                 recipient,
                 1001L,
                 tripStartDate,
                 NotificationType.TRIP_D1,
-                "내일 여행이 시작돼요",
+                title,
                 "여행 일정과 날씨를 확인해 주세요.",
                 createdAt
         );
