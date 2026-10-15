@@ -9,6 +9,7 @@ import io.sentry.Sentry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 
@@ -21,6 +22,7 @@ public class PhotoMissionGenerationService {
     private final TripRepository tripRepository;
     private final PhotoMissionGenerationTransactionService transactionService;
     private final PhotoMissionAiClient aiClient;
+    private final Clock photoMissionClock;
 
     public void generateDueTrips(LocalDateTime now) {
         if (!now.toLocalTime().isBefore(PUBLICATION_TIME)) {
@@ -31,22 +33,40 @@ public class PhotoMissionGenerationService {
                         now.toLocalDate(),
                         MissionGenerationJob.staleBefore(now)
                 )) {
-            generate(tripId, now);
+            LocalDateTime attemptedAt = LocalDateTime.now(photoMissionClock);
+            if (!attemptedAt.toLocalDate().equals(now.toLocalDate())
+                    || !attemptedAt.toLocalTime().isBefore(PUBLICATION_TIME)) {
+                break;
+            }
+            generate(tripId, attemptedAt);
         }
     }
 
     private void generate(Long tripId, LocalDateTime now) {
-        Long jobId = null;
+        MissionGenerationAttempt attempt = null;
         try {
-            jobId = transactionService.start(tripId, now);
+            attempt = transactionService.start(tripId, now);
             PhotoMissionGenerateRequest request =
-                    transactionService.loadRequest(jobId);
+                    transactionService.loadRequest(attempt.jobId());
             PhotoMissionGenerateResponse response = aiClient.generate(request);
-            transactionService.complete(jobId, response, now);
+            transactionService.complete(
+                    attempt,
+                    response,
+                    LocalDateTime.now(photoMissionClock)
+            );
         } catch (RuntimeException exception) {
-            if (jobId != null) {
-                transactionService.fail(jobId);
-            }
+            Sentry.captureException(exception);
+            markFailed(attempt);
+        }
+    }
+
+    private void markFailed(MissionGenerationAttempt attempt) {
+        if (attempt == null) {
+            return;
+        }
+        try {
+            transactionService.fail(attempt);
+        } catch (RuntimeException exception) {
             Sentry.captureException(exception);
         }
     }

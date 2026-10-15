@@ -45,19 +45,26 @@ public class PhotoMissionGenerationTransactionService {
     private final MissionGroupStateRepository groupStateRepository;
 
     @Transactional
-    public Long start(Long tripId, LocalDateTime attemptedAt) {
+    public MissionGenerationAttempt start(
+            Long tripId,
+            LocalDateTime attemptedAt
+    ) {
         Trip trip = tripRepository.findById(tripId)
                 .filter(found -> found.getDeletedAt() == null)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "포토미션 생성 대상 여행을 찾을 수 없습니다"
                 ));
-        MissionGenerationJob job = jobRepository.findByTripId(tripId)
+        MissionGenerationJob job = jobRepository.findByTripIdForUpdate(tripId)
                 .map(existing -> retry(existing, attemptedAt))
                 .orElseGet(() -> MissionGenerationJob.start(
                         trip,
                         attemptedAt
                 ));
-        return jobRepository.save(job).getId();
+        MissionGenerationJob saved = jobRepository.saveAndFlush(job);
+        return new MissionGenerationAttempt(
+                saved.getId(),
+                saved.getAttemptCount()
+        );
     }
 
     @Transactional(readOnly = true)
@@ -75,11 +82,12 @@ public class PhotoMissionGenerationTransactionService {
 
     @Transactional
     public void complete(
-            Long jobId,
+            MissionGenerationAttempt attempt,
             PhotoMissionGenerateResponse response,
             LocalDateTime completedAt
     ) {
-        MissionGenerationJob job = findJob(jobId);
+        MissionGenerationJob job = findJobForUpdate(attempt.jobId());
+        requireCurrentAttempt(job, attempt);
         requireRunning(job);
         Schedule schedule = findActiveSchedule(job.getTrip().getId());
         List<ScheduleVisit> visits = findActiveVisits(schedule.getId());
@@ -105,9 +113,10 @@ public class PhotoMissionGenerationTransactionService {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void fail(Long jobId) {
-        MissionGenerationJob job = findJob(jobId);
-        if (job.getStatus() == MissionGenerationStatus.RUNNING) {
+    public void fail(MissionGenerationAttempt attempt) {
+        MissionGenerationJob job = findJobForUpdate(attempt.jobId());
+        if (job.getStatus() == MissionGenerationStatus.RUNNING
+                && job.getAttemptCount() == attempt.attemptCount()) {
             job.fail();
         }
     }
@@ -126,6 +135,13 @@ public class PhotoMissionGenerationTransactionService {
 
     private MissionGenerationJob findJob(Long jobId) {
         return jobRepository.findById(jobId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "포토미션 생성 작업을 찾을 수 없습니다"
+                ));
+    }
+
+    private MissionGenerationJob findJobForUpdate(Long jobId) {
+        return jobRepository.findByIdForUpdate(jobId)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "포토미션 생성 작업을 찾을 수 없습니다"
                 ));
@@ -160,7 +176,7 @@ public class PhotoMissionGenerationTransactionService {
                         visit.getPlaceNameSnapshot(),
                         "ko"
                 ),
-                List.of("Day " + visit.getDay().getDayNumber()),
+                List.of(),
                 visit.getMatchedPreferences()
         );
     }
@@ -233,6 +249,17 @@ public class PhotoMissionGenerationTransactionService {
         if (job.getStatus() != MissionGenerationStatus.RUNNING) {
             throw new IllegalStateException(
                     "진행 중인 포토미션 생성 작업이 아닙니다"
+            );
+        }
+    }
+
+    private void requireCurrentAttempt(
+            MissionGenerationJob job,
+            MissionGenerationAttempt attempt
+    ) {
+        if (job.getAttemptCount() != attempt.attemptCount()) {
+            throw new IllegalStateException(
+                    "현재 실행 중인 포토미션 생성 시도가 아닙니다"
             );
         }
     }

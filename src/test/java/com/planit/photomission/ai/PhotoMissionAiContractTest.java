@@ -39,7 +39,7 @@ class PhotoMissionAiContractTest {
                                         "첨성대",
                                         "ko"
                                 ),
-                                List.of("Day 1"),
+                                List.of("user_abc"),
                                 List.of("역사·유적")
                         ))
                 );
@@ -47,7 +47,7 @@ class PhotoMissionAiContractTest {
         JsonNode json = objectMapper.valueToTree(request);
         assertThat(json.get("itinerary_id").asText()).isEqualTo("trip_1");
         assertThat(json.get("places").get(0)
-                .get("selected_for").get(0).asText()).isEqualTo("Day 1");
+                .get("selected_for").get(0).asText()).isEqualTo("user_abc");
         assertThat(json.get("places").get(0)
                 .get("matched_preferences").get(0).asText())
                 .isEqualTo("역사·유적");

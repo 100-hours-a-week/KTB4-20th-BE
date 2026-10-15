@@ -122,7 +122,7 @@ class PhotoMissionAiClientTest {
                                         "첨성대",
                                         "ko"
                                 ),
-                                List.of("Day 1"),
+                                List.of("user_abc"),
                                 List.of("역사·유적")
                         ))
                 );
@@ -144,7 +144,7 @@ class PhotoMissionAiClientTest {
                               "text": "첨성대",
                               "languageCode": "ko"
                             },
-                            "selected_for": ["Day 1"],
+                            "selected_for": ["user_abc"],
                             "matched_preferences": ["역사·유적"]
                           }]
                         }
