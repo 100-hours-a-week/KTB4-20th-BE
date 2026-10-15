@@ -6,7 +6,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
-public record AiWeatherPrecheckResponse(
+public record AiPrecheckResponse(
         @JsonProperty("status_code")
         int statusCode,
         Data data

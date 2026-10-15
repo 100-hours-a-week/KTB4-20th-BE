@@ -11,7 +11,7 @@ import java.time.ZoneId;
 import java.util.List;
 
 @Component
-public class AiWeatherPrecheckClient {
+public class AiPrecheckClient {
 
     private static final String INTERNAL_TOKEN_HEADER =
             "X-Internal-Token";
@@ -21,7 +21,7 @@ public class AiWeatherPrecheckClient {
     private final RestClient restClient;
     private final AiProperties aiProperties;
 
-    public AiWeatherPrecheckClient(
+    public AiPrecheckClient(
             @Qualifier("aiRestClient") RestClient restClient,
             AiProperties aiProperties
     ) {
@@ -29,8 +29,8 @@ public class AiWeatherPrecheckClient {
         this.aiProperties = aiProperties;
     }
 
-    public AiWeatherPrecheckResponse precheck() {
-        AiWeatherPrecheckResponse response = restClient.get()
+    public AiPrecheckResponse precheck() {
+        AiPrecheckResponse response = restClient.get()
                 .uri(aiProperties.baseUrl().resolve("/precheck"))
                 .header(
                         INTERNAL_TOKEN_HEADER,
@@ -38,28 +38,28 @@ public class AiWeatherPrecheckClient {
                 )
                 .accept(MediaType.APPLICATION_JSON)
                 .retrieve()
-                .body(AiWeatherPrecheckResponse.class);
+                .body(AiPrecheckResponse.class);
 
         if (response == null) {
             throw new RestClientException(
-                    "AI 날씨 사전 점검 응답이 없습니다."
+                    "AI 외부 요인 사전 점검 응답이 없습니다."
             );
         }
         if (response.statusCode() != 200) {
             throw new RestClientException(
-                    "AI 날씨 사전 점검 응답 상태가 올바르지 않습니다."
+                    "AI 외부 요인 사전 점검 응답 상태가 올바르지 않습니다."
             );
         }
         if (!hasValidData(response.data())) {
             throw new RestClientException(
-                    "AI 날씨 사전 점검 응답 형식이 올바르지 않습니다."
+                    "AI 외부 요인 사전 점검 응답 형식이 올바르지 않습니다."
             );
         }
 
         return response;
     }
 
-    private boolean hasValidData(AiWeatherPrecheckResponse.Data data) {
+    private boolean hasValidData(AiPrecheckResponse.Data data) {
         if (data == null || data.generatedAt() == null
                 || data.forecasts() == null
                 || data.forecasts().size() != FORECAST_DAY_COUNT) {
@@ -69,11 +69,11 @@ public class AiWeatherPrecheckClient {
         LocalDate generatedDate = data.generatedAt()
                 .atZone(SEOUL_ZONE)
                 .toLocalDate();
-        List<AiWeatherPrecheckResponse.Forecast> forecasts =
+        List<AiPrecheckResponse.Forecast> forecasts =
                 data.forecasts();
 
         for (int index = 0; index < FORECAST_DAY_COUNT; index++) {
-            AiWeatherPrecheckResponse.Forecast forecast =
+            AiPrecheckResponse.Forecast forecast =
                     forecasts.get(index);
             if (forecast == null
                     || !generatedDate.plusDays(index + 1L)
@@ -88,7 +88,7 @@ public class AiWeatherPrecheckClient {
     }
 
     private boolean hasInvalidRegionForecast(
-            AiWeatherPrecheckResponse.RegionForecast forecast
+            AiPrecheckResponse.RegionForecast forecast
     ) {
         return forecast == null
                 || forecast.region() == null
