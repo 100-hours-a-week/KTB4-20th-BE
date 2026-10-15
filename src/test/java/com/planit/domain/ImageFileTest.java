@@ -27,4 +27,25 @@ class ImageFileTest {
         assertThat(imageFile.getCreatedAt())
                 .isNotNull();
     }
+
+    @DisplayName("포토미션 이미지를 MISSION 용도로 생성한다")
+    @Test
+    void createsMissionImage() {
+        ImageFile imageFile = ImageFile.mission(
+                "missions/31/photo.jpg",
+                "photo.jpg",
+                "image/jpeg",
+                1024
+        );
+
+        assertThat(imageFile.getImageKey())
+                .isEqualTo("missions/31/photo.jpg");
+        assertThat(imageFile.getImagePurpose())
+                .isEqualTo(ImagePurpose.MISSION);
+        assertThat(imageFile.getOriginalFilename())
+                .isEqualTo("photo.jpg");
+        assertThat(imageFile.getMimeType()).isEqualTo("image/jpeg");
+        assertThat(imageFile.getSizeBytes()).isEqualTo(1024);
+        assertThat(imageFile.getCreatedAt()).isNotNull();
+    }
 }

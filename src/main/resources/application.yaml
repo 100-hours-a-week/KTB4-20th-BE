@@ -1,6 +1,10 @@
 spring:
   application:
     name: planit-backend
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
   datasource:
     url: ${DB_URL:jdbc:mysql://localhost:3306/planit?connectionTimeZone=Asia/Seoul}
     username: ${DB_USERNAME:planit}
@@ -36,6 +40,7 @@ planit:
     region: ${AWS_REGION:ap-northeast-2}
     read-url-ttl: 5m
     max-profile-bytes: 5242880
+    max-mission-bytes: 5242880
     download-connect-timeout: 3s
     download-read-timeout: 5s
   auth:

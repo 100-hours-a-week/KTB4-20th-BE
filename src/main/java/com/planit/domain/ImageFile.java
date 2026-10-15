@@ -68,12 +68,32 @@ public class ImageFile {
         );
     }
 
+    public static ImageFile mission(
+            String imageKey,
+            String originalFilename,
+            String mimeType,
+            int sizeBytes
+    ) {
+        ImageFile imageFile = new ImageFile(
+                imageKey,
+                ImagePurpose.MISSION,
+                mimeType,
+                sizeBytes
+        );
+        imageFile.originalFilename = originalFilename;
+        return imageFile;
+    }
+
     public String getImageKey() {
         return imageKey;
     }
 
     public ImagePurpose getImagePurpose() {
         return imagePurpose;
+    }
+
+    public String getOriginalFilename() {
+        return originalFilename;
     }
 
     public String getMimeType() {

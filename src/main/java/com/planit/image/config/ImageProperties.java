@@ -16,6 +16,7 @@ public record ImageProperties(
         @NotBlank String region,
         @NotNull Duration readUrlTtl,
         @Positive int maxProfileBytes,
+        @Positive int maxMissionBytes,
         @NotNull Duration downloadConnectTimeout,
         @NotNull Duration downloadReadTimeout
 ) {

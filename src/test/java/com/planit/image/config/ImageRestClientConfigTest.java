@@ -39,6 +39,7 @@ class ImageRestClientConfigTest {
                     "ap-northeast-2",
                     Duration.ofMinutes(5),
                     5_242_880,
+                    5_242_880,
                     Duration.ofMillis(100),
                     Duration.ofMillis(100)
             );
