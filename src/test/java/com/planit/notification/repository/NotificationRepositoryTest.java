@@ -52,6 +52,7 @@ class NotificationRepositoryTest {
                 createdAt,
                 "내일 여행이 시작돼요"
         ));
+        LocalDateTime firstStoredCreatedAt = findCreatedAt(firstId);
         Long duplicateId = notificationStore.saveIdempotently(notification(
                 recipient,
                 tripStartDate,
@@ -62,12 +63,12 @@ class NotificationRepositoryTest {
                 .orElseThrow();
 
         assertThat(duplicateId).isEqualTo(firstId);
-        assertThat(notificationRepository.count()).isEqualTo(1);
+        assertThat(countByDedupeKey(saved.getDedupeKey())).isEqualTo(1);
         assertThat(saved.getDedupeKey()).isEqualTo(
                 "TRIP_D1:1001:" + recipientPublicId + ":2026-10-15"
         );
         assertThat(saved.getTitle()).isEqualTo("내일 여행이 시작돼요");
-        assertThat(saved.getCreatedAt()).isEqualTo(createdAt);
+        assertThat(findCreatedAt(firstId)).isEqualTo(firstStoredCreatedAt);
     }
 
     @DisplayName("알림 수신 ACK는 최초 시각을 유지하고 소유자가 아니면 처리하지 않는다")
@@ -150,6 +151,22 @@ class NotificationRepositoryTest {
                 title,
                 "여행 일정과 날씨를 확인해 주세요.",
                 createdAt
+        );
+    }
+
+    private LocalDateTime findCreatedAt(Long notificationId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT created_at FROM notifications WHERE id = ?",
+                LocalDateTime.class,
+                notificationId
+        );
+    }
+
+    private Integer countByDedupeKey(String dedupeKey) {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM notifications WHERE dedupe_key = ?",
+                Integer.class,
+                dedupeKey
         );
     }
 }
