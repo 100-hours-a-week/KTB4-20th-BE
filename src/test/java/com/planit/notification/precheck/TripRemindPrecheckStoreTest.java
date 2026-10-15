@@ -86,9 +86,9 @@ class TripRemindPrecheckStoreTest {
         );
     }
 
-    @DisplayName("Valkey가 저장 결과를 반환하지 않으면 실패한다")
+    @DisplayName("Redis가 저장 결과를 반환하지 않으면 실패한다")
     @Test
-    void rejectsMissingValkeyResult() {
+    void rejectsMissingRedisResult() {
         when(redisTemplate.execute(
                 any(RedisScript.class),
                 any(),
@@ -100,7 +100,7 @@ class TripRemindPrecheckStoreTest {
                 LocalDate.of(2026, 10, 11),
                 cache()
         )).isInstanceOf(IllegalStateException.class)
-                .hasMessage("Valkey 사전 점검 저장 결과가 없습니다.");
+                .hasMessage("Redis 사전 점검 저장 결과가 없습니다.");
     }
 
     @DisplayName("사전 점검 JSON과 남은 TTL을 함께 조회한다")
@@ -143,7 +143,7 @@ class TripRemindPrecheckStoreTest {
         assertThatThrownBy(() -> store.find(
                 LocalDate.of(2026, 10, 11)
         )).isInstanceOf(IllegalStateException.class)
-                .hasMessage("Valkey 사전 점검 JSON을 해석할 수 없습니다.");
+                .hasMessage("Redis 사전 점검 JSON을 해석할 수 없습니다.");
     }
 
     @DisplayName("사전 점검 키에 TTL이 없으면 실패한다")
@@ -157,7 +157,7 @@ class TripRemindPrecheckStoreTest {
         assertThatThrownBy(() -> store.find(
                 LocalDate.of(2026, 10, 11)
         )).isInstanceOf(IllegalStateException.class)
-                .hasMessage("Valkey 사전 점검 TTL이 비정상입니다: -1");
+                .hasMessage("Redis 사전 점검 TTL이 비정상입니다: -1");
     }
 
     @DisplayName("조회 시점에 만료된 사전 점검 키는 실패한다")
@@ -171,7 +171,7 @@ class TripRemindPrecheckStoreTest {
         assertThatThrownBy(() -> store.find(
                 LocalDate.of(2026, 10, 11)
         )).isInstanceOf(IllegalStateException.class)
-                .hasMessage("Valkey 사전 점검 TTL이 비정상입니다: -2");
+                .hasMessage("Redis 사전 점검 TTL이 비정상입니다: -2");
     }
 
     @DisplayName("사전 점검 TTL이 최초 설정값보다 크면 실패한다")
@@ -185,7 +185,7 @@ class TripRemindPrecheckStoreTest {
         assertThatThrownBy(() -> store.find(
                 LocalDate.of(2026, 10, 11)
         )).isInstanceOf(IllegalStateException.class)
-                .hasMessage("Valkey 사전 점검 TTL이 비정상입니다: 72001");
+                .hasMessage("Redis 사전 점검 TTL이 비정상입니다: 72001");
     }
 
     @DisplayName("여행 시작 대상일 없이 사전 점검을 조회할 수 없다")
@@ -272,7 +272,7 @@ class TripRemindPrecheckStoreTest {
         )).isEqualTo(TripRemindPrecheckTransitionResult.STATUS_MISMATCH);
     }
 
-    @DisplayName("순서를 건너뛰는 상태 전이는 Valkey 호출 전에 거부한다")
+    @DisplayName("순서를 건너뛰는 상태 전이는 Redis 호출 전에 거부한다")
     @Test
     void rejectsSkippedTransition() {
         assertThatThrownBy(() -> store.transition(

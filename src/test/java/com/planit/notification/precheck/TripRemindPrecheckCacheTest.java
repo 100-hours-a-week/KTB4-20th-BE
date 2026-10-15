@@ -19,7 +19,7 @@ class TripRemindPrecheckCacheTest {
 
     private final ObjectMapper objectMapper = JsonMapper.builder().build();
 
-    @DisplayName("AI 응답 데이터에 PRECHECKED 상태를 추가해 Valkey JSON 모델로 변환한다")
+    @DisplayName("AI 응답 데이터에 PRECHECKED 상태를 추가해 Redis JSON 모델로 변환한다")
     @Test
     void createsPrecheckedCacheFromAiResponse() {
         AiPrecheckResponse.Data data = precheckData();
@@ -43,7 +43,7 @@ class TripRemindPrecheckCacheTest {
         assertThat(json.has("status_code")).isFalse();
     }
 
-    @DisplayName("변환 후 AI 응답 목록이 바뀌어도 Valkey JSON 모델은 변경되지 않는다")
+    @DisplayName("변환 후 AI 응답 목록이 바뀌어도 Redis JSON 모델은 변경되지 않는다")
     @Test
     void defensivelyCopiesAiResponseLists() {
         List<AiPrecheckResponse.Reason> reasons = new ArrayList<>();
@@ -72,7 +72,7 @@ class TripRemindPrecheckCacheTest {
                 .isInstanceOf(UnsupportedOperationException.class);
     }
 
-    @DisplayName("AI 응답 데이터가 없으면 Valkey JSON 모델을 만들 수 없다")
+    @DisplayName("AI 응답 데이터가 없으면 Redis JSON 모델을 만들 수 없다")
     @Test
     void rejectsMissingAiResponseData() {
         assertThatThrownBy(() -> TripRemindPrecheckCache.from(null))
