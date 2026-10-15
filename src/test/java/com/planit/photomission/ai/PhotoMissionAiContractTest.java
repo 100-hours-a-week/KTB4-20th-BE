@@ -27,6 +27,50 @@ class PhotoMissionAiContractTest {
     private final PhotoMissionEvaluationMapper mapper =
             new PhotoMissionEvaluationMapper(objectMapper);
 
+    @DisplayName("미션 생성 요청과 응답을 AI 계약으로 매핑한다")
+    @Test
+    void mapsGenerationContract() throws Exception {
+        PhotoMissionGenerateRequest request =
+                new PhotoMissionGenerateRequest(
+                        "trip_1",
+                        List.of(new PhotoMissionGenerateRequest.Place(
+                                "place_abc",
+                                new PhotoMissionGenerateRequest.DisplayName(
+                                        "첨성대",
+                                        "ko"
+                                ),
+                                List.of("Day 1"),
+                                List.of("역사·유적")
+                        ))
+                );
+
+        JsonNode json = objectMapper.valueToTree(request);
+        assertThat(json.get("itinerary_id").asText()).isEqualTo("trip_1");
+        assertThat(json.get("places").get(0)
+                .get("selected_for").get(0).asText()).isEqualTo("Day 1");
+        assertThat(json.get("places").get(0)
+                .get("matched_preferences").get(0).asText())
+                .isEqualTo("역사·유적");
+
+        PhotoMissionGenerateResponse response = objectMapper.readValue("""
+                {
+                  "missions": [{
+                    "mission_id": "mission_abc",
+                    "place_id": "place_abc",
+                    "description": "첨성대 전경을 찍어보세요.",
+                    "scope": "PERSONAL",
+                    "primary_category": "역사·유적"
+                  }]
+                }
+                """, PhotoMissionGenerateResponse.class);
+
+        assertThat(response.missions()).singleElement().satisfies(mission -> {
+            assertThat(mission.placeId()).isEqualTo("place_abc");
+            assertThat(mission.scope()).isEqualTo("PERSONAL");
+            assertThat(mission.primaryCategory()).isEqualTo("역사·유적");
+        });
+    }
+
     @DisplayName("사진 판정 요청을 AI snake_case 계약으로 직렬화한다")
     @Test
     void serializesVerifyRequestContract() {

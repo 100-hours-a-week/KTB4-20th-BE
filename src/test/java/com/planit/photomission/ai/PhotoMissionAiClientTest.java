@@ -12,6 +12,7 @@ import org.springframework.web.client.RestClient;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.time.Duration;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.client.ExpectedCount.once;
@@ -106,6 +107,65 @@ class PhotoMissionAiClientTest {
                 .isEqualByComparingTo("92.0");
         assertThat(response.retryHint())
                 .isEqualTo("탑이 사람에 가려졌어요.");
+        server.verify();
+    }
+
+    @DisplayName("AI 서버에 전체 여행의 포토미션 생성을 요청한다")
+    @Test
+    void requestsPhotoMissionGenerationFromAiServer() {
+        PhotoMissionGenerateRequest request =
+                new PhotoMissionGenerateRequest(
+                        "trip_1",
+                        List.of(new PhotoMissionGenerateRequest.Place(
+                                "place_abc",
+                                new PhotoMissionGenerateRequest.DisplayName(
+                                        "첨성대",
+                                        "ko"
+                                ),
+                                List.of("Day 1"),
+                                List.of("역사·유적")
+                        ))
+                );
+
+        server.expect(once(), requestTo(
+                        "http://localhost:8000/photomissions/generate"
+                ))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header(
+                        "X-Internal-Token",
+                        "test-internal-token"
+                ))
+                .andExpect(content().json("""
+                        {
+                          "itinerary_id": "trip_1",
+                          "places": [{
+                            "id": "place_abc",
+                            "displayName": {
+                              "text": "첨성대",
+                              "languageCode": "ko"
+                            },
+                            "selected_for": ["Day 1"],
+                            "matched_preferences": ["역사·유적"]
+                          }]
+                        }
+                        """))
+                .andRespond(withSuccess("""
+                        {
+                          "missions": [{
+                            "mission_id": "mission_abc",
+                            "place_id": "place_abc",
+                            "description": "첨성대 전경을 찍어보세요.",
+                            "scope": "PERSONAL",
+                            "primary_category": "역사·유적"
+                          }]
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        PhotoMissionGenerateResponse response = client.generate(request);
+
+        assertThat(response.missions()).hasSize(1);
+        assertThat(response.missions().getFirst().placeId())
+                .isEqualTo("place_abc");
         server.verify();
     }
 }

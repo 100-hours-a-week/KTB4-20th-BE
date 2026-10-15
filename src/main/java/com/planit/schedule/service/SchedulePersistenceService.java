@@ -224,6 +224,7 @@ public class SchedulePersistenceService {
                     place,
                     index + 1,
                     recommendation.editorialSummary(),
+                    recommendation.matchedPreferences(),
                     now
             ));
             visitByPlaceId.put(routePlace.placeId(), visit);
