@@ -7,10 +7,9 @@ spring:
     password: ${DB_PASSWORD}
   data:
     redis:
-      # Spring Data Redis/Lettuce는 RESP 호환 Valkey 연결에 그대로 사용한다.
-      host: ${VALKEY_HOST:localhost}
-      port: ${VALKEY_PORT:6379}
-      password: ${VALKEY_PASSWORD:}
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
       timeout: 3s
   flyway:
     enabled: true
