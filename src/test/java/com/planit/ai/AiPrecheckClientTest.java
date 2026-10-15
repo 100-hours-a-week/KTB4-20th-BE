@@ -22,16 +22,16 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withNoContent;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
-class AiWeatherPrecheckClientTest {
+class AiPrecheckClientTest {
 
     private MockRestServiceServer server;
-    private AiWeatherPrecheckClient client;
+    private AiPrecheckClient client;
 
     @BeforeEach
     void setUp() {
         RestClient.Builder builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
-        client = new AiWeatherPrecheckClient(
+        client = new AiPrecheckClient(
                 builder.build(),
                 new AiProperties(
                         URI.create("http://localhost:8000"),
@@ -42,9 +42,9 @@ class AiWeatherPrecheckClientTest {
         );
     }
 
-    @DisplayName("AI 서버에서 다음 날부터 9일간의 지역별 날씨를 조회한다")
+    @DisplayName("AI 서버에서 다음 날부터 9일간의 지역별 외부 요인을 조회한다")
     @Test
-    void requestsNineDayRegionalWeatherPrecheck() {
+    void requestsNineDayRegionalPrecheck() {
         server.expect(once(), requestTo(
                         "http://localhost:8000/precheck"
                 ))
@@ -55,7 +55,7 @@ class AiWeatherPrecheckClientTest {
                 ))
                 .andRespond(successfulResponse(nineDayForecasts()));
 
-        AiWeatherPrecheckResponse response = client.precheck();
+        AiPrecheckResponse response = client.precheck();
 
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.data().generatedAt().toString())
@@ -69,7 +69,7 @@ class AiWeatherPrecheckClientTest {
                 .getFirst().hasIssue()).isTrue();
         assertThat(response.data().forecasts().getFirst().regions()
                 .getFirst().reasons())
-                .containsExactly(new AiWeatherPrecheckResponse.Reason(
+                .containsExactly(new AiPrecheckResponse.Reason(
                         "weather_risk",
                         "heavy_rain"
                 ));
@@ -86,7 +86,7 @@ class AiWeatherPrecheckClientTest {
 
         assertThatThrownBy(client::precheck)
                 .isInstanceOf(RestClientException.class)
-                .hasMessage("AI 날씨 사전 점검 응답이 없습니다.");
+                .hasMessage("AI 외부 요인 사전 점검 응답이 없습니다.");
         server.verify();
     }
 
@@ -106,7 +106,7 @@ class AiWeatherPrecheckClientTest {
         assertThatThrownBy(client::precheck)
                 .isInstanceOf(RestClientException.class)
                 .hasMessage(
-                        "AI 날씨 사전 점검 응답 상태가 올바르지 않습니다."
+                        "AI 외부 요인 사전 점검 응답 상태가 올바르지 않습니다."
                 );
         server.verify();
     }
@@ -129,7 +129,7 @@ class AiWeatherPrecheckClientTest {
         assertThatThrownBy(client::precheck)
                 .isInstanceOf(RestClientException.class)
                 .hasMessage(
-                        "AI 날씨 사전 점검 응답 형식이 올바르지 않습니다."
+                        "AI 외부 요인 사전 점검 응답 형식이 올바르지 않습니다."
                 );
         server.verify();
     }
@@ -150,7 +150,7 @@ class AiWeatherPrecheckClientTest {
         assertThatThrownBy(client::precheck)
                 .isInstanceOf(RestClientException.class)
                 .hasMessage(
-                        "AI 날씨 사전 점검 응답 형식이 올바르지 않습니다."
+                        "AI 외부 요인 사전 점검 응답 형식이 올바르지 않습니다."
                 );
         server.verify();
     }
@@ -172,7 +172,7 @@ class AiWeatherPrecheckClientTest {
         assertThatThrownBy(client::precheck)
                 .isInstanceOf(RestClientException.class)
                 .hasMessage(
-                        "AI 날씨 사전 점검 응답 형식이 올바르지 않습니다."
+                        "AI 외부 요인 사전 점검 응답 형식이 올바르지 않습니다."
                 );
         server.verify();
     }
