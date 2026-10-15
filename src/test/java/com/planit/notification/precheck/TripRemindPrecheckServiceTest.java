@@ -90,7 +90,7 @@ class TripRemindPrecheckServiceTest {
         );
     }
 
-    @DisplayName("AI 사전 점검이 실패하면 Valkey JSON을 생성하지 않는다")
+    @DisplayName("AI 사전 점검이 실패하면 Redis JSON을 생성하지 않는다")
     @Test
     void doesNotCreateCacheWhenAiPrecheckFails() {
         LocalDate targetDate = LocalDate.of(2026, 10, 11);

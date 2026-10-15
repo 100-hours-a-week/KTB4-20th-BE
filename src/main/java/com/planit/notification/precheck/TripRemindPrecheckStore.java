@@ -106,7 +106,7 @@ public class TripRemindPrecheckStore {
 
         if (result == null) {
             throw new IllegalStateException(
-                    "Valkey 사전 점검 저장 결과가 없습니다."
+                    "Redis 사전 점검 저장 결과가 없습니다."
             );
         }
 
@@ -114,7 +114,7 @@ public class TripRemindPrecheckStore {
             return TripRemindPrecheckCreateResult.valueOf(result);
         } catch (IllegalArgumentException exception) {
             throw new IllegalStateException(
-                    "지원하지 않는 Valkey 사전 점검 저장 결과입니다: "
+                    "지원하지 않는 Redis 사전 점검 저장 결과입니다: "
                             + result,
                     exception
             );
@@ -157,7 +157,7 @@ public class TripRemindPrecheckStore {
 
         if (result == null) {
             throw new IllegalStateException(
-                    "Valkey 사전 점검 상태 전이 결과가 없습니다."
+                    "Redis 사전 점검 상태 전이 결과가 없습니다."
             );
         }
 
@@ -165,7 +165,7 @@ public class TripRemindPrecheckStore {
             return TripRemindPrecheckTransitionResult.valueOf(result);
         } catch (IllegalArgumentException exception) {
             throw new IllegalStateException(
-                    "지원하지 않는 Valkey 사전 점검 상태 전이 결과입니다: "
+                    "지원하지 않는 Redis 사전 점검 상태 전이 결과입니다: "
                             + result,
                     exception
             );
@@ -208,7 +208,7 @@ public class TripRemindPrecheckStore {
     private void validateFindResult(List<?> result) {
         if (result.size() != 2) {
             throw new IllegalStateException(
-                    "지원하지 않는 Valkey 사전 점검 조회 결과입니다."
+                    "지원하지 않는 Redis 사전 점검 조회 결과입니다."
             );
         }
     }
@@ -218,7 +218,7 @@ public class TripRemindPrecheckStore {
             return Long.parseLong(Objects.toString(ttl));
         } catch (NumberFormatException exception) {
             throw new IllegalStateException(
-                    "Valkey 사전 점검 TTL을 해석할 수 없습니다.",
+                    "Redis 사전 점검 TTL을 해석할 수 없습니다.",
                     exception
             );
         }
@@ -227,7 +227,7 @@ public class TripRemindPrecheckStore {
     private void validateTtlSeconds(long ttlSeconds) {
         if (ttlSeconds <= 0 || ttlSeconds > TTL_SECONDS) {
             throw new IllegalStateException(
-                    "Valkey 사전 점검 TTL이 비정상입니다: " + ttlSeconds
+                    "Redis 사전 점검 TTL이 비정상입니다: " + ttlSeconds
             );
         }
     }
@@ -240,7 +240,7 @@ public class TripRemindPrecheckStore {
             );
         } catch (RuntimeException exception) {
             throw new IllegalStateException(
-                    "Valkey 사전 점검 JSON을 해석할 수 없습니다.",
+                    "Redis 사전 점검 JSON을 해석할 수 없습니다.",
                     exception
             );
         }
