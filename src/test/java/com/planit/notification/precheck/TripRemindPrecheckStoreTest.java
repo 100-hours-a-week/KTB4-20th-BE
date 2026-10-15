@@ -19,6 +19,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class TripRemindPrecheckStoreTest {
@@ -193,6 +194,126 @@ class TripRemindPrecheckStoreTest {
         assertThatThrownBy(() -> store.find(null))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessage("여행 시작 대상일은 필수입니다");
+    }
+
+    @DisplayName("PRECHECKED 상태를 NOTI_GENERATED로 변경한다")
+    @Test
+    void transitionsPrecheckedToNotificationGenerated() {
+        when(redisTemplate.execute(
+                any(RedisScript.class),
+                eq(List.of("planit:trip-remind:precheck:2026-10-11")),
+                eq("PRECHECKED"),
+                eq("NOTI_GENERATED")
+        )).thenReturn("UPDATED");
+
+        TripRemindPrecheckTransitionResult result = store.transition(
+                LocalDate.of(2026, 10, 11),
+                TripRemindNotificationWorkflowStatus.PRECHECKED,
+                TripRemindNotificationWorkflowStatus.NOTI_GENERATED
+        );
+
+        assertThat(result).isEqualTo(
+                TripRemindPrecheckTransitionResult.UPDATED
+        );
+    }
+
+    @DisplayName("NOTI_GENERATED 상태를 DONE으로 변경한다")
+    @Test
+    void transitionsNotificationGeneratedToDone() {
+        when(redisTemplate.execute(
+                any(RedisScript.class),
+                any(),
+                anyString(),
+                anyString()
+        )).thenReturn("UPDATED");
+
+        TripRemindPrecheckTransitionResult result = store.transition(
+                LocalDate.of(2026, 10, 11),
+                TripRemindNotificationWorkflowStatus.NOTI_GENERATED,
+                TripRemindNotificationWorkflowStatus.DONE
+        );
+
+        assertThat(result).isEqualTo(
+                TripRemindPrecheckTransitionResult.UPDATED
+        );
+    }
+
+    @DisplayName("사전 점검 키가 없으면 상태 전이 실패 결과를 반환한다")
+    @Test
+    void returnsKeyNotFoundForTransition() {
+        when(redisTemplate.execute(
+                any(RedisScript.class),
+                any(),
+                anyString(),
+                anyString()
+        )).thenReturn("KEY_NOT_FOUND");
+
+        assertThat(store.transition(
+                LocalDate.of(2026, 10, 11),
+                TripRemindNotificationWorkflowStatus.PRECHECKED,
+                TripRemindNotificationWorkflowStatus.NOTI_GENERATED
+        )).isEqualTo(TripRemindPrecheckTransitionResult.KEY_NOT_FOUND);
+    }
+
+    @DisplayName("현재 상태가 기대 상태와 다르면 불일치 결과를 반환한다")
+    @Test
+    void returnsStatusMismatchForTransition() {
+        when(redisTemplate.execute(
+                any(RedisScript.class),
+                any(),
+                anyString(),
+                anyString()
+        )).thenReturn("STATUS_MISMATCH");
+
+        assertThat(store.transition(
+                LocalDate.of(2026, 10, 11),
+                TripRemindNotificationWorkflowStatus.PRECHECKED,
+                TripRemindNotificationWorkflowStatus.NOTI_GENERATED
+        )).isEqualTo(TripRemindPrecheckTransitionResult.STATUS_MISMATCH);
+    }
+
+    @DisplayName("순서를 건너뛰는 상태 전이는 Valkey 호출 전에 거부한다")
+    @Test
+    void rejectsSkippedTransition() {
+        assertThatThrownBy(() -> store.transition(
+                LocalDate.of(2026, 10, 11),
+                TripRemindNotificationWorkflowStatus.PRECHECKED,
+                TripRemindNotificationWorkflowStatus.DONE
+        )).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("PRECHECKED -> DONE");
+
+        verifyNoInteractions(redisTemplate);
+    }
+
+    @DisplayName("완료 상태에서는 더 이상 상태를 변경할 수 없다")
+    @Test
+    void rejectsTransitionFromDone() {
+        assertThatThrownBy(() -> store.transition(
+                LocalDate.of(2026, 10, 11),
+                TripRemindNotificationWorkflowStatus.DONE,
+                TripRemindNotificationWorkflowStatus.PRECHECKED
+        )).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("DONE -> PRECHECKED");
+
+        verifyNoInteractions(redisTemplate);
+    }
+
+    @DisplayName("지원하지 않는 상태 전이 결과를 반환하면 실패한다")
+    @Test
+    void rejectsUnsupportedTransitionResult() {
+        when(redisTemplate.execute(
+                any(RedisScript.class),
+                any(),
+                anyString(),
+                anyString()
+        )).thenReturn("UNKNOWN");
+
+        assertThatThrownBy(() -> store.transition(
+                LocalDate.of(2026, 10, 11),
+                TripRemindNotificationWorkflowStatus.PRECHECKED,
+                TripRemindNotificationWorkflowStatus.NOTI_GENERATED
+        )).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("상태 전이 결과입니다: UNKNOWN");
     }
 
     private static TripRemindPrecheckCache cache() {
