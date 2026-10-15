@@ -48,6 +48,37 @@ public class TripRemindPrecheckStore {
                     return { json, tostring(ttl) }
                     """, List.class);
 
+    private static final DefaultRedisScript<String> TRANSITION_SCRIPT =
+            new DefaultRedisScript<>("""
+                    local statusJson = redis.call(
+                        'JSON.GET',
+                        KEYS[1],
+                        '$.status'
+                    )
+
+                    if not statusJson then
+                        if redis.call('EXISTS', KEYS[1]) == 0 then
+                            return 'KEY_NOT_FOUND'
+                        end
+                        return 'STATUS_MISMATCH'
+                    end
+
+                    local currentStatus = cjson.decode(statusJson)[1]
+
+                    if currentStatus ~= ARGV[1] then
+                        return 'STATUS_MISMATCH'
+                    end
+
+                    redis.call(
+                        'JSON.SET',
+                        KEYS[1],
+                        '$.status',
+                        cjson.encode(ARGV[2])
+                    )
+
+                    return 'UPDATED'
+                    """, String.class);
+
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
 
@@ -105,6 +136,60 @@ public class TripRemindPrecheckStore {
         }
 
         return Optional.of(toSnapshot(result));
+    }
+
+    public TripRemindPrecheckTransitionResult transition(
+            LocalDate targetDate,
+            TripRemindNotificationWorkflowStatus expectedStatus,
+            TripRemindNotificationWorkflowStatus nextStatus
+    ) {
+        Objects.requireNonNull(targetDate, "여행 시작 대상일은 필수입니다");
+        Objects.requireNonNull(expectedStatus, "현재 작업 상태는 필수입니다");
+        Objects.requireNonNull(nextStatus, "다음 작업 상태는 필수입니다");
+        validateTransition(expectedStatus, nextStatus);
+
+        String result = redisTemplate.execute(
+                TRANSITION_SCRIPT,
+                List.of(key(targetDate)),
+                expectedStatus.name(),
+                nextStatus.name()
+        );
+
+        if (result == null) {
+            throw new IllegalStateException(
+                    "Valkey 사전 점검 상태 전이 결과가 없습니다."
+            );
+        }
+
+        try {
+            return TripRemindPrecheckTransitionResult.valueOf(result);
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalStateException(
+                    "지원하지 않는 Valkey 사전 점검 상태 전이 결과입니다: "
+                            + result,
+                    exception
+            );
+        }
+    }
+
+    private void validateTransition(
+            TripRemindNotificationWorkflowStatus expectedStatus,
+            TripRemindNotificationWorkflowStatus nextStatus
+    ) {
+        boolean allowed = switch (expectedStatus) {
+            case PRECHECKED -> nextStatus
+                    == TripRemindNotificationWorkflowStatus.NOTI_GENERATED;
+            case NOTI_GENERATED -> nextStatus
+                    == TripRemindNotificationWorkflowStatus.DONE;
+            case DONE -> false;
+        };
+
+        if (!allowed) {
+            throw new IllegalArgumentException(
+                    "허용되지 않는 여행 리마인드 알림 작업 상태 전이입니다: "
+                            + expectedStatus + " -> " + nextStatus
+            );
+        }
     }
 
     private TripRemindPrecheckSnapshot toSnapshot(List<?> result) {
