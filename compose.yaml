@@ -24,5 +24,21 @@ services:
       retries: 20
       start_period: 30s
 
+  valkey:
+    image: valkey/valkey-bundle:9.1.3-alpine
+    container_name: planit-valkey
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - planit-valkey-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
 volumes:
   planit-mysql-data:
+  planit-valkey-data:
