@@ -102,6 +102,99 @@ class TripRemindPrecheckStoreTest {
                 .hasMessage("Valkey 사전 점검 저장 결과가 없습니다.");
     }
 
+    @DisplayName("사전 점검 JSON과 남은 TTL을 함께 조회한다")
+    @Test
+    void findsPrecheckWithRemainingTtl() {
+        String json = JsonMapper.builder().build()
+                .writeValueAsString(cache());
+        when(redisTemplate.execute(
+                any(RedisScript.class),
+                eq(List.of("planit:trip-remind:precheck:2026-10-11"))
+        )).thenReturn(List.of(json, "71940"));
+
+        TripRemindPrecheckSnapshot snapshot = store.find(
+                LocalDate.of(2026, 10, 11)
+        ).orElseThrow();
+
+        assertThat(snapshot.cache()).isEqualTo(cache());
+        assertThat(snapshot.ttlSeconds()).isEqualTo(71_940L);
+    }
+
+    @DisplayName("사전 점검 키가 없으면 빈 결과를 반환한다")
+    @Test
+    void returnsEmptyForMissingPrecheck() {
+        when(redisTemplate.execute(
+                any(RedisScript.class),
+                any()
+        )).thenReturn(null);
+
+        assertThat(store.find(LocalDate.of(2026, 10, 11))).isEmpty();
+    }
+
+    @DisplayName("사전 점검 JSON을 역직렬화할 수 없으면 실패한다")
+    @Test
+    void rejectsInvalidPrecheckJson() {
+        when(redisTemplate.execute(
+                any(RedisScript.class),
+                any()
+        )).thenReturn(List.of("{invalid-json}", "71940"));
+
+        assertThatThrownBy(() -> store.find(
+                LocalDate.of(2026, 10, 11)
+        )).isInstanceOf(IllegalStateException.class)
+                .hasMessage("Valkey 사전 점검 JSON을 해석할 수 없습니다.");
+    }
+
+    @DisplayName("사전 점검 키에 TTL이 없으면 실패한다")
+    @Test
+    void rejectsPrecheckWithoutTtl() {
+        when(redisTemplate.execute(
+                any(RedisScript.class),
+                any()
+        )).thenReturn(List.of("{}", "-1"));
+
+        assertThatThrownBy(() -> store.find(
+                LocalDate.of(2026, 10, 11)
+        )).isInstanceOf(IllegalStateException.class)
+                .hasMessage("Valkey 사전 점검 TTL이 비정상입니다: -1");
+    }
+
+    @DisplayName("조회 시점에 만료된 사전 점검 키는 실패한다")
+    @Test
+    void rejectsExpiredPrecheck() {
+        when(redisTemplate.execute(
+                any(RedisScript.class),
+                any()
+        )).thenReturn(List.of("{}", "-2"));
+
+        assertThatThrownBy(() -> store.find(
+                LocalDate.of(2026, 10, 11)
+        )).isInstanceOf(IllegalStateException.class)
+                .hasMessage("Valkey 사전 점검 TTL이 비정상입니다: -2");
+    }
+
+    @DisplayName("사전 점검 TTL이 최초 설정값보다 크면 실패한다")
+    @Test
+    void rejectsPrecheckWithExcessiveTtl() {
+        when(redisTemplate.execute(
+                any(RedisScript.class),
+                any()
+        )).thenReturn(List.of("{}", "72001"));
+
+        assertThatThrownBy(() -> store.find(
+                LocalDate.of(2026, 10, 11)
+        )).isInstanceOf(IllegalStateException.class)
+                .hasMessage("Valkey 사전 점검 TTL이 비정상입니다: 72001");
+    }
+
+    @DisplayName("여행 시작 대상일 없이 사전 점검을 조회할 수 없다")
+    @Test
+    void rejectsMissingTargetDateForFind() {
+        assertThatThrownBy(() -> store.find(null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("여행 시작 대상일은 필수입니다");
+    }
+
     private static TripRemindPrecheckCache cache() {
         return new TripRemindPrecheckCache(
                 Instant.parse("2026-10-10T01:00:03Z"),
