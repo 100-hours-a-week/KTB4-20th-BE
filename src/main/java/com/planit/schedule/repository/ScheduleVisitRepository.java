@@ -27,4 +27,11 @@ public interface ScheduleVisitRepository extends JpaRepository<ScheduleVisit, Lo
             Long placeId,
             String status
     );
+
+    @EntityGraph(attributePaths = {"place", "day", "day.schedule"})
+    List<ScheduleVisit>
+    findByDay_Schedule_IdAndStatusOrderByDay_DayNumberAscVisitOrderAsc(
+            Long scheduleId,
+            String status
+    );
 }

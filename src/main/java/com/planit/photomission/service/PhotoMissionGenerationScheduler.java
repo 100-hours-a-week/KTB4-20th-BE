@@ -1,0 +1,29 @@
+package com.planit.photomission.service;
+
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+import java.time.Clock;
+import java.time.LocalDateTime;
+
+@Component
+public class PhotoMissionGenerationScheduler {
+
+    private final PhotoMissionGenerationService generationService;
+    private final Clock clock;
+
+    public PhotoMissionGenerationScheduler(
+            PhotoMissionGenerationService generationService,
+            Clock photoMissionClock
+    ) {
+        this.generationService = generationService;
+        this.clock = photoMissionClock;
+    }
+
+    @Scheduled(cron = "0 */5 * * * *", zone = "Asia/Seoul")
+    @SchedulerLock(name = "photoMissionGeneration")
+    public void generate() {
+        generationService.generateDueTrips(LocalDateTime.now(clock));
+    }
+}
