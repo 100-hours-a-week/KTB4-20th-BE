@@ -34,6 +34,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -115,6 +116,19 @@ class PhotoMissionRepositoryTest {
                 )).contains(participation);
         assertThat(groupStateRepository.findByMissionId(groupMission.getId()))
                 .contains(groupState);
+        assertThat(missionRepository
+                .findByTripIdAndScheduleDayDayNumberOrderByMissionOrderAsc(
+                        fixture.member().getTrip().getId(),
+                        (byte) 1
+                )).containsExactly(personalMission, groupMission);
+        assertThat(participationRepository.findByMissionIdIn(List.of(
+                personalMission.getId(),
+                groupMission.getId()
+        ))).containsExactly(participation);
+        assertThat(groupStateRepository.findByMissionIdIn(List.of(
+                personalMission.getId(),
+                groupMission.getId()
+        ))).containsExactly(groupState);
     }
 
     @DisplayName("멱등성 키와 활성·대표 슬롯으로 사진을 조회한다")
@@ -166,6 +180,10 @@ class PhotoMissionRepositoryTest {
         assertThat(photoRepository.findRepresentativeByMissionId(
                 groupMission.getId()
         )).contains(groupPhoto);
+        assertThat(photoRepository.findVisibleByMissionIdIn(List.of(
+                personalMission.getId(),
+                groupMission.getId()
+        ))).containsExactlyInAnyOrder(personalPhoto, groupPhoto);
     }
 
     @DisplayName("사진의 가장 최근 AI 실행 시도를 조회한다")
