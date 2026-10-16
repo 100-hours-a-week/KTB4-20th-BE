@@ -1,7 +1,11 @@
 package com.planit.schedule.domain;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Entity @Table(name = "schedule_visits")
 public class ScheduleVisit {
@@ -19,11 +23,25 @@ public class ScheduleVisit {
     @Column(name = "removed_at") private LocalDateTime removedAt;
     @Column(length = 20) private String source;
     @Column(name = "selection_reason", length = 500) private String selectionReason;
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "matched_preferences_json", columnDefinition = "json")
+    private List<String> matchedPreferences;
     protected ScheduleVisit() {}
     public ScheduleVisit(ScheduleDay day, Place place, int order, String reason, LocalDateTime now) {
+        this(day, place, order, reason, List.of(), now);
+    }
+    public ScheduleVisit(
+            ScheduleDay day,
+            Place place,
+            int order,
+            String reason,
+            List<String> matchedPreferences,
+            LocalDateTime now
+    ) {
         this.day = day; this.place = place; this.visitOrder = (short) order;
         this.placeNameSnapshot = place.getName(); this.addressSnapshot = place.getAddress();
         this.status = "ACTIVE"; this.source = "AI"; this.selectionReason = reason;
+        this.matchedPreferences = List.copyOf(matchedPreferences);
         this.createdAt = now; this.updatedAt = now;
     }
 
@@ -42,6 +60,7 @@ public class ScheduleVisit {
         visit.status = "ACTIVE";
         visit.source = "MANUAL";
         visit.selectionReason = "사용자가 직접 추가한 장소입니다.";
+        visit.matchedPreferences = List.of();
         visit.createdAt = now;
         visit.updatedAt = now;
         return visit;
@@ -56,6 +75,9 @@ public class ScheduleVisit {
     public LocalDateTime getRemovedAt() { return removedAt; }
     public String getSource() { return source; }
     public String getSelectionReason() { return selectionReason; }
+    public List<String> getMatchedPreferences() {
+        return matchedPreferences == null ? List.of() : List.copyOf(matchedPreferences);
+    }
 
     public void remove(LocalDateTime now) {
         this.status = "REMOVED";
