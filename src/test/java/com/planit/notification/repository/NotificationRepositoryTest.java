@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -137,6 +138,72 @@ class NotificationRepositoryTest {
         )).isEmpty();
     }
 
+    @DisplayName("당일 미전달·미삭제 여행 알림만 발행 대상으로 조회한다")
+    @Test
+    void findsTodayUndeliveredNotifications() {
+        User recipient = userRepository.save(new User(
+                null,
+                UUID.randomUUID(),
+                "발행대상수신자"
+        ));
+        LocalDate targetDate = LocalDate.of(2026, 10, 17);
+        LocalDateTime dayStart = LocalDateTime.of(2026, 10, 16, 0, 0);
+        Long eligibleId = notificationStore.saveIdempotently(notification(
+                recipient,
+                2001L,
+                targetDate,
+                NotificationType.TRIP_D1,
+                dayStart.plusHours(10)
+        ));
+        Long deliveredId = notificationStore.saveIdempotently(notification(
+                recipient,
+                2002L,
+                targetDate,
+                NotificationType.TRIP_WEATHER_ALERT,
+                dayStart.plusHours(10)
+        ));
+        Long deletedId = notificationStore.saveIdempotently(notification(
+                recipient,
+                2003L,
+                targetDate,
+                NotificationType.TRIP_D1,
+                dayStart.plusHours(10)
+        ));
+        notificationStore.saveIdempotently(notification(
+                recipient,
+                2004L,
+                targetDate,
+                NotificationType.TRIP_D1,
+                dayStart.minusSeconds(1)
+        ));
+        jdbcTemplate.update(
+                "UPDATE notifications SET delivered_at = ? WHERE id = ?",
+                dayStart.plusHours(10).plusMinutes(1),
+                deliveredId
+        );
+        jdbcTemplate.update(
+                "UPDATE notifications SET deleted_at = ? WHERE id = ?",
+                dayStart.plusHours(10).plusMinutes(1),
+                deletedId
+        );
+
+        List<Notification> notifications =
+                notificationRepository.findUndeliveredCreatedBetween(
+                        dayStart,
+                        dayStart.plusDays(1),
+                        List.of(
+                                NotificationType.TRIP_D1,
+                                NotificationType.TRIP_WEATHER_ALERT
+                        )
+                );
+
+        assertThat(notifications)
+                .extracting(Notification::getId)
+                .containsExactly(eligibleId);
+        assertThat(notifications.getFirst().getRecipient().getPublicId())
+                .isEqualTo(recipient.getPublicId());
+    }
+
     private Notification notification(
             User recipient,
             LocalDate tripStartDate,
@@ -150,6 +217,24 @@ class NotificationRepositoryTest {
                 NotificationType.TRIP_D1,
                 title,
                 "여행 일정과 날씨를 확인해 주세요.",
+                createdAt
+        );
+    }
+
+    private Notification notification(
+            User recipient,
+            Long tripId,
+            LocalDate tripStartDate,
+            NotificationType type,
+            LocalDateTime createdAt
+    ) {
+        return Notification.createTripNotification(
+                recipient,
+                tripId,
+                tripStartDate,
+                type,
+                "알림 제목",
+                "알림 본문",
                 createdAt
         );
     }
