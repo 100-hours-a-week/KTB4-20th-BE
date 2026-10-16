@@ -1,5 +1,6 @@
 package com.planit.notification.delivery;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.planit.notification.domain.Notification;
 import com.planit.notification.domain.NotificationType;
 
@@ -14,6 +15,9 @@ public record NotificationPublishEvent(
         NotificationType notificationType,
         String title,
         String body,
+        @JsonFormat(
+                without = JsonFormat.Feature.ADJUST_DATES_TO_CONTEXT_TIME_ZONE
+        )
         OffsetDateTime createdAt
 ) {
 
