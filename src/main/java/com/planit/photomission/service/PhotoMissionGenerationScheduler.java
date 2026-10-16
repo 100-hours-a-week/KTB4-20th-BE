@@ -1,6 +1,7 @@
 package com.planit.photomission.service;
 
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -15,7 +16,7 @@ public class PhotoMissionGenerationScheduler {
 
     public PhotoMissionGenerationScheduler(
             PhotoMissionGenerationService generationService,
-            Clock photoMissionClock
+            @Qualifier("photoMissionClock") Clock photoMissionClock
     ) {
         this.generationService = generationService;
         this.clock = photoMissionClock;

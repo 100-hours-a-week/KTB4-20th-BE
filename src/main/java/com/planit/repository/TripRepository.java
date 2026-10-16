@@ -15,6 +15,18 @@ import java.util.Optional;
 public interface TripRepository
         extends JpaRepository<Trip, Long> {
 
+    @Query("""
+            SELECT trip
+            FROM Trip trip
+            JOIN FETCH trip.region
+            WHERE trip.startDate = :startDate
+              AND trip.deletedAt IS NULL
+            ORDER BY trip.id
+            """)
+    List<Trip> findActiveTripsStartingOn(
+            @Param("startDate") LocalDate startDate
+    );
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT trip FROM Trip trip WHERE trip.id = :id")
     Optional<Trip> findByIdForUpdate(@Param("id") Long id);

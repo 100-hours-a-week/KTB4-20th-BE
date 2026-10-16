@@ -6,7 +6,7 @@ import com.planit.photomission.ai.PhotoMissionGenerateResponse;
 import com.planit.photomission.domain.MissionGenerationJob;
 import com.planit.repository.TripRepository;
 import io.sentry.Sentry;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -14,7 +14,6 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 
 @Service
-@RequiredArgsConstructor
 public class PhotoMissionGenerationService {
 
     private static final LocalTime PUBLICATION_TIME = LocalTime.of(0, 30);
@@ -23,6 +22,18 @@ public class PhotoMissionGenerationService {
     private final PhotoMissionGenerationTransactionService transactionService;
     private final PhotoMissionAiClient aiClient;
     private final Clock photoMissionClock;
+
+    public PhotoMissionGenerationService(
+            TripRepository tripRepository,
+            PhotoMissionGenerationTransactionService transactionService,
+            PhotoMissionAiClient aiClient,
+            @Qualifier("photoMissionClock") Clock photoMissionClock
+    ) {
+        this.tripRepository = tripRepository;
+        this.transactionService = transactionService;
+        this.aiClient = aiClient;
+        this.photoMissionClock = photoMissionClock;
+    }
 
     public void generateDueTrips(LocalDateTime now) {
         if (!now.toLocalTime().isBefore(PUBLICATION_TIME)) {
