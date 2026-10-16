@@ -1,5 +1,6 @@
 package com.planit.photomission.service;
 
+import com.planit.domain.ImageFile;
 import com.planit.domain.Trip;
 import com.planit.domain.TripMember;
 import com.planit.domain.User;
@@ -11,6 +12,7 @@ import com.planit.photomission.domain.MissionCompletionStatus;
 import com.planit.photomission.domain.MissionGroupState;
 import com.planit.photomission.domain.MissionParticipation;
 import com.planit.photomission.domain.MissionPhoto;
+import com.planit.photomission.dto.PhotoMissionDetailResponse;
 import com.planit.photomission.dto.PhotoMissionListResponse;
 import com.planit.photomission.repository.MissionGroupStateRepository;
 import com.planit.photomission.repository.MissionParticipationRepository;
@@ -29,6 +31,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -113,6 +116,99 @@ public class PhotoMissionQueryService {
                         selectedDayNumber < totalDays,
                         cards
                 )
+        );
+    }
+
+    public PhotoMissionDetailResponse getMissionDetail(
+            String userPublicId,
+            Long missionId
+    ) {
+        LocalDateTime now = LocalDateTime.now(SEOUL_ZONE);
+        User user = requireUser(userPublicId);
+        Mission mission = missionRepository.findById(missionId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.RESOURCE_NOT_FOUND
+                ));
+        Trip trip = mission.getTrip();
+        requireActiveTrip(trip);
+        if (!isPublished(mission.getScheduleDay().getScheduleDate(), now)) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
+        }
+
+        List<TripMember> activeMembers = tripMemberRepository
+                .findActiveMembersByTrip(trip);
+        TripMember viewer = requireActiveMember(activeMembers, user);
+        List<MissionParticipation> participations = mission.isPersonal()
+                ? participationRepository.findByMissionIdIn(List.of(missionId))
+                : List.of();
+        MissionGroupState groupState = mission.isGroup()
+                ? groupStateRepository.findByMissionId(missionId)
+                        .orElseThrow(this::inconsistentState)
+                : null;
+        Map<Long, MissionParticipation> participationByMember = participations
+                .stream()
+                .collect(Collectors.toMap(
+                        participation -> participation.getTripMember().getId(),
+                        Function.identity()
+                ));
+
+        MissionCompletionStatus status;
+        int retryCount;
+        String completionMethod;
+        LocalDateTime completedAt;
+        if (mission.isPersonal()) {
+            MissionParticipation mine = requireParticipation(
+                    participationByMember,
+                    viewer.getId()
+            );
+            status = mine.getStatus();
+            retryCount = mine.getRetryCount();
+            completionMethod = mine.getCompletionMethod() == null
+                    ? null
+                    : mine.getCompletionMethod().name();
+            completedAt = mine.getCompletedAt();
+        } else {
+            status = groupState.getStatus();
+            retryCount = groupState.getRetryCount();
+            completionMethod = groupState.getCompletionMethod() == null
+                    ? null
+                    : groupState.getCompletionMethod().name();
+            completedAt = groupState.getCompletedAt();
+        }
+
+        List<PhotoMissionDetailResponse.MemberStatus> members = activeMembers
+                .stream()
+                .map(member -> memberStatus(
+                        member,
+                        viewer,
+                        mission,
+                        participationByMember,
+                        groupState
+                ))
+                .toList();
+        List<PhotoMissionDetailResponse.Photo> photos = photoRepository
+                .findVisibleByMissionIdIn(List.of(missionId))
+                .stream()
+                .filter(photo -> mission.isGroup()
+                        || belongsTo(photo, viewer))
+                .sorted(photoOrder())
+                .map(this::photoResponse)
+                .toList();
+
+        return new PhotoMissionDetailResponse(
+                mission.getId(),
+                mission.getScheduleDay().getDayNumber(),
+                mission.getScheduleDay().getScheduleDate(),
+                mission.getScope().name(),
+                mission.getDescription(),
+                mission.getPrimaryCategory(),
+                mission.isExpired(now),
+                status.name(),
+                retryCount,
+                completionMethod,
+                completedAt,
+                members,
+                photos
         );
     }
 
@@ -274,6 +370,50 @@ public class PhotoMissionQueryService {
         );
     }
 
+    private PhotoMissionDetailResponse.MemberStatus memberStatus(
+            TripMember member,
+            TripMember viewer,
+            Mission mission,
+            Map<Long, MissionParticipation> participationByMember,
+            MissionGroupState groupState
+    ) {
+        MissionCompletionStatus status;
+        LocalDateTime completedAt;
+        if (mission.isPersonal()) {
+            MissionParticipation participation = requireParticipation(
+                    participationByMember,
+                    member.getId()
+            );
+            status = participation.getStatus();
+            completedAt = participation.getCompletedAt();
+        } else {
+            status = groupState.getStatus();
+            completedAt = groupState.getCompletedAt();
+        }
+        User user = member.getUser();
+        return new PhotoMissionDetailResponse.MemberStatus(
+                member.getId(),
+                user.getPublicId(),
+                user.getUsername(),
+                profileImageUrl(user),
+                member.getId().equals(viewer.getId()),
+                status.name(),
+                completedAt
+        );
+    }
+
+    private PhotoMissionDetailResponse.Photo photoResponse(MissionPhoto photo) {
+        User submitter = photo.getSubmittedBy().getUser();
+        return new PhotoMissionDetailResponse.Photo(
+                photo.getId(),
+                imageUrl(photo),
+                submitter.getPublicId(),
+                submitter.getUsername(),
+                isRepresentative(photo),
+                photo.getSubmittedAt()
+        );
+    }
+
     private User requireUser(String userPublicId) {
         return userRepository.findByPublicIdAndDeletedAtIsNull(
                         UUID.fromString(userPublicId)
@@ -289,6 +429,12 @@ public class PhotoMissionQueryService {
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.TRIP_NOT_FOUND
                 ));
+    }
+
+    private void requireActiveTrip(Trip trip) {
+        if (trip.getDeletedAt() != null) {
+            throw new BusinessException(ErrorCode.TRIP_NOT_FOUND);
+        }
     }
 
     private TripMember requireActiveMember(
@@ -358,6 +504,18 @@ public class PhotoMissionQueryService {
         return !now.isBefore(date.atTime(DAILY_PUBLISH_TIME));
     }
 
+    private MissionParticipation requireParticipation(
+            Map<Long, MissionParticipation> participationByMember,
+            Long memberId
+    ) {
+        MissionParticipation participation =
+                participationByMember.get(memberId);
+        if (participation == null) {
+            throw inconsistentState();
+        }
+        return participation;
+    }
+
     private MissionGroupState requireGroupState(
             Map<Long, MissionGroupState> states,
             Long missionId
@@ -380,10 +538,25 @@ public class PhotoMissionQueryService {
                 && photo.getRepresentativeSlot() == 1;
     }
 
+    private Comparator<MissionPhoto> photoOrder() {
+        return Comparator
+                .comparing(this::isRepresentative)
+                .reversed()
+                .thenComparing(MissionPhoto::getSubmittedAt)
+                .thenComparing(MissionPhoto::getId);
+    }
+
     private String imageUrl(MissionPhoto photo) {
         return imageStorage.createReadUrl(
                 photo.getImageFile().getImageKey()
         );
+    }
+
+    private String profileImageUrl(User user) {
+        ImageFile imageFile = user.getImageFile();
+        return imageFile == null
+                ? null
+                : imageStorage.createReadUrl(imageFile.getImageKey());
     }
 
     private BusinessException inconsistentState() {

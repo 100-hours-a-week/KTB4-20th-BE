@@ -1,6 +1,7 @@
 package com.planit.photomission.controller;
 
 import com.planit.photomission.ai.PhotoMissionVerifyResponse;
+import com.planit.photomission.dto.PhotoMissionDetailResponse;
 import com.planit.photomission.dto.PhotoMissionListResponse;
 import com.planit.photomission.service.PhotoMissionQueryService;
 import com.planit.photomission.service.PhotoMissionSubmissionService;
@@ -138,4 +139,36 @@ class PhotoMissionControllerTest {
                         .value(2));
     }
 
+    @DisplayName("포토미션 상세를 조회한다")
+    @Test
+    void getsPhotoMissionDetail() throws Exception {
+        when(queryService.getMissionDetail(any(), any()))
+                .thenReturn(new PhotoMissionDetailResponse(
+                        31L,
+                        2,
+                        LocalDate.of(2026, 9, 1),
+                        "PERSONAL",
+                        "유적지 전경 담기",
+                        "역사·유적",
+                        false,
+                        "PENDING",
+                        1,
+                        null,
+                        null,
+                        List.of(),
+                        List.of()
+                ));
+
+        mockMvc.perform(get("/api/photomissions/31")
+                        .principal(new UsernamePasswordAuthenticationToken(
+                                "550e8400-e29b-41d4-a716-446655440000",
+                                ""
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code")
+                        .value("PHOTO_MISSION_DETAIL_FOUND"))
+                .andExpect(jsonPath("$.data.missionId").value(31))
+                .andExpect(jsonPath("$.data.scope").value("PERSONAL"))
+                .andExpect(jsonPath("$.data.retryCount").value(1));
+    }
 }

@@ -12,6 +12,7 @@ import com.planit.photomission.domain.MissionGroupState;
 import com.planit.photomission.domain.MissionParticipation;
 import com.planit.photomission.domain.MissionPhoto;
 import com.planit.photomission.domain.MissionScope;
+import com.planit.photomission.dto.PhotoMissionDetailResponse;
 import com.planit.photomission.dto.PhotoMissionListResponse;
 import com.planit.photomission.repository.MissionGroupStateRepository;
 import com.planit.photomission.repository.MissionParticipationRepository;
@@ -148,6 +149,89 @@ class PhotoMissionQueryServiceTest {
                 .isEqualTo("친구");
         assertThat(response.selectedDay().missions().get(1).thumbnailUrl())
                 .isEqualTo("https://image/group.jpg");
+    }
+
+    @DisplayName("개인 미션 상세는 활성 멤버별 상태와 내 활성 사진만 반환한다")
+    @Test
+    void getsPersonalMissionDetail() {
+        ScheduleDay day = day(1, today.minusDays(1));
+        Mission mission = mission(
+                101L, day, 1, MissionScope.PERSONAL, "유적지 전경 담기"
+        );
+        MissionParticipation myParticipation = participation(
+                201L, mission, myMember, MissionCompletionStatus.PENDING
+        );
+        when(myParticipation.getRetryCount()).thenReturn(2);
+        MissionParticipation otherParticipation = participation(
+                202L, mission, otherMember, MissionCompletionStatus.COMPLETED
+        );
+        MissionPhoto myPhoto = photo(
+                301L, mission, myMember, false, "mine.jpg"
+        );
+        when(myPhoto.getParticipation()).thenReturn(myParticipation);
+
+        when(missionRepository.findById(101L)).thenReturn(Optional.of(mission));
+        when(participationRepository.findByMissionIdIn(List.of(101L)))
+                .thenReturn(List.of(myParticipation, otherParticipation));
+        when(photoRepository.findVisibleByMissionIdIn(List.of(101L)))
+                .thenReturn(List.of(myPhoto));
+        when(imageStorage.createReadUrl("mine.jpg"))
+                .thenReturn("https://image/mine.jpg");
+
+        PhotoMissionDetailResponse response = service.getMissionDetail(
+                UUID.randomUUID().toString(),
+                101L
+        );
+
+        assertThat(response.status()).isEqualTo("PENDING");
+        assertThat(response.retryCount()).isEqualTo(2);
+        assertThat(response.members()).hasSize(2);
+        assertThat(response.members().get(0).me()).isTrue();
+        assertThat(response.members().get(1).status()).isEqualTo("COMPLETED");
+        assertThat(response.photos()).hasSize(1);
+        assertThat(response.photos().get(0).imageUrl())
+                .isEqualTo("https://image/mine.jpg");
+    }
+
+    @DisplayName("단체 미션 상세는 공유 상태와 대표 사진을 먼저 반환한다")
+    @Test
+    void getsGroupMissionDetail() {
+        ScheduleDay day = day(1, today.minusDays(1));
+        Mission mission = mission(
+                102L, day, 2, MissionScope.GROUP, "다 같이 그룹 사진 찍기"
+        );
+        MissionGroupState state = mock(MissionGroupState.class);
+        when(state.getStatus()).thenReturn(MissionCompletionStatus.COMPLETED);
+        when(state.getCompletionMethod()).thenReturn(MissionCompletionMethod.AI);
+        when(state.getCompletedAt()).thenReturn(LocalDateTime.now());
+        MissionPhoto additional = photo(
+                302L, mission, myMember, false, "additional.jpg"
+        );
+        MissionPhoto representative = photo(
+                301L, mission, otherMember, true, "representative.jpg"
+        );
+
+        when(missionRepository.findById(102L)).thenReturn(Optional.of(mission));
+        when(groupStateRepository.findByMissionId(102L))
+                .thenReturn(Optional.of(state));
+        when(photoRepository.findVisibleByMissionIdIn(List.of(102L)))
+                .thenReturn(List.of(additional, representative));
+        when(imageStorage.createReadUrl("additional.jpg"))
+                .thenReturn("https://image/additional.jpg");
+        when(imageStorage.createReadUrl("representative.jpg"))
+                .thenReturn("https://image/representative.jpg");
+
+        PhotoMissionDetailResponse response = service.getMissionDetail(
+                UUID.randomUUID().toString(),
+                102L
+        );
+
+        assertThat(response.status()).isEqualTo("COMPLETED");
+        assertThat(response.members())
+                .allMatch(member -> member.status().equals("COMPLETED"));
+        assertThat(response.photos()).hasSize(2);
+        assertThat(response.photos().get(0).representative()).isTrue();
+        assertThat(response.photos().get(0).photoId()).isEqualTo(301L);
     }
 
     @DisplayName("아직 공개되지 않은 미래 Day는 미션을 반환하지 않는다")
