@@ -2,14 +2,18 @@ package com.planit.notification.controller;
 
 import com.planit.global.response.ApiResponse;
 import com.planit.notification.dto.NotificationListResponse;
+import com.planit.notification.dto.NotificationReadResponse;
 import com.planit.notification.dto.UnreadNotificationCountResponse;
 import com.planit.notification.service.NotificationListService;
+import com.planit.notification.service.NotificationReadService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
 
 @RestController
 @RequestMapping("/api/notifications")
@@ -17,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class NotificationController {
 
     private final NotificationListService notificationListService;
+    private final NotificationReadService notificationReadService;
 
     @GetMapping
     public ApiResponse<NotificationListResponse> getNotifications(
@@ -42,6 +47,21 @@ public class NotificationController {
                 "읽지 않은 알림 수를 조회했습니다.",
                 notificationListService.getUnreadCount(
                         authentication.getName()
+                )
+        );
+    }
+
+    @PutMapping("/{notificationId}/read")
+    public ApiResponse<NotificationReadResponse> markAsRead(
+            Authentication authentication,
+            @PathVariable Long notificationId
+    ) {
+        return ApiResponse.success(
+                "NOTIFICATION_READ",
+                "알림을 읽음 처리했습니다.",
+                notificationReadService.markAsRead(
+                        authentication.getName(),
+                        notificationId
                 )
         );
     }

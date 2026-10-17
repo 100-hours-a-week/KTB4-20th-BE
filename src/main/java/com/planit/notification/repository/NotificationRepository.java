@@ -24,6 +24,18 @@ public interface NotificationRepository
     @Query("""
             SELECT notification
             FROM Notification notification
+            WHERE notification.id = :notificationId
+              AND notification.recipient.publicId = :recipientPublicId
+              AND notification.deletedAt IS NULL
+            """)
+    Optional<Notification> findOwnedActiveById(
+            @Param("notificationId") Long notificationId,
+            @Param("recipientPublicId") UUID recipientPublicId
+    );
+
+    @Query("""
+            SELECT notification
+            FROM Notification notification
             JOIN FETCH notification.recipient recipient
             WHERE recipient.publicId = :recipientPublicId
               AND notification.deletedAt IS NULL
