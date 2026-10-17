@@ -99,4 +99,45 @@ class PhotoMissionControllerTest {
         );
     }
 
+    @DisplayName("완료한 단체 미션에 사진을 추가한다")
+    @Test
+    void addsCompletedGroupMissionPhoto() throws Exception {
+        PhotoMissionSubmissionService submissionService =
+                mock(PhotoMissionSubmissionService.class);
+        PhotoMissionPhotoManagementService managementService =
+                mock(PhotoMissionPhotoManagementService.class);
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(
+                new PhotoMissionController(
+                        submissionService,
+                        managementService
+                )
+        ).build();
+        when(submissionService.addGroupPhoto(
+                any(), any(), any(), any(), any(), any()
+        )).thenReturn(43L);
+
+        mockMvc.perform(multipart(
+                                "/api/photomissions/31/photos/additional"
+                        )
+                        .file(jpegPhoto())
+                        .header("Idempotency-Key", UUID.randomUUID())
+                        .principal(new UsernamePasswordAuthenticationToken(
+                                "550e8400-e29b-41d4-a716-446655440000",
+                                ""
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code")
+                        .value("PHOTO_MISSION_PHOTO_ADDED"))
+                .andExpect(jsonPath("$.data.photoId").value(43));
+    }
+
+    private MockMultipartFile jpegPhoto() {
+        return new MockMultipartFile(
+                "photo",
+                "photo.jpg",
+                "image/jpeg",
+                new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF}
+        );
+    }
+
 }

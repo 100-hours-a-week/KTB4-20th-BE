@@ -51,7 +51,7 @@ public enum ErrorCode {
     SCHEDULE_GENERATION_NOT_READY(HttpStatus.CONFLICT, "일정을 생성할 수 있는 설문 상태가 아닙니다."),
     UNSUPPORTED_TRIP_REGION(HttpStatus.CONFLICT, "AI 일정 생성을 지원하지 않는 여행 지역입니다."),
     AI_SCHEDULE_GENERATION_FAILED(HttpStatus.SERVICE_UNAVAILABLE, "AI 일정 생성에 실패했습니다."),
-    PHOTO_MISSION_SUBMISSION_NOT_ALLOWED(HttpStatus.CONFLICT, "이미 완료되었거나 제출 기한이 지난 미션입니다."),
+    PHOTO_MISSION_SUBMISSION_NOT_ALLOWED(HttpStatus.CONFLICT, "현재 사진을 제출할 수 없는 미션입니다."),
     PHOTO_MISSION_IDEMPOTENCY_KEY_REUSED(HttpStatus.CONFLICT, "이미 처리된 사진 제출 요청입니다. 잠시 후 결과를 확인해 주세요."),
     REGION_CATALOG_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "여행 지역 목록을 사용할 수 없습니다."),
     CHAT_POLICY_VERSION_NOT_ACTIVE(HttpStatus.CONFLICT, "현재 활성 채팅 운영 정책이 아닙니다."),

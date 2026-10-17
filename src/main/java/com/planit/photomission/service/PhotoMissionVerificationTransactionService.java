@@ -112,11 +112,7 @@ public class PhotoMissionVerificationTransactionService {
     private void validatePending(MissionPhoto photo) {
         if (photo.getMission().isPersonal()) {
             MissionParticipation participation = photo.getParticipation();
-            if (participation == null
-                    || participation.getStatus()
-                    != MissionCompletionStatus.PENDING
-                    || participation.getRetryCount()
-                    >= MissionParticipation.MAX_RETRY_COUNT) {
+            if (!canVerifyPersonalPhoto(photo, participation)) {
                 throw new IllegalStateException(
                         "AI 판정이 가능한 개인 미션이 아닙니다"
                 );
@@ -141,7 +137,13 @@ public class PhotoMissionVerificationTransactionService {
             LocalDateTime evaluatedAt
     ) {
         if (photo.getMission().isPersonal()) {
-            photo.getParticipation().completeByAi(evaluatedAt);
+            MissionParticipation participation = photo.getParticipation();
+            if (participation.getStatus()
+                    == MissionCompletionStatus.COMPLETED) {
+                replaceCompletedPersonalPhoto(photo, evaluatedAt);
+            } else {
+                participation.completeByAi(evaluatedAt);
+            }
             return;
         }
 
@@ -155,13 +157,45 @@ public class PhotoMissionVerificationTransactionService {
             LocalDateTime evaluatedAt
     ) {
         if (photo.getMission().isPersonal()) {
-            photo.getParticipation()
-                    .recordUnsuccessfulEvaluation(evaluatedAt);
+            if (photo.getParticipation().getStatus()
+                    == MissionCompletionStatus.COMPLETED) {
+                photo.replace(evaluatedAt);
+            } else {
+                photo.getParticipation()
+                        .recordUnsuccessfulEvaluation(evaluatedAt);
+            }
             return;
         }
 
         findGroupState(photo.getMission().getId())
                 .recordUnsuccessfulEvaluation(evaluatedAt);
+    }
+
+    private boolean canVerifyPersonalPhoto(
+            MissionPhoto photo,
+            MissionParticipation participation
+    ) {
+        if (participation == null) {
+            return false;
+        }
+        if (participation.getStatus() == MissionCompletionStatus.COMPLETED) {
+            return photo.getActiveSlot() == null;
+        }
+        return participation.getRetryCount()
+                < MissionParticipation.MAX_RETRY_COUNT;
+    }
+
+    private void replaceCompletedPersonalPhoto(
+            MissionPhoto candidate,
+            LocalDateTime evaluatedAt
+    ) {
+        MissionParticipation participation = candidate.getParticipation();
+        photoRepository.findActiveByParticipationId(participation.getId())
+                .ifPresent(activePhoto -> {
+                    activePhoto.replace(evaluatedAt);
+                    photoRepository.flush();
+                });
+        candidate.activate();
     }
 
     private MissionGroupState findGroupState(Long missionId) {

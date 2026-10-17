@@ -149,6 +149,71 @@ class PhotoMissionVerificationTransactionServiceTest {
                 .isEqualTo(MissionCompletionStatus.PENDING);
     }
 
+    @DisplayName("완료한 개인 미션은 새 사진이 성공한 경우에만 기존 사진을 교체한다")
+    @Test
+    void replacesCompletedPersonalMissionPhotoAfterSuccess() {
+        Mission mission = mission(MissionScope.PERSONAL);
+        MissionParticipation participation = MissionParticipation.create(
+                mission,
+                mock(TripMember.class),
+                NOW
+        );
+        ReflectionTestUtils.setField(participation, "id", 61L);
+        participation.completeByAi(NOW);
+        MissionPhoto previous = personalPhoto(participation);
+        MissionPhoto candidate = MissionPhoto.personalCandidate(
+                participation,
+                missionImage(),
+                UUID.randomUUID(),
+                null,
+                null,
+                NOW.plusMinutes(1)
+        );
+        ReflectionTestUtils.setField(candidate, "id", 42L);
+        PhotoEvaluation evaluation = evaluation(candidate);
+        when(evaluationRepository.findById(51L))
+                .thenReturn(Optional.of(evaluation));
+        when(photoRepository.findActiveByParticipationId(61L))
+                .thenReturn(Optional.of(previous));
+
+        service.complete(51L, successResponse());
+
+        assertThat(previous.getReplacedAt()).isNotNull();
+        assertThat(candidate.getActiveSlot()).isEqualTo((byte) 1);
+        assertThat(participation.getStatus())
+                .isEqualTo(MissionCompletionStatus.COMPLETED);
+    }
+
+    @DisplayName("완료한 개인 미션의 새 사진이 실패하면 기존 완료 사진을 유지한다")
+    @Test
+    void keepsCompletedPersonalMissionPhotoAfterRetry() {
+        Mission mission = mission(MissionScope.PERSONAL);
+        MissionParticipation participation = MissionParticipation.create(
+                mission,
+                mock(TripMember.class),
+                NOW
+        );
+        participation.completeByAi(NOW);
+        MissionPhoto candidate = MissionPhoto.personalCandidate(
+                participation,
+                missionImage(),
+                UUID.randomUUID(),
+                null,
+                null,
+                NOW.plusMinutes(1)
+        );
+        PhotoEvaluation evaluation = evaluation(candidate);
+        when(evaluationRepository.findById(51L))
+                .thenReturn(Optional.of(evaluation));
+
+        service.complete(51L, retryResponse());
+
+        assertThat(candidate.getReplacedAt()).isNotNull();
+        assertThat(participation.getStatus())
+                .isEqualTo(MissionCompletionStatus.COMPLETED);
+        assertThat(participation.getRetryCount()).isZero();
+    }
+
     @DisplayName("AI 기술 오류는 실행 실패만 기록하고 미션 실패 횟수에 포함하지 않는다")
     @Test
     void recordsExecutionFailureOnly() {
