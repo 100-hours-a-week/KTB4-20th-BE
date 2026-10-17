@@ -40,6 +40,8 @@ public enum ErrorCode {
     EXCLUSION_CATEGORY_NOT_FOUND(HttpStatus.NOT_FOUND, "설문 제외 항목을 찾을 수 없습니다."),
     INVALID_AI_PLACE_RESULT(HttpStatus.BAD_GATEWAY, "AI 추천 장소 결과가 유효하지 않습니다."),
     SCHEDULE_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 생성된 여행 일정이 있습니다."),
+    SCHEDULE_REGENERATION_LIMIT_EXCEEDED(HttpStatus.CONFLICT, "일정 재생성 가능 횟수를 모두 사용했습니다."),
+    WEATHER_REPLAN_NOT_AVAILABLE(HttpStatus.CONFLICT, "날씨로 인한 일정 변경 대상이 아닙니다."),
     ACTIVE_SCHEDULE_NOT_FOUND(HttpStatus.NOT_FOUND, "아직 확정된 일정이 없습니다."),
     TRIP_HOST_REQUIRED(HttpStatus.FORBIDDEN, "여행방 방장 권한이 필요합니다."),
     SCHEDULE_DAY_NOT_FOUND(HttpStatus.NOT_FOUND, "일정 일차를 찾을 수 없습니다."),

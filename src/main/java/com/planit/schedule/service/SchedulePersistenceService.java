@@ -33,6 +33,7 @@ import java.util.Map;
 
 import static com.planit.global.error.ErrorCode.INVALID_AI_PLACE_RESULT;
 import static com.planit.global.error.ErrorCode.SCHEDULE_ALREADY_EXISTS;
+import static com.planit.global.error.ErrorCode.SCHEDULE_REGENERATION_LIMIT_EXCEEDED;
 import static com.planit.global.error.ErrorCode.SCHEDULE_ROUTE_NOT_FOUND;
 import static com.planit.global.error.ErrorCode.TRIP_NOT_FOUND;
 
@@ -68,6 +69,19 @@ public class SchedulePersistenceService {
             long tripId,
             List<List<RecommendedPlace>> dailyRecommendations
     ) {
+        return save(tripId, dailyRecommendations, ScheduleGenerationMode.INITIAL);
+    }
+
+    /**
+     * 생성된 일정을 저장한다. 재생성이면 여행 행을 잠근 상태에서 기존 일정을 삭제한 뒤 새 일정으로 대체하고,
+     * 일반 재생성일 때만 재생성 횟수를 차감한다. 이후 단계가 실패하면 트랜잭션이 롤백되어 기존 일정과 횟수가 유지된다.
+     */
+    @Transactional
+    public GeneratedScheduleResult save(
+            long tripId,
+            List<List<RecommendedPlace>> dailyRecommendations,
+            ScheduleGenerationMode mode
+    ) {
         Trip trip = tripRepository.findByIdForUpdate(tripId)
                 .filter(value -> value.getDeletedAt() == null)
                 .orElseThrow(() -> new BusinessException(TRIP_NOT_FOUND));
@@ -75,7 +89,7 @@ public class SchedulePersistenceService {
                 tripId,
                 (byte) 1
         )) {
-            throw new BusinessException(SCHEDULE_ALREADY_EXISTS);
+            replaceExistingSchedule(trip, mode);
         }
 
         LocalDateTime now = LocalDateTime.now();
@@ -254,6 +268,26 @@ public class SchedulePersistenceService {
             int placeCount,
             int legCount
     ) {
+    }
+
+    private void replaceExistingSchedule(Trip trip, ScheduleGenerationMode mode) {
+        switch (mode) {
+            case INITIAL -> throw new BusinessException(SCHEDULE_ALREADY_EXISTS);
+            case GENERAL_REGENERATION -> {
+                if (ScheduleRegenerationPolicy.remainingRegenerations(trip) == 0) {
+                    throw new BusinessException(
+                            SCHEDULE_REGENERATION_LIMIT_EXCEEDED
+                    );
+                }
+                trip.increaseScheduleRegenerationCount();
+            }
+            case WEATHER_REGENERATION -> {
+                // 날씨 사유 재생성은 재생성 횟수에 포함하지 않는다.
+            }
+        }
+        deleteAllForTrip(trip.getId());
+        // 확정 일정 UNIQUE(trip_id, active_confirmed_slot)를 위반하지 않도록 새 일정 저장 전에 삭제를 반영한다.
+        scheduleRepository.flush();
     }
 
     /**
