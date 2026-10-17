@@ -1,9 +1,13 @@
 package com.planit.photomission.controller;
 
 import com.planit.photomission.ai.PhotoMissionVerifyResponse;
+import com.planit.photomission.dto.PhotoMissionDetailResponse;
+import com.planit.photomission.dto.PhotoMissionListResponse;
 import com.planit.photomission.service.PhotoMissionManualCompletionService;
 import com.planit.photomission.service.PhotoMissionPhotoManagementService;
+import com.planit.photomission.service.PhotoMissionQueryService;
 import com.planit.photomission.service.PhotoMissionSubmissionService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
@@ -12,6 +16,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -20,6 +25,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -27,23 +33,35 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class PhotoMissionControllerTest {
 
+    private static final String USER_PUBLIC_ID =
+            "550e8400-e29b-41d4-a716-446655440000";
+
+    private PhotoMissionSubmissionService submissionService;
+    private PhotoMissionPhotoManagementService managementService;
+    private PhotoMissionManualCompletionService manualCompletionService;
+    private PhotoMissionQueryService queryService;
+    private MockMvc mockMvc;
+
+    @BeforeEach
+    void setUp() {
+        submissionService = mock(PhotoMissionSubmissionService.class);
+        managementService = mock(PhotoMissionPhotoManagementService.class);
+        manualCompletionService = mock(PhotoMissionManualCompletionService.class);
+        queryService = mock(PhotoMissionQueryService.class);
+        mockMvc = MockMvcBuilders.standaloneSetup(
+                new PhotoMissionController(
+                        submissionService,
+                        managementService,
+                        manualCompletionService,
+                        queryService
+                )
+        ).build();
+    }
+
     @DisplayName("사진을 제출하고 동기 AI 판정 결과를 반환한다")
     @Test
     void submitsAndVerifiesPhoto() throws Exception {
-        PhotoMissionSubmissionService service =
-                mock(PhotoMissionSubmissionService.class);
-        PhotoMissionPhotoManagementService managementService =
-                mock(PhotoMissionPhotoManagementService.class);
-        PhotoMissionManualCompletionService manualCompletionService =
-                mock(PhotoMissionManualCompletionService.class);
-        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(
-                new PhotoMissionController(
-                        service,
-                        managementService,
-                        manualCompletionService
-                )
-        ).build();
-        when(service.submitAndVerify(
+        when(submissionService.submitAndVerify(
                 any(), any(), any(), any(), any(), any()
         )).thenReturn(new PhotoMissionVerifyResponse(
                 "retry",
@@ -53,22 +71,13 @@ class PhotoMissionControllerTest {
                 BigDecimal.valueOf(92),
                 "한 발 옆으로 옮겨서 다시 찍어 보세요."
         ));
-        MockMultipartFile photo = new MockMultipartFile(
-                "photo",
-                "photo.jpg",
-                "image/jpeg",
-                new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF}
-        );
 
         mockMvc.perform(multipart("/api/photomissions/31/photos")
-                        .file(photo)
+                        .file(jpegPhoto())
                         .header("Idempotency-Key", UUID.randomUUID())
                         .param("latitude", "35.8350")
                         .param("longitude", "129.2188")
-                        .principal(new UsernamePasswordAuthenticationToken(
-                                "550e8400-e29b-41d4-a716-446655440000",
-                                ""
-                        )))
+                        .principal(authentication()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code")
                         .value("PHOTO_MISSION_VERIFIED"))
@@ -80,52 +89,18 @@ class PhotoMissionControllerTest {
     @DisplayName("본인이 제출한 포토미션 사진을 삭제한다")
     @Test
     void deletesSubmittedPhoto() throws Exception {
-        PhotoMissionSubmissionService submissionService =
-                mock(PhotoMissionSubmissionService.class);
-        PhotoMissionPhotoManagementService managementService =
-                mock(PhotoMissionPhotoManagementService.class);
-        PhotoMissionManualCompletionService manualCompletionService =
-                mock(PhotoMissionManualCompletionService.class);
-        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(
-                new PhotoMissionController(
-                        submissionService,
-                        managementService,
-                        manualCompletionService
-                )
-        ).build();
-
         mockMvc.perform(delete("/api/photomissions/31/photos/41")
-                        .principal(new UsernamePasswordAuthenticationToken(
-                                "550e8400-e29b-41d4-a716-446655440000",
-                                ""
-                        )))
+                        .principal(authentication()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code")
                         .value("PHOTO_MISSION_PHOTO_DELETED"));
 
-        verify(managementService).delete(
-                "550e8400-e29b-41d4-a716-446655440000",
-                31L,
-                41L
-        );
+        verify(managementService).delete(USER_PUBLIC_ID, 31L, 41L);
     }
 
     @DisplayName("완료한 단체 미션에 사진을 추가한다")
     @Test
     void addsCompletedGroupMissionPhoto() throws Exception {
-        PhotoMissionSubmissionService submissionService =
-                mock(PhotoMissionSubmissionService.class);
-        PhotoMissionPhotoManagementService managementService =
-                mock(PhotoMissionPhotoManagementService.class);
-        PhotoMissionManualCompletionService manualCompletionService =
-                mock(PhotoMissionManualCompletionService.class);
-        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(
-                new PhotoMissionController(
-                        submissionService,
-                        managementService,
-                        manualCompletionService
-                )
-        ).build();
         when(submissionService.addGroupPhoto(
                 any(), any(), any(), any(), any(), any()
         )).thenReturn(43L);
@@ -135,10 +110,7 @@ class PhotoMissionControllerTest {
                         )
                         .file(jpegPhoto())
                         .header("Idempotency-Key", UUID.randomUUID())
-                        .principal(new UsernamePasswordAuthenticationToken(
-                                "550e8400-e29b-41d4-a716-446655440000",
-                                ""
-                        )))
+                        .principal(authentication()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code")
                         .value("PHOTO_MISSION_PHOTO_ADDED"))
@@ -148,33 +120,105 @@ class PhotoMissionControllerTest {
     @DisplayName("판정 실패 3회 이후 미션을 직접 완료한다")
     @Test
     void completesMissionManually() throws Exception {
-        PhotoMissionSubmissionService submissionService =
-                mock(PhotoMissionSubmissionService.class);
-        PhotoMissionPhotoManagementService managementService =
-                mock(PhotoMissionPhotoManagementService.class);
-        PhotoMissionManualCompletionService manualCompletionService =
-                mock(PhotoMissionManualCompletionService.class);
-        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(
-                new PhotoMissionController(
-                        submissionService,
-                        managementService,
-                        manualCompletionService
-                )
-        ).build();
-
         mockMvc.perform(post("/api/photomissions/31/manual-completion")
-                        .principal(new UsernamePasswordAuthenticationToken(
-                                "550e8400-e29b-41d4-a716-446655440000",
-                                ""
-                        )))
+                        .principal(authentication()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code")
                         .value("PHOTO_MISSION_MANUALLY_COMPLETED"));
 
-        verify(manualCompletionService).complete(
-                "550e8400-e29b-41d4-a716-446655440000",
-                31L
-        );
+        verify(manualCompletionService).complete(USER_PUBLIC_ID, 31L);
+    }
+
+    @DisplayName("선택한 Day의 포토미션 목록을 조회한다")
+    @Test
+    void getsPhotoMissionsByDay() throws Exception {
+        when(queryService.getMissionList(any(), any(), any()))
+                .thenReturn(new PhotoMissionListResponse(
+                        new PhotoMissionListResponse.TripSummary(
+                                10L,
+                                "경주 여행",
+                                LocalDate.of(2026, 8, 31),
+                                LocalDate.of(2026, 9, 2),
+                                4
+                        ),
+                        List.of(
+                                new PhotoMissionListResponse.DayTab(
+                                        1,
+                                        LocalDate.of(2026, 8, 31),
+                                        true,
+                                        false
+                                ),
+                                new PhotoMissionListResponse.DayTab(
+                                        2,
+                                        LocalDate.of(2026, 9, 1),
+                                        true,
+                                        true
+                                ),
+                                new PhotoMissionListResponse.DayTab(
+                                        3,
+                                        LocalDate.of(2026, 9, 2),
+                                        false,
+                                        false
+                                )
+                        ),
+                        new PhotoMissionListResponse.SelectedDay(
+                                2,
+                                LocalDate.of(2026, 9, 1),
+                                true,
+                                2,
+                                5,
+                                false,
+                                true,
+                                List.of()
+                        )
+                ));
+
+        mockMvc.perform(get("/api/trips/10/photomissions")
+                        .param("day", "2")
+                        .principal(authentication()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code")
+                        .value("PHOTO_MISSION_LIST_FOUND"))
+                .andExpect(jsonPath("$.data.trip.name")
+                        .value("경주 여행"))
+                .andExpect(jsonPath("$.data.days[1].selected")
+                        .value(true))
+                .andExpect(jsonPath("$.data.selectedDay.completedMissionCount")
+                        .value(2));
+    }
+
+    @DisplayName("포토미션 상세를 조회한다")
+    @Test
+    void getsPhotoMissionDetail() throws Exception {
+        when(queryService.getMissionDetail(any(), any()))
+                .thenReturn(new PhotoMissionDetailResponse(
+                        31L,
+                        2,
+                        LocalDate.of(2026, 9, 1),
+                        "PERSONAL",
+                        "유적지 전경 담기",
+                        "역사·유적",
+                        false,
+                        "PENDING",
+                        1,
+                        null,
+                        null,
+                        List.of(),
+                        List.of()
+                ));
+
+        mockMvc.perform(get("/api/photomissions/31")
+                        .principal(authentication()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code")
+                        .value("PHOTO_MISSION_DETAIL_FOUND"))
+                .andExpect(jsonPath("$.data.missionId").value(31))
+                .andExpect(jsonPath("$.data.scope").value("PERSONAL"))
+                .andExpect(jsonPath("$.data.retryCount").value(1));
+    }
+
+    private UsernamePasswordAuthenticationToken authentication() {
+        return new UsernamePasswordAuthenticationToken(USER_PUBLIC_ID, "");
     }
 
     private MockMultipartFile jpegPhoto() {
@@ -185,5 +229,4 @@ class PhotoMissionControllerTest {
                 new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF}
         );
     }
-
 }

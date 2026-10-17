@@ -70,4 +70,21 @@ public interface MissionPhotoRepository
     findFirstByMissionIdAndDeletedAtIsNullAndReplacedAtIsNullOrderBySubmittedAtAscIdAsc(
             Long missionId
     );
+
+    @Query("""
+            SELECT photo
+            FROM MissionPhoto photo
+            JOIN FETCH photo.mission
+            JOIN FETCH photo.submittedBy submitter
+            JOIN FETCH submitter.user
+            JOIN FETCH photo.imageFile
+            LEFT JOIN FETCH photo.participation
+            WHERE photo.mission.id IN :missionIds
+              AND photo.deletedAt IS NULL
+              AND photo.replacedAt IS NULL
+              AND (photo.activeSlot = 1 OR photo.participation IS NULL)
+            """)
+    List<MissionPhoto> findVisibleByMissionIdIn(
+            @Param("missionIds") List<Long> missionIds
+    );
 }

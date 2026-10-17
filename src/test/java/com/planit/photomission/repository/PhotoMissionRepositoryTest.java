@@ -6,11 +6,16 @@ import com.planit.domain.Trip;
 import com.planit.domain.TripMember;
 import com.planit.domain.User;
 import com.planit.photomission.domain.Mission;
+import com.planit.photomission.domain.MissionGenerationJob;
 import com.planit.photomission.domain.MissionGroupState;
 import com.planit.photomission.domain.MissionParticipation;
 import com.planit.photomission.domain.MissionPhoto;
 import com.planit.photomission.domain.MissionScope;
 import com.planit.photomission.domain.PhotoEvaluation;
+import com.planit.photomission.ai.PhotoMissionGenerateRequest;
+import com.planit.photomission.ai.PhotoMissionGenerateResponse;
+import com.planit.photomission.service.PhotoMissionGenerationTransactionService;
+import com.planit.photomission.service.MissionGenerationAttempt;
 import com.planit.repository.ImageFileRepository;
 import com.planit.repository.RegionRepository;
 import com.planit.repository.TripMemberRepository;
@@ -29,14 +34,17 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
 @Transactional
@@ -59,6 +67,12 @@ class PhotoMissionRepositoryTest {
 
     @Autowired
     private PhotoEvaluationRepository evaluationRepository;
+
+    @Autowired
+    private MissionGenerationJobRepository generationJobRepository;
+
+    @Autowired
+    private PhotoMissionGenerationTransactionService generationService;
 
     @Autowired
     private RegionRepository regionRepository;
@@ -102,7 +116,7 @@ class PhotoMissionRepositoryTest {
                 )
         );
         Mission groupMission = missionRepository.save(Mission.create(
-                fixture.visit(), 2, MissionScope.GROUP,
+                createAnotherVisit(fixture), 2, MissionScope.GROUP,
                 "다 같이 사진 찍기", null, NOW
         ));
         MissionGroupState groupState = groupStateRepository.save(
@@ -115,6 +129,36 @@ class PhotoMissionRepositoryTest {
                 )).contains(participation);
         assertThat(groupStateRepository.findByMissionId(groupMission.getId()))
                 .contains(groupState);
+        assertThat(missionRepository
+                .findByTripIdAndScheduleDayDayNumberOrderByMissionOrderAsc(
+                        fixture.member().getTrip().getId(),
+                        (byte) 1
+                )).containsExactly(personalMission, groupMission);
+        assertThat(participationRepository.findByMissionIdIn(List.of(
+                personalMission.getId(),
+                groupMission.getId()
+        ))).containsExactly(participation);
+        assertThat(groupStateRepository.findByMissionIdIn(List.of(
+                personalMission.getId(),
+                groupMission.getId()
+        ))).containsExactly(groupState);
+    }
+
+    @DisplayName("하나의 일정 방문에는 포토미션을 하나만 저장할 수 있다")
+    @Test
+    void rejectsDuplicateMissionForScheduleVisit() {
+        Fixture fixture = createFixture();
+        missionRepository.saveAndFlush(Mission.create(
+                fixture.visit(), 1, MissionScope.PERSONAL,
+                "유적지 전경 담기", "역사", NOW
+        ));
+
+        assertThatThrownBy(() -> missionRepository.saveAndFlush(
+                Mission.create(
+                        fixture.visit(), 2, MissionScope.GROUP,
+                        "다 같이 사진 찍기", null, NOW
+                )
+        )).isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @DisplayName("멱등성 키와 활성·대표 슬롯으로 사진을 조회한다")
@@ -143,7 +187,7 @@ class PhotoMissionRepositoryTest {
         );
 
         Mission groupMission = missionRepository.save(Mission.create(
-                fixture.visit(), 2, MissionScope.GROUP,
+                createAnotherVisit(fixture), 2, MissionScope.GROUP,
                 "다 같이 사진 찍기", null, NOW
         ));
         MissionPhoto groupPhoto = MissionPhoto.group(
@@ -166,6 +210,10 @@ class PhotoMissionRepositoryTest {
         assertThat(photoRepository.findRepresentativeByMissionId(
                 groupMission.getId()
         )).contains(groupPhoto);
+        assertThat(photoRepository.findVisibleByMissionIdIn(List.of(
+                personalMission.getId(),
+                groupMission.getId()
+        ))).containsExactlyInAnyOrder(personalPhoto, groupPhoto);
     }
 
     @DisplayName("사진의 가장 최근 AI 실행 시도를 조회한다")
@@ -195,6 +243,209 @@ class PhotoMissionRepositoryTest {
         assertThat(evaluationRepository
                 .findTopByMissionPhotoIdOrderByAttemptNoDesc(photo.getId()))
                 .contains(latest);
+    }
+
+    @DisplayName("여행 단위 포토미션 생성 작업을 조회한다")
+    @Test
+    void findsGenerationJobByTrip() {
+        Fixture fixture = createFixture();
+        Trip trip = fixture.visit().getDay().getSchedule().getTrip();
+        MissionGenerationJob job = generationJobRepository.save(
+                MissionGenerationJob.start(trip, NOW)
+        );
+
+        assertThat(generationJobRepository.findByTripIdForUpdate(
+                trip.getId()
+        )).contains(job);
+    }
+
+    @DisplayName("하나의 여행에는 생성 작업을 하나만 저장할 수 있다")
+    @Test
+    void rejectsDuplicateGenerationJobForTrip() {
+        Fixture fixture = createFixture();
+        Trip trip = fixture.visit().getDay().getSchedule().getTrip();
+        generationJobRepository.saveAndFlush(
+                MissionGenerationJob.start(trip, NOW)
+        );
+
+        assertThatThrownBy(() -> generationJobRepository.saveAndFlush(
+                MissionGenerationJob.start(
+                        trip,
+                        NOW.plusMinutes(1)
+                )
+        )).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @DisplayName("전체 여행 일정으로 개인 미션과 멤버 상태를 생성한다")
+    @Test
+    void generatesPersonalMissionForActiveMember() {
+        Fixture fixture = createFixture();
+        Trip trip = fixture.visit().getDay().getSchedule().getTrip();
+        MissionGenerationAttempt attempt =
+                generationService.start(trip.getId(), NOW);
+
+        PhotoMissionGenerateRequest request =
+                generationService.loadRequest(attempt.jobId());
+        generationService.complete(
+                attempt,
+                new PhotoMissionGenerateResponse(List.of(
+                        new PhotoMissionGenerateResponse.Mission(
+                                "mission_abc",
+                                fixture.visit().getPlace().getGooglePlaceId(),
+                                "첨성대 전경을 찍어보세요.",
+                                "PERSONAL",
+                                "역사·유적"
+                        )
+                )),
+                NOW.plusSeconds(2)
+        );
+
+        assertThat(request.itineraryId())
+                .isEqualTo("trip_" + trip.getId());
+        assertThat(request.places()).hasSize(1);
+        assertThat(request.places().getFirst().selectedFor()).isEmpty();
+        Mission mission = missionRepository.findAll().getLast();
+        assertThat(participationRepository
+                .findByMissionIdAndTripMemberId(
+                        mission.getId(),
+                        fixture.member().getId()
+                )).isPresent();
+        assertThat(generationJobRepository.findById(
+                attempt.jobId()
+        ).orElseThrow()
+                .getStatus()).isEqualTo(
+                        com.planit.photomission.domain
+                                .MissionGenerationStatus.SUCCEEDED
+                );
+    }
+
+    @DisplayName("단체 미션에는 여행방 공유 상태를 하나 생성한다")
+    @Test
+    void generatesSharedStateForGroupMission() {
+        Fixture fixture = createFixture();
+        Trip trip = fixture.visit().getDay().getSchedule().getTrip();
+        MissionGenerationAttempt attempt =
+                generationService.start(trip.getId(), NOW);
+
+        generationService.complete(
+                attempt,
+                new PhotoMissionGenerateResponse(List.of(
+                        new PhotoMissionGenerateResponse.Mission(
+                                "mission_group",
+                                fixture.visit().getPlace().getGooglePlaceId(),
+                                "멤버 모두가 함께 사진을 찍어보세요.",
+                                "GROUP",
+                                null
+                        )
+                )),
+                NOW.plusSeconds(2)
+        );
+
+        Mission mission = missionRepository.findAll().getLast();
+        assertThat(groupStateRepository.findByMissionId(mission.getId()))
+                .isPresent();
+        assertThat(participationRepository
+                .findByMissionIdAndTripMemberId(
+                        mission.getId(),
+                        fixture.member().getId()
+                )).isEmpty();
+    }
+
+    @DisplayName("재시도가 시작되면 이전 실행의 늦은 응답을 저장하지 않는다")
+    @Test
+    void rejectsResponseFromPreviousGenerationAttempt() {
+        Fixture fixture = createFixture();
+        Trip trip = fixture.visit().getDay().getSchedule().getTrip();
+        MissionGenerationAttempt firstAttempt =
+                generationService.start(trip.getId(), NOW);
+        MissionGenerationJob job = generationJobRepository.findById(
+                firstAttempt.jobId()
+        ).orElseThrow();
+        job.fail();
+        generationJobRepository.flush();
+        MissionGenerationAttempt secondAttempt = generationService.start(
+                trip.getId(),
+                NOW.plusMinutes(1)
+        );
+        PhotoMissionGenerateResponse response =
+                new PhotoMissionGenerateResponse(List.of(
+                        new PhotoMissionGenerateResponse.Mission(
+                                "mission_old",
+                                fixture.visit().getPlace().getGooglePlaceId(),
+                                "이전 실행에서 생성한 미션",
+                                "PERSONAL",
+                                "역사·유적"
+                        )
+                ));
+
+        assertThat(secondAttempt.attemptCount()).isEqualTo(2);
+        assertThatThrownBy(() -> generationService.complete(
+                firstAttempt,
+                response,
+                NOW.plusMinutes(1)
+        ))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("현재 실행 중인 포토미션 생성 시도가 아닙니다");
+        assertThat(missionRepository.findAll()).isEmpty();
+    }
+
+    @DisplayName("같은 장소가 일정에 여러 번 있으면 AI 요청을 만들지 않는다")
+    @Test
+    void rejectsDuplicatePlacesBeforeGenerationRequest() {
+        Fixture fixture = createFixture();
+        Schedule schedule = fixture.visit().getDay().getSchedule();
+        ScheduleDay secondDay = scheduleDayRepository.save(
+                new ScheduleDay(
+                        schedule,
+                        (byte) 2,
+                        schedule.getTrip().getStartDate().plusDays(1)
+                )
+        );
+        visitRepository.save(new ScheduleVisit(
+                secondDay,
+                fixture.visit().getPlace(),
+                1,
+                "역사 취향 반영",
+                NOW
+        ));
+        MissionGenerationAttempt attempt = generationService.start(
+                schedule.getTrip().getId(),
+                NOW
+        );
+
+        assertThatThrownBy(() -> generationService.loadRequest(
+                attempt.jobId()
+        ))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("같은 장소가 일정에 중복되어 있습니다");
+    }
+
+    @DisplayName("시작일이 되었고 확정 일정이 있는 미생성 여행을 찾는다")
+    @Test
+    void findsTripsDueForPhotoMissionGeneration() {
+        Fixture fixture = createFixture();
+        Trip trip = fixture.visit().getDay().getSchedule().getTrip();
+
+        assertThat(tripRepository.findPhotoMissionGenerationTargetIds(
+                trip.getStartDate(),
+                NOW.minusMinutes(5)
+        )).contains(trip.getId());
+    }
+
+    @DisplayName("실행 제한 시간이 지난 생성 작업을 다시 조회한다")
+    @Test
+    void findsStaleRunningGenerationJob() {
+        Fixture fixture = createFixture();
+        Trip trip = fixture.visit().getDay().getSchedule().getTrip();
+        generationJobRepository.save(MissionGenerationJob.start(
+                trip,
+                NOW.minusMinutes(6)
+        ));
+
+        assertThat(tripRepository.findPhotoMissionGenerationTargetIds(
+                trip.getStartDate(),
+                NOW.minusMinutes(5)
+        )).contains(trip.getId());
     }
 
     private Fixture createFixture() {
@@ -244,6 +495,16 @@ class PhotoMissionRepositoryTest {
                 "missions/" + UUID.randomUUID() + ".jpg",
                 "image/jpeg",
                 1024
+        ));
+    }
+
+    private ScheduleVisit createAnotherVisit(Fixture fixture) {
+        return visitRepository.save(new ScheduleVisit(
+                fixture.visit().getDay(),
+                fixture.visit().getPlace(),
+                2,
+                "야경 취향 반영",
+                NOW
         ));
     }
 

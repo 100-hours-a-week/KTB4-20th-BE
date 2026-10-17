@@ -3,7 +3,7 @@ package com.planit.notification.precheck;
 import com.planit.notification.domain.Notification;
 import com.planit.notification.domain.NotificationType;
 import com.planit.notification.repository.NotificationStore;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,7 +13,6 @@ import java.time.LocalDateTime;
 import java.util.Objects;
 
 @Service
-@RequiredArgsConstructor
 public class TripRemindNotificationGenerationService {
 
     private static final String D1_TITLE = "내일 여행이 시작돼요";
@@ -24,6 +23,16 @@ public class TripRemindNotificationGenerationService {
     private final TripRemindNotificationTargetService targetService;
     private final NotificationStore notificationStore;
     private final Clock clock;
+
+    public TripRemindNotificationGenerationService(
+            TripRemindNotificationTargetService targetService,
+            NotificationStore notificationStore,
+            @Qualifier("tripRemindClock") Clock clock
+    ) {
+        this.targetService = targetService;
+        this.notificationStore = notificationStore;
+        this.clock = clock;
+    }
 
     @Transactional
     public void generate(LocalDate targetDate) {
