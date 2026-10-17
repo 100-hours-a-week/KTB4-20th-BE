@@ -91,8 +91,7 @@ public class MissionGroupState {
     }
 
     public void completeManually(LocalDateTime completedAt) {
-        requirePending();
-        if (retryCount < MAX_RETRY_COUNT) {
+        if (!canCompleteManually()) {
             throw new IllegalStateException(
                     "판정 실패 3회 이후에 직접 완료할 수 있습니다"
             );
@@ -102,19 +101,38 @@ public class MissionGroupState {
     }
 
     public void reflectPhotoDeletion(
-            boolean hasRemainingSuccessPhoto,
+            boolean hasRemainingCompletionPhoto,
             LocalDateTime updatedAt
     ) {
-        if (status != MissionCompletionStatus.COMPLETED
-                || completionMethod != MissionCompletionMethod.AI
-                || hasRemainingSuccessPhoto) {
+        if (hasRemainingCompletionPhoto) {
             return;
         }
 
+        if (canCompleteManually()
+                || completionMethod == MissionCompletionMethod.MANUAL) {
+            fail(updatedAt);
+            return;
+        }
+        if (status != MissionCompletionStatus.COMPLETED
+                || completionMethod != MissionCompletionMethod.AI) {
+            return;
+        }
         status = MissionCompletionStatus.PENDING;
         completionMethod = null;
         completedAt = null;
         this.updatedAt = updatedAt;
+    }
+
+    public boolean canCompleteManually() {
+        return status == MissionCompletionStatus.PENDING
+                && retryCount >= MAX_RETRY_COUNT;
+    }
+
+    private void fail(LocalDateTime failedAt) {
+        status = MissionCompletionStatus.FAILED;
+        completionMethod = null;
+        completedAt = null;
+        updatedAt = failedAt;
     }
 
     private void complete(

@@ -146,6 +146,22 @@ class PhotoEvaluationTest {
         assertThat(evaluation.getErrorCode()).isEqualTo("AI_TIMEOUT");
     }
 
+    @DisplayName("재시도 가능한 AI 오류는 다음 실행 예정 시각과 함께 대기 상태로 기록한다")
+    @Test
+    void waitsForRetryAfterRetryableExecutionError() {
+        PhotoEvaluation evaluation = runningEvaluation();
+        LocalDateTime retryAfter = now().plusSeconds(30);
+
+        evaluation.waitForRetry("AI_429", retryAfter);
+
+        assertThat(evaluation.getExecutionStatus())
+                .isEqualTo(PhotoEvaluationExecutionStatus.RETRY_PENDING);
+        assertThat(evaluation.getResult()).isNull();
+        assertThat(evaluation.getErrorCode()).isEqualTo("AI_429");
+        assertThat(evaluation.getRetryAfterAt()).isEqualTo(retryAfter);
+        assertThat(evaluation.getEvaluatedAt()).isNull();
+    }
+
     @DisplayName("정상 종료에는 반드시 판정 결과가 있어야 한다")
     @Test
     void rejectsNullResultOnSuccess() {

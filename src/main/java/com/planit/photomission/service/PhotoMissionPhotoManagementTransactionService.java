@@ -5,6 +5,7 @@ import com.planit.domain.User;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
 import com.planit.photomission.domain.MissionGroupState;
+import com.planit.photomission.domain.MissionCompletionMethod;
 import com.planit.photomission.domain.MissionPhoto;
 import com.planit.photomission.repository.MissionGroupStateRepository;
 import com.planit.photomission.repository.MissionPhotoRepository;
@@ -80,15 +81,16 @@ public class PhotoMissionPhotoManagementTransactionService {
         photo.delete(now);
         if (photo.getMission().isPersonal()) {
             photo.getParticipation().reflectPhotoDeletion(false, now);
-        } else if (representative) {
-            reflectGroupRepresentativeDeletion(photo, now);
+        } else {
+            reflectGroupPhotoDeletion(photo, representative, now);
         }
 
         return photo.getImageFile().getImageKey();
     }
 
-    private void reflectGroupRepresentativeDeletion(
+    private void reflectGroupPhotoDeletion(
             MissionPhoto deletedPhoto,
+            boolean representative,
             LocalDateTime now
     ) {
         Long missionId = deletedPhoto.getMission().getId();
@@ -97,17 +99,43 @@ public class PhotoMissionPhotoManagementTransactionService {
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.INTERNAL_SERVER_ERROR
                 ));
-        List<MissionPhoto> remainingSuccessPhotos = photoRepository
-                .findSuccessfulByMissionIdExcludingPhotoId(
-                        missionId,
-                        deletedPhoto.getId()
-                );
-        if (remainingSuccessPhotos.isEmpty()) {
-            state.reflectPhotoDeletion(false, now);
+        if (!representative && !state.canCompleteManually()) {
             return;
         }
 
-        remainingSuccessPhotos.get(0).markRepresentative();
-        state.reflectPhotoDeletion(true, now);
+        MissionPhoto replacement = findReplacementPhoto(
+                state,
+                missionId,
+                deletedPhoto.getId()
+        );
+        if (representative && replacement != null) {
+            replacement.markRepresentative();
+        }
+        state.reflectPhotoDeletion(replacement != null, now);
+    }
+
+    private MissionPhoto findReplacementPhoto(
+            MissionGroupState state,
+            Long missionId,
+            Long deletedPhotoId
+    ) {
+        if (state.getCompletionMethod() == MissionCompletionMethod.AI) {
+            return photoRepository
+                    .findSuccessfulByMissionIdExcludingPhotoId(
+                            missionId,
+                            deletedPhotoId
+                    )
+                    .stream()
+                    .findFirst()
+                    .orElse(null);
+        }
+        return photoRepository
+                .findAvailableByMissionIdExcludingPhotoId(
+                        missionId,
+                        deletedPhotoId
+                )
+                .stream()
+                .findFirst()
+                .orElse(null);
     }
 }

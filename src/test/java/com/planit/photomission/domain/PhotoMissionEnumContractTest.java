@@ -23,7 +23,8 @@ class PhotoMissionEnumContractTest {
         assertThat(MissionCompletionStatus.values())
                 .containsExactly(
                         MissionCompletionStatus.PENDING,
-                        MissionCompletionStatus.COMPLETED
+                        MissionCompletionStatus.COMPLETED,
+                        MissionCompletionStatus.FAILED
                 );
         assertThat(MissionCompletionMethod.values())
                 .containsExactly(
@@ -39,6 +40,7 @@ class PhotoMissionEnumContractTest {
                 .containsExactly(
                         PhotoEvaluationExecutionStatus.RUNNING,
                         PhotoEvaluationExecutionStatus.SUCCEEDED,
+                        PhotoEvaluationExecutionStatus.RETRY_PENDING,
                         PhotoEvaluationExecutionStatus.FAILED
                 );
         assertThat(PhotoEvaluationResult.values())

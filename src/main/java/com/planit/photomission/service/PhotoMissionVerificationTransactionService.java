@@ -93,6 +93,18 @@ public class PhotoMissionVerificationTransactionService {
         );
     }
 
+    @Transactional
+    public void waitForRetry(
+            Long evaluationId,
+            String errorCode,
+            LocalDateTime retryAfterAt
+    ) {
+        findEvaluation(evaluationId).waitForRetry(
+                errorCode,
+                retryAfterAt
+        );
+    }
+
     private MissionPhoto findPhoto(Long missionPhotoId) {
         return photoRepository.findById(missionPhotoId)
                 .filter(photo -> photo.getDeletedAt() == null)
