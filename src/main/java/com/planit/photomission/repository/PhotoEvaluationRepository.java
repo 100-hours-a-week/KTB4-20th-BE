@@ -20,4 +20,10 @@ public interface PhotoEvaluationRepository
                     PhotoEvaluationExecutionStatus executionStatus,
                     LocalDateTime retryAfterAt
             );
+
+    List<PhotoEvaluation>
+            findTop5ByExecutionStatusAndRequestedAtLessThanEqualOrderByRequestedAtAsc(
+                    PhotoEvaluationExecutionStatus executionStatus,
+                    LocalDateTime requestedAt
+            );
 }

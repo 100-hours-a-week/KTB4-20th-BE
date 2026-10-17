@@ -7,10 +7,10 @@ import java.time.Clock;
 import java.time.ZoneId;
 
 @Configuration(proxyBeanMethods = false)
-public class PhotoMissionEvaluationRetryConfig {
+public class PhotoMissionTimeConfig {
 
-    @Bean("photoMissionEvaluationRetryClock")
-    public Clock photoMissionEvaluationRetryClock() {
+    @Bean("photoMissionClock")
+    public Clock photoMissionClock() {
         return Clock.system(ZoneId.of("Asia/Seoul"));
     }
 }

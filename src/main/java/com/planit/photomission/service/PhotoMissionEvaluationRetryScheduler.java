@@ -16,7 +16,7 @@ public class PhotoMissionEvaluationRetryScheduler {
 
     public PhotoMissionEvaluationRetryScheduler(
             PhotoMissionEvaluationRetryService retryService,
-            @Qualifier("photoMissionEvaluationRetryClock") Clock clock
+            @Qualifier("photoMissionClock") Clock clock
     ) {
         this.retryService = retryService;
         this.clock = clock;
@@ -24,7 +24,7 @@ public class PhotoMissionEvaluationRetryScheduler {
 
     @Scheduled(
             fixedDelayString =
-                    "${photo-mission.evaluation-retry-delay-ms:10000}"
+                    "${photo-mission.evaluation-retry-delay-ms:30000}"
     )
     @SchedulerLock(
             name = "photoMissionEvaluationRetry",

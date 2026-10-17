@@ -22,10 +22,13 @@ class PhotoMissionEvaluationRetryServiceTest {
             mock(PhotoEvaluationRepository.class);
     private final PhotoMissionVerificationService verificationService =
             mock(PhotoMissionVerificationService.class);
+    private final PhotoMissionVerificationTransactionService transactionService =
+            mock(PhotoMissionVerificationTransactionService.class);
     private final PhotoMissionEvaluationRetryService service =
             new PhotoMissionEvaluationRetryService(
                     evaluationRepository,
-                    verificationService
+                    verificationService,
+                    transactionService
             );
 
     @DisplayName("재시도 시각이 지난 판정을 모두 재실행하고 개별 오류가 다음 작업을 막지 않는다")
@@ -48,6 +51,27 @@ class PhotoMissionEvaluationRetryServiceTest {
         verify(verificationService).retry(52L, now);
     }
 
+    @DisplayName("5분 이상 RUNNING인 판정을 재시도 상태로 복구한다")
+    @Test
+    void recoversStaleRunningEvaluations() {
+        LocalDateTime now = LocalDateTime.of(2026, 10, 17, 10, 0);
+        LocalDateTime staleBefore = now.minusMinutes(5);
+        PhotoEvaluation stale = runningEvaluation(53L, staleBefore);
+        when(evaluationRepository
+                .findTop5ByExecutionStatusAndRequestedAtLessThanEqualOrderByRequestedAtAsc(
+                        PhotoEvaluationExecutionStatus.RUNNING,
+                        staleBefore
+                )).thenReturn(List.of(stale));
+
+        service.retryDue(now);
+
+        verify(transactionService).recoverStaleRunning(
+                53L,
+                staleBefore,
+                now
+        );
+    }
+
     private PhotoEvaluation pendingEvaluation(Long id) {
         PhotoEvaluation evaluation = PhotoEvaluation.start(
                 mock(MissionPhoto.class),
@@ -57,6 +81,19 @@ class PhotoMissionEvaluationRetryServiceTest {
         evaluation.waitForRetry(
                 "HTTP_502",
                 LocalDateTime.of(2026, 10, 17, 9, 59, 30)
+        );
+        ReflectionTestUtils.setField(evaluation, "id", id);
+        return evaluation;
+    }
+
+    private PhotoEvaluation runningEvaluation(
+            Long id,
+            LocalDateTime requestedAt
+    ) {
+        PhotoEvaluation evaluation = PhotoEvaluation.start(
+                mock(MissionPhoto.class),
+                1,
+                requestedAt
         );
         ReflectionTestUtils.setField(evaluation, "id", id);
         return evaluation;

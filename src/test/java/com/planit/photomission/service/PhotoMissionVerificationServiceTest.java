@@ -16,7 +16,10 @@ import org.springframework.http.HttpStatus;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -28,12 +31,21 @@ import static org.mockito.Mockito.when;
 
 class PhotoMissionVerificationServiceTest {
 
+    private static final Clock SEOUL_CLOCK = Clock.fixed(
+            Instant.parse("2026-10-17T01:00:00Z"),
+            ZoneId.of("Asia/Seoul")
+    );
+
     private final PhotoMissionVerificationTransactionService transactionService =
             mock(PhotoMissionVerificationTransactionService.class);
     private final PhotoMissionAiClient aiClient =
             mock(PhotoMissionAiClient.class);
     private final PhotoMissionVerificationService service =
-            new PhotoMissionVerificationService(transactionService, aiClient);
+            new PhotoMissionVerificationService(
+                    transactionService,
+                    aiClient,
+                    SEOUL_CLOCK
+            );
 
     @DisplayName("트랜잭션 밖에서 AI를 호출하고 판정 결과를 반영한다")
     @Test
@@ -79,15 +91,30 @@ class PhotoMissionVerificationServiceTest {
     @Test
     void discardsUnavailablePendingEvaluation() {
         LocalDateTime now = LocalDateTime.of(2026, 10, 17, 10, 0);
-        IllegalStateException exception =
-                new IllegalStateException("이미 완료된 미션");
+        PhotoMissionVerificationTransactionService.RetryUnavailableException
+                exception =
+                new PhotoMissionVerificationTransactionService
+                        .RetryUnavailableException("이미 완료된 미션");
+        when(transactionService.prepareRetry(51L, now))
+                .thenThrow(exception);
+
+        service.retry(51L, now);
+
+        verify(transactionService).discardRetry(51L, now);
+    }
+
+    @DisplayName("재시도 준비 중 일시적 오류는 대기 판정을 종료하지 않는다")
+    @Test
+    void keepsPendingEvaluationAfterTransientPreparationFailure() {
+        LocalDateTime now = LocalDateTime.of(2026, 10, 17, 10, 0);
+        RuntimeException exception = new RuntimeException("일시적 DB 오류");
         when(transactionService.prepareRetry(51L, now))
                 .thenThrow(exception);
 
         assertThatThrownBy(() -> service.retry(51L, now))
                 .isSameAs(exception);
 
-        verify(transactionService).discardRetry(51L, now);
+        verify(transactionService, never()).discardRetry(51L, now);
     }
 
     @DisplayName("판정 결과 DB 반영 오류를 AI 실행 오류로 기록하지 않는다")
@@ -179,7 +206,9 @@ class PhotoMissionVerificationServiceTest {
         verify(transactionService).waitForRetry(
                 org.mockito.ArgumentMatchers.eq(51L),
                 org.mockito.ArgumentMatchers.eq("HTTP_429"),
-                org.mockito.ArgumentMatchers.any(LocalDateTime.class)
+                org.mockito.ArgumentMatchers.eq(
+                        LocalDateTime.of(2026, 10, 17, 10, 0, 30)
+                )
         );
     }
 

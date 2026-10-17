@@ -15,9 +15,11 @@ import com.planit.photomission.domain.PhotoEvaluationResult;
 import com.planit.photomission.repository.MissionGroupStateRepository;
 import com.planit.photomission.repository.MissionPhotoRepository;
 import com.planit.photomission.repository.PhotoEvaluationRepository;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 
 @Service
@@ -31,6 +33,7 @@ public class PhotoMissionVerificationTransactionService {
     private final ImageStorage imageStorage;
     private final PhotoMissionVerifyRequestFactory requestFactory;
     private final PhotoMissionEvaluationMapper evaluationMapper;
+    private final Clock clock;
 
     public PhotoMissionVerificationTransactionService(
             MissionPhotoRepository photoRepository,
@@ -38,7 +41,8 @@ public class PhotoMissionVerificationTransactionService {
             MissionGroupStateRepository groupStateRepository,
             ImageStorage imageStorage,
             PhotoMissionVerifyRequestFactory requestFactory,
-            PhotoMissionEvaluationMapper evaluationMapper
+            PhotoMissionEvaluationMapper evaluationMapper,
+            @Qualifier("photoMissionClock") Clock clock
     ) {
         this.photoRepository = photoRepository;
         this.evaluationRepository = evaluationRepository;
@@ -46,6 +50,7 @@ public class PhotoMissionVerificationTransactionService {
         this.imageStorage = imageStorage;
         this.requestFactory = requestFactory;
         this.evaluationMapper = evaluationMapper;
+        this.clock = clock;
     }
 
     @Transactional
@@ -57,7 +62,7 @@ public class PhotoMissionVerificationTransactionService {
                 .findTopByMissionPhotoIdOrderByAttemptNoDesc(missionPhotoId)
                 .map(evaluation -> evaluation.getAttemptNo() + 1)
                 .orElse(1);
-        return startVerification(photo, attemptNo, LocalDateTime.now());
+        return startVerification(photo, attemptNo, LocalDateTime.now(clock));
     }
 
     @Transactional
@@ -68,12 +73,25 @@ public class PhotoMissionVerificationTransactionService {
         PhotoEvaluation previous = findEvaluation(evaluationId);
         if (previous.getExecutionStatus()
                 != PhotoEvaluationExecutionStatus.RETRY_PENDING
-                || previous.getRetryAfterAt().isAfter(retriedAt)
                 || previous.getAttemptNo() >= MAX_TECHNICAL_ATTEMPTS) {
-            throw new IllegalStateException("재시도 가능한 AI 판정이 아닙니다");
+            throw new RetryUnavailableException(
+                    "재시도 가능한 AI 판정이 아닙니다"
+            );
         }
-        MissionPhoto photo = findPhoto(previous.getMissionPhoto().getId());
-        validatePending(photo);
+        if (previous.getRetryAfterAt().isAfter(retriedAt)) {
+            throw new IllegalStateException(
+                    "AI 판정 재시도 예정 시각이 아직 되지 않았습니다"
+            );
+        }
+        MissionPhoto photo = findRetryPhoto(previous.getMissionPhoto().getId());
+        try {
+            validatePending(photo);
+        } catch (IllegalStateException | IllegalArgumentException exception) {
+            throw new RetryUnavailableException(
+                    exception.getMessage(),
+                    exception
+            );
+        }
         previous.markRetryStarted(retriedAt);
         return startVerification(
                 photo,
@@ -107,7 +125,7 @@ public class PhotoMissionVerificationTransactionService {
             PhotoMissionVerifyResponse response
     ) {
         PhotoEvaluation evaluation = findEvaluation(evaluationId);
-        LocalDateTime evaluatedAt = LocalDateTime.now();
+        LocalDateTime evaluatedAt = LocalDateTime.now(clock);
         evaluationMapper.apply(evaluation, response, evaluatedAt);
 
         MissionPhoto photo = evaluation.getMissionPhoto();
@@ -122,7 +140,7 @@ public class PhotoMissionVerificationTransactionService {
     public void fail(Long evaluationId, String errorCode) {
         findEvaluation(evaluationId).failExecution(
                 errorCode,
-                LocalDateTime.now()
+                LocalDateTime.now(clock)
         );
     }
 
@@ -134,7 +152,7 @@ public class PhotoMissionVerificationTransactionService {
     ) {
         PhotoEvaluation evaluation = findEvaluation(evaluationId);
         if (evaluation.getAttemptNo() >= MAX_TECHNICAL_ATTEMPTS) {
-            evaluation.failExecution(errorCode, LocalDateTime.now());
+            evaluation.failExecution(errorCode, LocalDateTime.now(clock));
             return;
         }
         evaluation.waitForRetry(errorCode, retryAfterAt);
@@ -152,6 +170,25 @@ public class PhotoMissionVerificationTransactionService {
         }
     }
 
+    @Transactional
+    public void recoverStaleRunning(
+            Long evaluationId,
+            LocalDateTime staleBefore,
+            LocalDateTime recoveredAt
+    ) {
+        PhotoEvaluation evaluation = findEvaluation(evaluationId);
+        if (evaluation.getExecutionStatus()
+                != PhotoEvaluationExecutionStatus.RUNNING
+                || evaluation.getRequestedAt().isAfter(staleBefore)) {
+            return;
+        }
+        if (evaluation.getAttemptNo() >= MAX_TECHNICAL_ATTEMPTS) {
+            evaluation.failExecution("STALE_RUNNING", recoveredAt);
+            return;
+        }
+        evaluation.waitForRetry("STALE_RUNNING", recoveredAt);
+    }
+
     private MissionPhoto findPhoto(Long missionPhotoId) {
         return photoRepository.findById(missionPhotoId)
                 .filter(photo -> photo.getDeletedAt() == null)
@@ -159,6 +196,17 @@ public class PhotoMissionVerificationTransactionService {
                 .orElseThrow(() -> new IllegalArgumentException(
                         "판정할 포토미션 사진을 찾을 수 없습니다"
                 ));
+    }
+
+    private MissionPhoto findRetryPhoto(Long missionPhotoId) {
+        try {
+            return findPhoto(missionPhotoId);
+        } catch (IllegalArgumentException exception) {
+            throw new RetryUnavailableException(
+                    exception.getMessage(),
+                    exception
+            );
+        }
     }
 
     private PhotoEvaluation findEvaluation(Long evaluationId) {
@@ -269,5 +317,17 @@ public class PhotoMissionVerificationTransactionService {
             Long missionId,
             PhotoMissionVerifyRequest request
     ) {
+    }
+
+    public static final class RetryUnavailableException
+            extends IllegalStateException {
+
+        public RetryUnavailableException(String message) {
+            super(message);
+        }
+
+        public RetryUnavailableException(String message, Throwable cause) {
+            super(message, cause);
+        }
     }
 }

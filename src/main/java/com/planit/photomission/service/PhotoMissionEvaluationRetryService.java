@@ -14,24 +14,47 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class PhotoMissionEvaluationRetryService {
 
+    private static final int STALE_RUNNING_MINUTES = 5;
+
     private final PhotoEvaluationRepository evaluationRepository;
     private final PhotoMissionVerificationService verificationService;
+    private final PhotoMissionVerificationTransactionService transactionService;
 
     public void retryDue(LocalDateTime now) {
+        LocalDateTime staleBefore = now.minusMinutes(STALE_RUNNING_MINUTES);
+        evaluationRepository
+                .findTop5ByExecutionStatusAndRequestedAtLessThanEqualOrderByRequestedAtAsc(
+                        PhotoEvaluationExecutionStatus.RUNNING,
+                        staleBefore
+                )
+                .forEach(evaluation -> runSafely(
+                        evaluation.getId(),
+                        () -> transactionService.recoverStaleRunning(
+                                evaluation.getId(),
+                                staleBefore,
+                                now
+                        )
+                ));
         evaluationRepository
                 .findTop5ByExecutionStatusAndRetryAfterAtLessThanEqualOrderByRetryAfterAtAsc(
                         PhotoEvaluationExecutionStatus.RETRY_PENDING,
                         now
                 )
-                .forEach(evaluation -> retry(evaluation.getId(), now));
+                .forEach(evaluation -> runSafely(
+                        evaluation.getId(),
+                        () -> verificationService.retry(
+                                evaluation.getId(),
+                                now
+                        )
+                ));
     }
 
-    private void retry(Long evaluationId, LocalDateTime now) {
+    private void runSafely(Long evaluationId, Runnable operation) {
         try {
-            verificationService.retry(evaluationId, now);
+            operation.run();
         } catch (RuntimeException exception) {
             log.error(
-                    "포토미션 AI 판정 재시도에 실패했습니다. evaluationId={}",
+                    "포토미션 AI 판정 복구에 실패했습니다. evaluationId={}",
                     evaluationId,
                     exception
             );

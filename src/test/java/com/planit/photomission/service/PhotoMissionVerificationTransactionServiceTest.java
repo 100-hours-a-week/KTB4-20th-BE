@@ -31,13 +31,17 @@ import org.springframework.test.util.ReflectionTestUtils;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -46,6 +50,10 @@ class PhotoMissionVerificationTransactionServiceTest {
 
     private static final LocalDateTime NOW =
             LocalDateTime.of(2026, 10, 11, 10, 0);
+    private static final Clock SEOUL_CLOCK = Clock.fixed(
+            Instant.parse("2026-10-11T01:00:00Z"),
+            ZoneId.of("Asia/Seoul")
+    );
 
     private MissionPhotoRepository photoRepository;
     private PhotoEvaluationRepository evaluationRepository;
@@ -65,7 +73,8 @@ class PhotoMissionVerificationTransactionServiceTest {
                 groupStateRepository,
                 imageStorage,
                 new PhotoMissionVerifyRequestFactory(),
-                new PhotoMissionEvaluationMapper(JsonMapper.builder().build())
+                new PhotoMissionEvaluationMapper(JsonMapper.builder().build()),
+                SEOUL_CLOCK
         );
     }
 
@@ -84,6 +93,7 @@ class PhotoMissionVerificationTransactionServiceTest {
         when(evaluationRepository.save(any(PhotoEvaluation.class)))
                 .thenAnswer(invocation -> {
                     PhotoEvaluation evaluation = invocation.getArgument(0);
+                    assertThat(evaluation.getRequestedAt()).isEqualTo(NOW);
                     ReflectionTestUtils.setField(evaluation, "id", 51L);
                     return evaluation;
                 });
@@ -292,6 +302,47 @@ class PhotoMissionVerificationTransactionServiceTest {
                 .isEqualTo("https://bucket.example/photo.jpg");
     }
 
+    @DisplayName("이미 완료된 미션의 대기 판정은 재시도 불가로 구분한다")
+    @Test
+    void rejectsRetryForCompletedMissionAsUnavailable() {
+        Mission mission = mission(MissionScope.GROUP);
+        MissionGroupState state = MissionGroupState.create(mission, NOW);
+        state.completeByAi(NOW.plusSeconds(1));
+        MissionPhoto photo = groupPhoto(mission);
+        PhotoEvaluation pending = PhotoEvaluation.start(photo, 1, NOW);
+        ReflectionTestUtils.setField(pending, "id", 51L);
+        pending.waitForRetry("HTTP_502", NOW.plusSeconds(30));
+        when(evaluationRepository.findById(51L))
+                .thenReturn(Optional.of(pending));
+        when(photoRepository.findById(41L)).thenReturn(Optional.of(photo));
+        when(groupStateRepository.findByMissionId(31L))
+                .thenReturn(Optional.of(state));
+
+        assertThatThrownBy(() ->
+                service.prepareRetry(51L, NOW.plusSeconds(31)))
+                .isInstanceOf(PhotoMissionVerificationTransactionService
+                        .RetryUnavailableException.class);
+    }
+
+    @DisplayName("예정 시각 전에는 대기 판정을 재시도 불가로 종료하지 않는다")
+    @Test
+    void keepsPendingEvaluationBeforeRetryTime() {
+        Mission mission = mission(MissionScope.GROUP);
+        MissionPhoto photo = groupPhoto(mission);
+        PhotoEvaluation pending = PhotoEvaluation.start(photo, 1, NOW);
+        ReflectionTestUtils.setField(pending, "id", 51L);
+        pending.waitForRetry("HTTP_502", NOW.plusSeconds(30));
+        when(evaluationRepository.findById(51L))
+                .thenReturn(Optional.of(pending));
+
+        assertThatThrownBy(() ->
+                service.prepareRetry(51L, NOW.plusSeconds(29)))
+                .isNotInstanceOf(PhotoMissionVerificationTransactionService
+                        .RetryUnavailableException.class);
+        assertThat(pending.getExecutionStatus())
+                .isEqualTo(PhotoEvaluationExecutionStatus.RETRY_PENDING);
+    }
+
     @DisplayName("세 번째 기술 오류는 추가 대기 없이 실행 실패로 종료한다")
     @Test
     void stopsAfterThirdTechnicalAttempt() {
@@ -316,6 +367,62 @@ class PhotoMissionVerificationTransactionServiceTest {
                 .isEqualTo(PhotoEvaluationExecutionStatus.FAILED);
         assertThat(third.getRetryAfterAt()).isNull();
         assertThat(participation.getRetryCount()).isZero();
+    }
+
+    @DisplayName("5분 이상 RUNNING인 첫 번째 실행은 즉시 재시도 대기로 복구한다")
+    @Test
+    void recoversStaleRunningEvaluationAsRetryPending() {
+        PhotoEvaluation evaluation = PhotoEvaluation.start(
+                personalPhoto(MissionParticipation.create(
+                        mission(MissionScope.PERSONAL),
+                        mock(TripMember.class),
+                        NOW
+                )),
+                2,
+                NOW.minusMinutes(5)
+        );
+        ReflectionTestUtils.setField(evaluation, "id", 52L);
+        when(evaluationRepository.findById(52L))
+                .thenReturn(Optional.of(evaluation));
+
+        service.recoverStaleRunning(
+                52L,
+                NOW.minusMinutes(5),
+                NOW
+        );
+
+        assertThat(evaluation.getExecutionStatus())
+                .isEqualTo(PhotoEvaluationExecutionStatus.RETRY_PENDING);
+        assertThat(evaluation.getRetryAfterAt()).isEqualTo(NOW);
+        assertThat(evaluation.getErrorCode()).isEqualTo("STALE_RUNNING");
+    }
+
+    @DisplayName("5분 이상 RUNNING인 세 번째 실행은 최종 실패로 종료한다")
+    @Test
+    void failsStaleThirdRunningEvaluation() {
+        PhotoEvaluation evaluation = PhotoEvaluation.start(
+                personalPhoto(MissionParticipation.create(
+                        mission(MissionScope.PERSONAL),
+                        mock(TripMember.class),
+                        NOW
+                )),
+                3,
+                NOW.minusMinutes(5)
+        );
+        ReflectionTestUtils.setField(evaluation, "id", 53L);
+        when(evaluationRepository.findById(53L))
+                .thenReturn(Optional.of(evaluation));
+
+        service.recoverStaleRunning(
+                53L,
+                NOW.minusMinutes(5),
+                NOW
+        );
+
+        assertThat(evaluation.getExecutionStatus())
+                .isEqualTo(PhotoEvaluationExecutionStatus.FAILED);
+        assertThat(evaluation.getEvaluatedAt()).isEqualTo(NOW);
+        assertThat(evaluation.getErrorCode()).isEqualTo("STALE_RUNNING");
     }
 
     private Mission mission(MissionScope scope) {

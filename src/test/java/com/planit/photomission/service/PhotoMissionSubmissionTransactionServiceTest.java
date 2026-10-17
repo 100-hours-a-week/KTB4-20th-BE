@@ -30,8 +30,11 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -47,6 +50,12 @@ class PhotoMissionSubmissionTransactionServiceTest {
 
     private static final UUID USER_PUBLIC_ID =
             UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
+    private static final LocalDateTime SEOUL_NOW =
+            LocalDateTime.of(2026, 10, 18, 10, 0);
+    private static final Clock SEOUL_CLOCK = Clock.fixed(
+            Instant.parse("2026-10-18T01:00:00Z"),
+            ZoneId.of("Asia/Seoul")
+    );
 
     private MissionRepository missionRepository;
     private MissionParticipationRepository participationRepository;
@@ -73,7 +82,8 @@ class PhotoMissionSubmissionTransactionServiceTest {
                 photoRepository,
                 userRepository,
                 tripMemberRepository,
-                imageFileRepository
+                imageFileRepository,
+                SEOUL_CLOCK
         );
     }
 
@@ -116,6 +126,8 @@ class PhotoMissionSubmissionTransactionServiceTest {
         assertThat(saved.getMission()).isSameAs(fixture.mission());
         assertThat(saved.getSubmittedBy()).isSameAs(fixture.member());
         assertThat(saved.getParticipation()).isNull();
+        assertThat(saved.getSubmittedAt()).isEqualTo(SEOUL_NOW);
+        assertThat(saved.getImageFile().getCreatedAt()).isEqualTo(SEOUL_NOW);
         assertThat(saved.getImageFile().getImagePurpose())
                 .isEqualTo(ImagePurpose.MISSION);
     }

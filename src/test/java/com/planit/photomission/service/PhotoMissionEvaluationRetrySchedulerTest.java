@@ -2,6 +2,7 @@ package com.planit.photomission.service;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.scheduling.annotation.Scheduled;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -10,6 +11,7 @@ import java.time.ZoneId;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.assertj.core.api.Assertions.assertThat;
 
 class PhotoMissionEvaluationRetrySchedulerTest {
 
@@ -29,5 +31,17 @@ class PhotoMissionEvaluationRetrySchedulerTest {
         scheduler.retry();
 
         verify(service).retryDue(LocalDateTime.of(2026, 10, 17, 10, 0));
+    }
+
+    @DisplayName("재시도 대상은 기본 30초 주기로 확인한다")
+    @Test
+    void usesThirtySecondDefaultDelay() throws NoSuchMethodException {
+        Scheduled scheduled = PhotoMissionEvaluationRetryScheduler.class
+                .getDeclaredMethod("retry")
+                .getAnnotation(Scheduled.class);
+
+        assertThat(scheduled.fixedDelayString()).isEqualTo(
+                "${photo-mission.evaluation-retry-delay-ms:30000}"
+        );
     }
 }
