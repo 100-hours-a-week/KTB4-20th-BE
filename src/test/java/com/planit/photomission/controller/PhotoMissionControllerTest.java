@@ -1,6 +1,7 @@
 package com.planit.photomission.controller;
 
 import com.planit.photomission.ai.PhotoMissionVerifyResponse;
+import com.planit.photomission.service.PhotoMissionManualCompletionService;
 import com.planit.photomission.service.PhotoMissionPhotoManagementService;
 import com.planit.photomission.service.PhotoMissionSubmissionService;
 import org.junit.jupiter.api.DisplayName;
@@ -20,6 +21,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -32,8 +34,14 @@ class PhotoMissionControllerTest {
                 mock(PhotoMissionSubmissionService.class);
         PhotoMissionPhotoManagementService managementService =
                 mock(PhotoMissionPhotoManagementService.class);
+        PhotoMissionManualCompletionService manualCompletionService =
+                mock(PhotoMissionManualCompletionService.class);
         MockMvc mockMvc = MockMvcBuilders.standaloneSetup(
-                new PhotoMissionController(service, managementService)
+                new PhotoMissionController(
+                        service,
+                        managementService,
+                        manualCompletionService
+                )
         ).build();
         when(service.submitAndVerify(
                 any(), any(), any(), any(), any(), any()
@@ -76,10 +84,13 @@ class PhotoMissionControllerTest {
                 mock(PhotoMissionSubmissionService.class);
         PhotoMissionPhotoManagementService managementService =
                 mock(PhotoMissionPhotoManagementService.class);
+        PhotoMissionManualCompletionService manualCompletionService =
+                mock(PhotoMissionManualCompletionService.class);
         MockMvc mockMvc = MockMvcBuilders.standaloneSetup(
                 new PhotoMissionController(
                         submissionService,
-                        managementService
+                        managementService,
+                        manualCompletionService
                 )
         ).build();
 
@@ -96,6 +107,82 @@ class PhotoMissionControllerTest {
                 "550e8400-e29b-41d4-a716-446655440000",
                 31L,
                 41L
+        );
+    }
+
+    @DisplayName("완료한 단체 미션에 사진을 추가한다")
+    @Test
+    void addsCompletedGroupMissionPhoto() throws Exception {
+        PhotoMissionSubmissionService submissionService =
+                mock(PhotoMissionSubmissionService.class);
+        PhotoMissionPhotoManagementService managementService =
+                mock(PhotoMissionPhotoManagementService.class);
+        PhotoMissionManualCompletionService manualCompletionService =
+                mock(PhotoMissionManualCompletionService.class);
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(
+                new PhotoMissionController(
+                        submissionService,
+                        managementService,
+                        manualCompletionService
+                )
+        ).build();
+        when(submissionService.addGroupPhoto(
+                any(), any(), any(), any(), any(), any()
+        )).thenReturn(43L);
+
+        mockMvc.perform(multipart(
+                                "/api/photomissions/31/photos/additional"
+                        )
+                        .file(jpegPhoto())
+                        .header("Idempotency-Key", UUID.randomUUID())
+                        .principal(new UsernamePasswordAuthenticationToken(
+                                "550e8400-e29b-41d4-a716-446655440000",
+                                ""
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code")
+                        .value("PHOTO_MISSION_PHOTO_ADDED"))
+                .andExpect(jsonPath("$.data.photoId").value(43));
+    }
+
+    @DisplayName("판정 실패 3회 이후 미션을 직접 완료한다")
+    @Test
+    void completesMissionManually() throws Exception {
+        PhotoMissionSubmissionService submissionService =
+                mock(PhotoMissionSubmissionService.class);
+        PhotoMissionPhotoManagementService managementService =
+                mock(PhotoMissionPhotoManagementService.class);
+        PhotoMissionManualCompletionService manualCompletionService =
+                mock(PhotoMissionManualCompletionService.class);
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(
+                new PhotoMissionController(
+                        submissionService,
+                        managementService,
+                        manualCompletionService
+                )
+        ).build();
+
+        mockMvc.perform(post("/api/photomissions/31/manual-completion")
+                        .principal(new UsernamePasswordAuthenticationToken(
+                                "550e8400-e29b-41d4-a716-446655440000",
+                                ""
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code")
+                        .value("PHOTO_MISSION_MANUALLY_COMPLETED"));
+
+        verify(manualCompletionService).complete(
+                "550e8400-e29b-41d4-a716-446655440000",
+                31L
+        );
+    }
+
+    private MockMultipartFile jpegPhoto() {
+        return new MockMultipartFile(
+                "photo",
+                "photo.jpg",
+                "image/jpeg",
+                new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF}
         );
     }
 
