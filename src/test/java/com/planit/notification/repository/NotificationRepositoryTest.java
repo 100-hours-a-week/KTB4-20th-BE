@@ -267,6 +267,67 @@ class NotificationRepositoryTest {
                 .containsExactly(newestId, olderId);
     }
 
+    @DisplayName("현재 사용자의 미삭제·미읽음 알림만 계산한다")
+    @Test
+    void countsUnreadNotificationsForRecipient() {
+        User recipient = userRepository.save(new User(
+                null,
+                UUID.randomUUID(),
+                "미읽음수신자"
+        ));
+        User otherUser = userRepository.save(new User(
+                null,
+                UUID.randomUUID(),
+                "다른미읽음수신자"
+        ));
+        LocalDate targetDate = LocalDate.of(2026, 10, 18);
+        LocalDateTime createdAt = LocalDateTime.of(2026, 10, 17, 10, 0);
+        Long unreadId = notificationStore.saveIdempotently(notification(
+                recipient,
+                4001L,
+                targetDate,
+                NotificationType.TRIP_D1,
+                createdAt
+        ));
+        Long readId = notificationStore.saveIdempotently(notification(
+                recipient,
+                4002L,
+                targetDate,
+                NotificationType.TRIP_D1,
+                createdAt
+        ));
+        Long deletedId = notificationStore.saveIdempotently(notification(
+                recipient,
+                4003L,
+                targetDate,
+                NotificationType.TRIP_D1,
+                createdAt
+        ));
+        notificationStore.saveIdempotently(notification(
+                otherUser,
+                4004L,
+                targetDate,
+                NotificationType.TRIP_D1,
+                createdAt
+        ));
+        jdbcTemplate.update(
+                "UPDATE notifications SET read_at = ? WHERE id = ?",
+                createdAt.plusMinutes(1),
+                readId
+        );
+        jdbcTemplate.update(
+                "UPDATE notifications SET deleted_at = ? WHERE id = ?",
+                createdAt.plusMinutes(1),
+                deletedId
+        );
+
+        assertThat(notificationRepository
+                .countByRecipientPublicIdAndReadAtIsNullAndDeletedAtIsNull(
+                        recipient.getPublicId()
+                )).isEqualTo(1L);
+        assertThat(notificationRepository.findById(unreadId)).isPresent();
+    }
+
     private Notification notification(
             User recipient,
             LocalDate tripStartDate,

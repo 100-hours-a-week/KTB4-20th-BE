@@ -25,6 +25,46 @@ import static org.mockito.Mockito.when;
 
 class NotificationListServiceTest {
 
+    @DisplayName("현재 사용자의 미읽음 알림 수와 존재 여부를 반환한다")
+    @Test
+    void returnsUnreadCount() {
+        NotificationRepository notificationRepository =
+                mock(NotificationRepository.class);
+        NotificationListService service = new NotificationListService(
+                notificationRepository,
+                mock(TripRepository.class),
+                new NotificationListCursorCodec()
+        );
+        UUID recipientPublicId = UUID.randomUUID();
+        when(notificationRepository
+                .countByRecipientPublicIdAndReadAtIsNullAndDeletedAtIsNull(
+                        recipientPublicId
+                )).thenReturn(3L);
+
+        var response = service.getUnreadCount(recipientPublicId.toString());
+
+        assertThat(response.unreadCount()).isEqualTo(3L);
+        assertThat(response.hasUnread()).isTrue();
+    }
+
+    @DisplayName("미읽음 알림이 없으면 hasUnread를 false로 반환한다")
+    @Test
+    void returnsNoUnreadNotifications() {
+        NotificationRepository notificationRepository =
+                mock(NotificationRepository.class);
+        NotificationListService service = new NotificationListService(
+                notificationRepository,
+                mock(TripRepository.class),
+                new NotificationListCursorCodec()
+        );
+        UUID recipientPublicId = UUID.randomUUID();
+
+        var response = service.getUnreadCount(recipientPublicId.toString());
+
+        assertThat(response.unreadCount()).isZero();
+        assertThat(response.hasUnread()).isFalse();
+    }
+
     @DisplayName("첫 페이지 20개와 다음 커서를 생성하고 삭제된 여행 대상을 만료 처리한다")
     @Test
     void returnsFirstPageWithCurrentTargetStatus() {

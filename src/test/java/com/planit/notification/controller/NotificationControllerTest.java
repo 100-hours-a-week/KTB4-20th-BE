@@ -5,6 +5,7 @@ import com.planit.notification.domain.NotificationTargetStatus;
 import com.planit.notification.domain.NotificationTargetType;
 import com.planit.notification.domain.NotificationType;
 import com.planit.notification.dto.NotificationListResponse;
+import com.planit.notification.dto.UnreadNotificationCountResponse;
 import com.planit.notification.service.NotificationListService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -88,5 +89,27 @@ class NotificationControllerTest {
                 .andExpect(jsonPath("$.data.page.hasNext").value(true));
 
         verify(service).getNotifications(USER_PUBLIC_ID, "next-cursor");
+    }
+
+    @DisplayName("현재 사용자의 미읽음 알림 수를 조회한다")
+    @Test
+    void getsUnreadNotificationCount() throws Exception {
+        when(service.getUnreadCount(USER_PUBLIC_ID))
+                .thenReturn(new UnreadNotificationCountResponse(3L, true));
+
+        mockMvc.perform(get("/api/notifications/unread-count")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code")
+                        .value("UNREAD_NOTIFICATION_COUNT_RETRIEVED"))
+                .andExpect(jsonPath("$.message")
+                        .value("읽지 않은 알림 수를 조회했습니다."))
+                .andExpect(jsonPath("$.data.unreadCount").value(3))
+                .andExpect(jsonPath("$.data.hasUnread").value(true));
+
+        verify(service).getUnreadCount(USER_PUBLIC_ID);
     }
 }
