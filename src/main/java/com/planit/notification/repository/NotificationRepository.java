@@ -86,4 +86,22 @@ public interface NotificationRepository
             @Param("endExclusive") LocalDateTime endExclusive,
             @Param("types") List<NotificationType> types
     );
+
+    @Query("""
+            SELECT notification
+            FROM Notification notification
+            WHERE notification.recipient.publicId = :recipientPublicId
+              AND notification.createdAt >= :startInclusive
+              AND notification.createdAt < :endExclusive
+              AND notification.deliveredAt IS NULL
+              AND notification.deletedAt IS NULL
+              AND notification.type IN :types
+            ORDER BY notification.id
+            """)
+    List<Notification> findPendingDeliveriesForRecipient(
+            @Param("recipientPublicId") UUID recipientPublicId,
+            @Param("startInclusive") LocalDateTime startInclusive,
+            @Param("endExclusive") LocalDateTime endExclusive,
+            @Param("types") List<NotificationType> types
+    );
 }

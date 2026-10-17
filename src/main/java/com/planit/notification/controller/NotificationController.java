@@ -4,6 +4,7 @@ import com.planit.global.response.ApiResponse;
 import com.planit.notification.dto.AllNotificationsReadResponse;
 import com.planit.notification.dto.NotificationListResponse;
 import com.planit.notification.dto.NotificationReadResponse;
+import com.planit.notification.dto.PendingNotificationDeliveriesResponse;
 import com.planit.notification.dto.UnreadNotificationCountResponse;
 import com.planit.notification.service.NotificationListService;
 import com.planit.notification.service.NotificationReadService;
@@ -47,6 +48,18 @@ public class NotificationController {
                 "UNREAD_NOTIFICATION_COUNT_RETRIEVED",
                 "읽지 않은 알림 수를 조회했습니다.",
                 notificationListService.getUnreadCount(
+                        authentication.getName()
+                )
+        );
+    }
+
+    @GetMapping("/pending-deliveries")
+    public ApiResponse<PendingNotificationDeliveriesResponse>
+            getPendingDeliveries(Authentication authentication) {
+        return ApiResponse.success(
+                "PENDING_NOTIFICATION_DELIVERIES_RETRIEVED",
+                "미전달 알림을 조회했습니다.",
+                notificationListService.getPendingDeliveries(
                         authentication.getName()
                 )
         );
