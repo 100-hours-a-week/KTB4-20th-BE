@@ -14,11 +14,18 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "missions")
+@Table(
+        name = "missions",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_missions_schedule_visit",
+                columnNames = "schedule_visit_id"
+        )
+)
 public class Mission {
 
     @Id
