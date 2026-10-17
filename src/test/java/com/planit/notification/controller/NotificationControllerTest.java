@@ -7,6 +7,7 @@ import com.planit.notification.domain.NotificationType;
 import com.planit.notification.dto.AllNotificationsReadResponse;
 import com.planit.notification.dto.NotificationListResponse;
 import com.planit.notification.dto.NotificationReadResponse;
+import com.planit.notification.dto.PendingNotificationDeliveriesResponse;
 import com.planit.notification.dto.UnreadNotificationCountResponse;
 import com.planit.notification.service.NotificationListService;
 import com.planit.notification.service.NotificationReadService;
@@ -117,6 +118,43 @@ class NotificationControllerTest {
                 .andExpect(jsonPath("$.data.hasUnread").value(true));
 
         verify(service).getUnreadCount(USER_PUBLIC_ID);
+    }
+
+    @DisplayName("현재 사용자의 당일 미전달 알림을 조회한다")
+    @Test
+    void getsPendingDeliveries() throws Exception {
+        when(service.getPendingDeliveries(USER_PUBLIC_ID))
+                .thenReturn(new PendingNotificationDeliveriesResponse(
+                        List.of(new PendingNotificationDeliveriesResponse.Item(
+                                "16001",
+                                NotificationType.TRIP_WEATHER_ALERT,
+                                "여행지에 많은 비가 예상돼요",
+                                "여행 기간에 폭우가 예상됩니다.",
+                                OffsetDateTime.parse(
+                                        "2026-10-17T10:00:00.123456+09:00"
+                                )
+                        ))
+                ));
+
+        mockMvc.perform(get("/api/notifications/pending-deliveries")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(
+                        "PENDING_NOTIFICATION_DELIVERIES_RETRIEVED"
+                ))
+                .andExpect(jsonPath("$.message")
+                        .value("미전달 알림을 조회했습니다."))
+                .andExpect(jsonPath("$.data.items[0].notificationId")
+                        .value("16001"))
+                .andExpect(jsonPath("$.data.items[0].type")
+                        .value("TRIP_WEATHER_ALERT"))
+                .andExpect(jsonPath("$.data.items[0].createdAt")
+                        .value("2026-10-17T10:00:00.123456+09:00"));
+
+        verify(service).getPendingDeliveries(USER_PUBLIC_ID);
     }
 
     @DisplayName("현재 사용자의 모든 알림을 읽음 처리한다")
