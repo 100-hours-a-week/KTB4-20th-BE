@@ -91,6 +91,26 @@ class MissionParticipationTest {
                 .isEqualTo(MissionCompletionMethod.MANUAL);
     }
 
+    @DisplayName("판정 실패 3회 이후에만 직접 완료할 수 있는 상태가 된다")
+    @Test
+    void checksManualCompletionAvailability() {
+        MissionParticipation participation = MissionParticipation.create(
+                personalMission(),
+                mock(TripMember.class),
+                now()
+        );
+
+        assertThat(participation.canCompleteManually()).isFalse();
+
+        participation.recordUnsuccessfulEvaluation(now());
+        participation.recordUnsuccessfulEvaluation(now());
+        participation.recordUnsuccessfulEvaluation(now());
+
+        assertThat(participation.canCompleteManually()).isTrue();
+        participation.completeManually(now().plusMinutes(1));
+        assertThat(participation.canCompleteManually()).isFalse();
+    }
+
     @DisplayName("AI 성공 판정으로 개인 미션을 완료한다")
     @Test
     void completesByAi() {
@@ -124,6 +144,46 @@ class MissionParticipationTest {
 
         assertThat(participation.getStatus())
                 .isEqualTo(MissionCompletionStatus.PENDING);
+        assertThat(participation.getCompletionMethod()).isNull();
+        assertThat(participation.getCompletedAt()).isNull();
+    }
+
+    @DisplayName("직접 완료 가능한 마지막 사진을 삭제하면 개인 미션을 실패 처리한다")
+    @Test
+    void failsAfterDeletingLastManualCompletionPhoto() {
+        MissionParticipation participation = MissionParticipation.create(
+                personalMission(),
+                mock(TripMember.class),
+                now()
+        );
+        participation.recordUnsuccessfulEvaluation(now());
+        participation.recordUnsuccessfulEvaluation(now());
+        participation.recordUnsuccessfulEvaluation(now());
+
+        participation.reflectPhotoDeletion(false, now().plusMinutes(1));
+
+        assertThat(participation.getStatus())
+                .isEqualTo(MissionCompletionStatus.FAILED);
+        assertThat(participation.canCompleteManually()).isFalse();
+    }
+
+    @DisplayName("직접 완료한 개인 미션의 마지막 사진을 삭제하면 실패 처리한다")
+    @Test
+    void failsManualCompletionAfterDeletingLastPhoto() {
+        MissionParticipation participation = MissionParticipation.create(
+                personalMission(),
+                mock(TripMember.class),
+                now()
+        );
+        participation.recordUnsuccessfulEvaluation(now());
+        participation.recordUnsuccessfulEvaluation(now());
+        participation.recordUnsuccessfulEvaluation(now());
+        participation.completeManually(now());
+
+        participation.reflectPhotoDeletion(false, now().plusMinutes(1));
+
+        assertThat(participation.getStatus())
+                .isEqualTo(MissionCompletionStatus.FAILED);
         assertThat(participation.getCompletionMethod()).isNull();
         assertThat(participation.getCompletedAt()).isNull();
     }

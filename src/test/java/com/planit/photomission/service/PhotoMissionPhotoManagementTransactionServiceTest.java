@@ -83,6 +83,29 @@ class PhotoMissionPhotoManagementTransactionServiceTest {
                 .isEqualTo(MissionCompletionStatus.PENDING);
     }
 
+    @DisplayName("직접 완료 가능한 개인 미션의 마지막 사진을 삭제하면 실패 처리한다")
+    @Test
+    void failsPersonalMissionAfterDeletingLastManualCompletionPhoto() {
+        Fixture fixture = fixture(MissionScope.PERSONAL, USER_PUBLIC_ID);
+        MissionParticipation participation = MissionParticipation.create(
+                fixture.mission(), fixture.member(), now().minusHours(1)
+        );
+        participation.recordUnsuccessfulEvaluation(now().minusMinutes(3));
+        participation.recordUnsuccessfulEvaluation(now().minusMinutes(2));
+        participation.recordUnsuccessfulEvaluation(now().minusMinutes(1));
+        MissionPhoto photo = personalPhoto(participation, 41L, "personal.jpg");
+        stubAccess(fixture, photo);
+
+        service.delete(
+                USER_PUBLIC_ID.toString(),
+                fixture.mission().getId(),
+                photo.getId()
+        );
+
+        assertThat(participation.getStatus())
+                .isEqualTo(MissionCompletionStatus.FAILED);
+    }
+
     @DisplayName("단체 대표 사진을 삭제하면 가장 오래된 성공 사진을 대표로 승계한다")
     @Test
     void promotesOldestSuccessfulGroupPhoto() {
@@ -139,6 +162,86 @@ class PhotoMissionPhotoManagementTransactionServiceTest {
 
         assertThat(state.getStatus())
                 .isEqualTo(MissionCompletionStatus.PENDING);
+    }
+
+    @DisplayName("직접 완료한 단체 미션의 대표 사진을 삭제하면 가장 오래된 유효 사진을 승계한다")
+    @Test
+    void promotesOldestAvailablePhotoAfterDeletingManualRepresentative() {
+        Fixture fixture = fixture(MissionScope.GROUP, USER_PUBLIC_ID);
+        MissionGroupState state = manuallyCompletedGroupState(fixture);
+        MissionPhoto representative = groupPhoto(
+                fixture, 41L, "representative.jpg", true
+        );
+        MissionPhoto next = groupPhoto(fixture, 42L, "next.jpg", false);
+        stubAccess(fixture, representative);
+        when(groupStateRepository.findByMissionId(fixture.mission().getId()))
+                .thenReturn(Optional.of(state));
+        when(photoRepository.findAvailableByMissionIdExcludingPhotoId(
+                fixture.mission().getId(), representative.getId()
+        )).thenReturn(List.of(next));
+
+        service.delete(
+                USER_PUBLIC_ID.toString(),
+                fixture.mission().getId(),
+                representative.getId()
+        );
+
+        assertThat(next.getRepresentativeSlot()).isEqualTo((byte) 1);
+        assertThat(state.getStatus())
+                .isEqualTo(MissionCompletionStatus.COMPLETED);
+    }
+
+    @DisplayName("직접 완료한 단체 미션의 마지막 사진을 삭제하면 실패 처리한다")
+    @Test
+    void failsManualGroupMissionAfterDeletingLastPhoto() {
+        Fixture fixture = fixture(MissionScope.GROUP, USER_PUBLIC_ID);
+        MissionGroupState state = manuallyCompletedGroupState(fixture);
+        MissionPhoto representative = groupPhoto(
+                fixture, 41L, "representative.jpg", true
+        );
+        stubAccess(fixture, representative);
+        when(groupStateRepository.findByMissionId(fixture.mission().getId()))
+                .thenReturn(Optional.of(state));
+        when(photoRepository.findAvailableByMissionIdExcludingPhotoId(
+                fixture.mission().getId(), representative.getId()
+        )).thenReturn(List.of());
+
+        service.delete(
+                USER_PUBLIC_ID.toString(),
+                fixture.mission().getId(),
+                representative.getId()
+        );
+
+        assertThat(state.getStatus())
+                .isEqualTo(MissionCompletionStatus.FAILED);
+    }
+
+    @DisplayName("직접 완료 가능한 단체 미션의 마지막 사진을 삭제하면 실패 처리한다")
+    @Test
+    void failsPendingGroupMissionAfterDeletingLastPhoto() {
+        Fixture fixture = fixture(MissionScope.GROUP, USER_PUBLIC_ID);
+        MissionGroupState state = MissionGroupState.create(
+                fixture.mission(), now().minusHours(1)
+        );
+        state.recordUnsuccessfulEvaluation(now().minusMinutes(3));
+        state.recordUnsuccessfulEvaluation(now().minusMinutes(2));
+        state.recordUnsuccessfulEvaluation(now().minusMinutes(1));
+        MissionPhoto photo = groupPhoto(fixture, 41L, "last.jpg", false);
+        stubAccess(fixture, photo);
+        when(groupStateRepository.findByMissionId(fixture.mission().getId()))
+                .thenReturn(Optional.of(state));
+        when(photoRepository.findAvailableByMissionIdExcludingPhotoId(
+                fixture.mission().getId(), photo.getId()
+        )).thenReturn(List.of());
+
+        service.delete(
+                USER_PUBLIC_ID.toString(),
+                fixture.mission().getId(),
+                photo.getId()
+        );
+
+        assertThat(state.getStatus())
+                .isEqualTo(MissionCompletionStatus.FAILED);
     }
 
     @DisplayName("다른 멤버가 제출한 사진은 삭제할 수 없다")
@@ -243,6 +346,17 @@ class PhotoMissionPhotoManagementTransactionServiceTest {
             photo.markRepresentative();
         }
         return photo;
+    }
+
+    private MissionGroupState manuallyCompletedGroupState(Fixture fixture) {
+        MissionGroupState state = MissionGroupState.create(
+                fixture.mission(), now().minusHours(1)
+        );
+        state.recordUnsuccessfulEvaluation(now().minusMinutes(3));
+        state.recordUnsuccessfulEvaluation(now().minusMinutes(2));
+        state.recordUnsuccessfulEvaluation(now().minusMinutes(1));
+        state.completeManually(now());
+        return state;
     }
 
     private Fixture fixture(MissionScope scope, UUID userPublicId) {

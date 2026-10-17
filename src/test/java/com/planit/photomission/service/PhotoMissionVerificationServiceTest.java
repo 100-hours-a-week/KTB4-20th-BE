@@ -7,9 +7,16 @@ import com.planit.photomission.ai.PhotoMissionVerifyRequest;
 import com.planit.photomission.ai.PhotoMissionVerifyResponse;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -47,7 +54,7 @@ class PhotoMissionVerificationServiceTest {
         verify(transactionService).complete(51L, response);
     }
 
-    @DisplayName("AI 호출 오류는 실행 실패로 기록하고 서비스 오류로 변환한다")
+    @DisplayName("네트워크 호출 오류는 재시도 대기로 기록하고 서비스 오류로 변환한다")
     @Test
     void recordsAiExecutionFailure() {
         PhotoMissionVerifyRequest request = request();
@@ -72,9 +79,94 @@ class PhotoMissionVerificationServiceTest {
                                     .isSameAs(exception);
                         }
                 );
-        verify(transactionService).fail(
-                51L,
-                "RestClientException"
+        verify(transactionService).waitForRetry(
+                org.mockito.ArgumentMatchers.eq(51L),
+                org.mockito.ArgumentMatchers.eq("RestClientException"),
+                org.mockito.ArgumentMatchers.any(LocalDateTime.class)
+        );
+    }
+
+    @DisplayName("AI 429 응답은 Retry-After를 반영해 재시도 대기로 기록한다")
+    @Test
+    void recordsRateLimitAsRetryPending() {
+        PhotoMissionVerifyRequest request = request();
+        PhotoMissionVerificationTransactionService.PreparedVerification prepared =
+                new PhotoMissionVerificationTransactionService.PreparedVerification(
+                        51L, 31L, request
+                );
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Retry-After", "30");
+        RestClientResponseException exception = new RestClientResponseException(
+                "호출 한도 초과",
+                HttpStatus.TOO_MANY_REQUESTS.value(),
+                HttpStatus.TOO_MANY_REQUESTS.getReasonPhrase(),
+                headers,
+                new byte[0],
+                StandardCharsets.UTF_8
+        );
+        when(transactionService.prepare(41L)).thenReturn(prepared);
+        when(aiClient.verify(31L, request)).thenThrow(exception);
+
+        assertThatThrownBy(() -> service.verify(41L))
+                .isInstanceOf(BusinessException.class);
+        verify(transactionService).waitForRetry(
+                org.mockito.ArgumentMatchers.eq(51L),
+                org.mockito.ArgumentMatchers.eq("HTTP_429"),
+                org.mockito.ArgumentMatchers.any(LocalDateTime.class)
+        );
+    }
+
+    @DisplayName("AI 401·422 응답은 재시도하지 않는 실행 실패로 기록한다")
+    @ParameterizedTest
+    @ValueSource(ints = {401, 422})
+    void recordsPermanentAiErrorsAsExecutionFailure(int statusCode) {
+        PhotoMissionVerifyRequest request = request();
+        PhotoMissionVerificationTransactionService.PreparedVerification prepared =
+                new PhotoMissionVerificationTransactionService.PreparedVerification(
+                        51L, 31L, request
+                );
+        RestClientResponseException exception = new RestClientResponseException(
+                "요청 형식 오류",
+                statusCode,
+                HttpStatus.valueOf(statusCode).getReasonPhrase(),
+                HttpHeaders.EMPTY,
+                new byte[0],
+                StandardCharsets.UTF_8
+        );
+        when(transactionService.prepare(41L)).thenReturn(prepared);
+        when(aiClient.verify(31L, request)).thenThrow(exception);
+
+        assertThatThrownBy(() -> service.verify(41L))
+                .isInstanceOf(BusinessException.class);
+        verify(transactionService).fail(51L, "HTTP_" + statusCode);
+    }
+
+    @DisplayName("AI 502·504 응답은 재시도 대기로 기록한다")
+    @ParameterizedTest
+    @ValueSource(ints = {502, 504})
+    void recordsTemporaryAiErrorsAsRetryPending(int statusCode) {
+        PhotoMissionVerifyRequest request = request();
+        PhotoMissionVerificationTransactionService.PreparedVerification prepared =
+                new PhotoMissionVerificationTransactionService.PreparedVerification(
+                        51L, 31L, request
+                );
+        RestClientResponseException exception = new RestClientResponseException(
+                "AI 일시 오류",
+                statusCode,
+                HttpStatus.valueOf(statusCode).getReasonPhrase(),
+                HttpHeaders.EMPTY,
+                new byte[0],
+                StandardCharsets.UTF_8
+        );
+        when(transactionService.prepare(41L)).thenReturn(prepared);
+        when(aiClient.verify(31L, request)).thenThrow(exception);
+
+        assertThatThrownBy(() -> service.verify(41L))
+                .isInstanceOf(BusinessException.class);
+        verify(transactionService).waitForRetry(
+                org.mockito.ArgumentMatchers.eq(51L),
+                org.mockito.ArgumentMatchers.eq("HTTP_" + statusCode),
+                org.mockito.ArgumentMatchers.any(LocalDateTime.class)
         );
     }
 
