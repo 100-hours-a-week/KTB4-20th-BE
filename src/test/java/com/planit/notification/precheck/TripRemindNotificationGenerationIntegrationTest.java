@@ -1,9 +1,12 @@
 package com.planit.notification.precheck;
 
+import com.planit.domain.Region;
 import com.planit.domain.Trip;
+import com.planit.domain.TripMemberRole;
 import com.planit.domain.User;
 import com.planit.notification.domain.Notification;
 import com.planit.notification.domain.NotificationType;
+import com.planit.notification.domain.WeatherCondition;
 import com.planit.notification.repository.NotificationRepository;
 import com.planit.repository.UserRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -61,12 +64,18 @@ class TripRemindNotificationGenerationIntegrationTest {
                 new TripRemindNotificationTarget(
                         d1Trip,
                         d1Recipient,
-                        NotificationType.TRIP_D1
+                        TripMemberRole.MEMBER,
+                        NotificationType.TRIP_D1,
+                        null,
+                        "방장"
                 ),
                 new TripRemindNotificationTarget(
                         weatherTrip,
                         weatherRecipient,
-                        NotificationType.TRIP_WEATHER_ALERT
+                        TripMemberRole.HOST,
+                        NotificationType.TRIP_WEATHER_ALERT,
+                        WeatherCondition.HEAVY_RAIN,
+                        "날씨알림수신자"
                 )
         ));
 
@@ -91,16 +100,21 @@ class TripRemindNotificationGenerationIntegrationTest {
                 .findByDedupeKey(weatherKey)
                 .orElseThrow();
 
-        assertThat(d1.getTitle()).isEqualTo("내일 여행이 시작돼요");
-        assertThat(weather.getTitle())
-                .isEqualTo("여행지에 특이 기상이 예상돼요");
+        assertThat(d1.getTitle()).isEqualTo("경주 여행이 내일 시작돼요");
+        assertThat(d1.getWeatherCondition()).isNull();
+        assertThat(weather.getTitle()).isEqualTo("내일 폭우가 예상돼요");
+        assertThat(weather.getWeatherCondition())
+                .isEqualTo(WeatherCondition.HEAVY_RAIN);
         assertThat(countByDedupeKeys(d1Key, weatherKey)).isEqualTo(2);
     }
 
     private Trip trip(Long id, LocalDate startDate) {
         Trip trip = mock(Trip.class);
+        Region region = mock(Region.class);
         when(trip.getId()).thenReturn(id);
         when(trip.getStartDate()).thenReturn(startDate);
+        when(trip.getRegion()).thenReturn(region);
+        when(region.getName()).thenReturn("경주");
         return trip;
     }
 
