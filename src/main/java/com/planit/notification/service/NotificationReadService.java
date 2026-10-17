@@ -5,6 +5,7 @@ import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
 import com.planit.notification.domain.Notification;
 import com.planit.notification.domain.NotificationTargetStatus;
+import com.planit.notification.dto.AllNotificationsReadResponse;
 import com.planit.notification.dto.NotificationReadResponse;
 import com.planit.notification.repository.NotificationRepository;
 import com.planit.repository.TripRepository;
@@ -51,6 +52,28 @@ public class NotificationReadService {
                 notification.getReadAt().atOffset(SEOUL_OFFSET),
                 targetStatus,
                 targetStatus == NotificationTargetStatus.ACTIVE
+        );
+    }
+
+    @Transactional
+    public AllNotificationsReadResponse markAllAsRead(
+            String userPublicId
+    ) {
+        UUID recipientPublicId = UUID.fromString(userPublicId);
+        LocalDateTime readAt = LocalDateTime.now(clock);
+        int updatedCount = notificationRepository.markAllAsRead(
+                recipientPublicId,
+                readAt
+        );
+        long unreadCount = notificationRepository
+                .countByRecipientPublicIdAndReadAtIsNullAndDeletedAtIsNull(
+                        recipientPublicId
+                );
+
+        return new AllNotificationsReadResponse(
+                updatedCount,
+                readAt.atOffset(SEOUL_OFFSET),
+                unreadCount
         );
     }
 

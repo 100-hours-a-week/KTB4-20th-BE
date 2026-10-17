@@ -3,6 +3,7 @@ package com.planit.notification.repository;
 import com.planit.notification.domain.Notification;
 import com.planit.notification.domain.NotificationType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.data.domain.Pageable;
@@ -31,6 +32,19 @@ public interface NotificationRepository
     Optional<Notification> findOwnedActiveById(
             @Param("notificationId") Long notificationId,
             @Param("recipientPublicId") UUID recipientPublicId
+    );
+
+    @Modifying
+    @Query("""
+            UPDATE Notification notification
+            SET notification.readAt = :readAt
+            WHERE notification.recipient.publicId = :recipientPublicId
+              AND notification.readAt IS NULL
+              AND notification.deletedAt IS NULL
+            """)
+    int markAllAsRead(
+            @Param("recipientPublicId") UUID recipientPublicId,
+            @Param("readAt") LocalDateTime readAt
     );
 
     @Query("""

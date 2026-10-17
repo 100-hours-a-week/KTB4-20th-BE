@@ -1,6 +1,7 @@
 package com.planit.notification.controller;
 
 import com.planit.global.response.ApiResponse;
+import com.planit.notification.dto.AllNotificationsReadResponse;
 import com.planit.notification.dto.NotificationListResponse;
 import com.planit.notification.dto.NotificationReadResponse;
 import com.planit.notification.dto.UnreadNotificationCountResponse;
@@ -46,6 +47,19 @@ public class NotificationController {
                 "UNREAD_NOTIFICATION_COUNT_RETRIEVED",
                 "읽지 않은 알림 수를 조회했습니다.",
                 notificationListService.getUnreadCount(
+                        authentication.getName()
+                )
+        );
+    }
+
+    @PutMapping("/read-all")
+    public ApiResponse<AllNotificationsReadResponse> markAllAsRead(
+            Authentication authentication
+    ) {
+        return ApiResponse.success(
+                "ALL_NOTIFICATIONS_READ",
+                "모든 알림을 읽음 처리했습니다.",
+                notificationReadService.markAllAsRead(
                         authentication.getName()
                 )
         );
