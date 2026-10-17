@@ -171,6 +171,29 @@ class PhotoMissionVerificationTransactionServiceTest {
         assertThat(participation.getRetryCount()).isZero();
     }
 
+    @DisplayName("재시도 가능한 AI 기술 오류는 대기 상태만 기록하고 미션 실패 횟수에 포함하지 않는다")
+    @Test
+    void recordsRetryPendingOnly() {
+        Mission mission = mission(MissionScope.PERSONAL);
+        MissionParticipation participation = MissionParticipation.create(
+                mission,
+                mock(TripMember.class),
+                NOW
+        );
+        PhotoEvaluation evaluation = evaluation(personalPhoto(participation));
+        LocalDateTime retryAfterAt = NOW.plusSeconds(30);
+        when(evaluationRepository.findById(51L))
+                .thenReturn(Optional.of(evaluation));
+
+        service.waitForRetry(51L, "HTTP_429", retryAfterAt);
+
+        assertThat(evaluation.getExecutionStatus())
+                .isEqualTo(PhotoEvaluationExecutionStatus.RETRY_PENDING);
+        assertThat(evaluation.getErrorCode()).isEqualTo("HTTP_429");
+        assertThat(evaluation.getRetryAfterAt()).isEqualTo(retryAfterAt);
+        assertThat(participation.getRetryCount()).isZero();
+    }
+
     private Mission mission(MissionScope scope) {
         Trip trip = mock(Trip.class);
         when(trip.getEndDate()).thenReturn(LocalDate.of(2026, 10, 12));

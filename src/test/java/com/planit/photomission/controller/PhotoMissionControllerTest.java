@@ -3,6 +3,7 @@ package com.planit.photomission.controller;
 import com.planit.photomission.ai.PhotoMissionVerifyResponse;
 import com.planit.photomission.dto.PhotoMissionDetailResponse;
 import com.planit.photomission.dto.PhotoMissionListResponse;
+import com.planit.photomission.service.PhotoMissionPhotoManagementService;
 import com.planit.photomission.service.PhotoMissionQueryService;
 import com.planit.photomission.service.PhotoMissionSubmissionService;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,7 +21,9 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -29,15 +32,21 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class PhotoMissionControllerTest {
 
     private PhotoMissionSubmissionService submissionService;
+    private PhotoMissionPhotoManagementService photoManagementService;
     private PhotoMissionQueryService queryService;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         submissionService = mock(PhotoMissionSubmissionService.class);
+        photoManagementService = mock(PhotoMissionPhotoManagementService.class);
         queryService = mock(PhotoMissionQueryService.class);
         mockMvc = MockMvcBuilders.standaloneSetup(
-                new PhotoMissionController(submissionService, queryService)
+                new PhotoMissionController(
+                        submissionService,
+                        photoManagementService,
+                        queryService
+                )
         ).build();
     }
 
@@ -76,6 +85,25 @@ class PhotoMissionControllerTest {
                 .andExpect(jsonPath("$.data.result").value("retry"))
                 .andExpect(jsonPath("$.data.retry_hint")
                         .value("한 발 옆으로 옮겨서 다시 찍어 보세요."));
+    }
+
+    @DisplayName("본인이 제출한 포토미션 사진을 삭제한다")
+    @Test
+    void deletesSubmittedPhoto() throws Exception {
+        mockMvc.perform(delete("/api/photomissions/31/photos/41")
+                        .principal(new UsernamePasswordAuthenticationToken(
+                                "550e8400-e29b-41d4-a716-446655440000",
+                                ""
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code")
+                        .value("PHOTO_MISSION_PHOTO_DELETED"));
+
+        verify(photoManagementService).delete(
+                "550e8400-e29b-41d4-a716-446655440000",
+                31L,
+                41L
+        );
     }
 
     @DisplayName("선택한 Day의 포토미션 목록을 조회한다")

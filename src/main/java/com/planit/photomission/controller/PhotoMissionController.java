@@ -4,10 +4,12 @@ import com.planit.global.response.ApiResponse;
 import com.planit.photomission.ai.PhotoMissionVerifyResponse;
 import com.planit.photomission.dto.PhotoMissionDetailResponse;
 import com.planit.photomission.dto.PhotoMissionListResponse;
+import com.planit.photomission.service.PhotoMissionPhotoManagementService;
 import com.planit.photomission.service.PhotoMissionQueryService;
 import com.planit.photomission.service.PhotoMissionSubmissionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -27,6 +29,7 @@ import java.util.UUID;
 public class PhotoMissionController {
 
     private final PhotoMissionSubmissionService submissionService;
+    private final PhotoMissionPhotoManagementService photoManagementService;
     private final PhotoMissionQueryService queryService;
 
     @PostMapping(path = "/photomissions/{missionId}/photos", consumes = "multipart/form-data")
@@ -49,6 +52,25 @@ public class PhotoMissionController {
                         latitude,
                         longitude
                 )
+        );
+    }
+
+    @DeleteMapping("/photomissions/{missionId}/photos/{photoId}")
+    public ApiResponse<Void> deletePhoto(
+            Authentication authentication,
+            @PathVariable Long missionId,
+            @PathVariable Long photoId
+    ) {
+        photoManagementService.delete(
+                authentication.getName(),
+                missionId,
+                photoId
+        );
+
+        return ApiResponse.success(
+                "PHOTO_MISSION_PHOTO_DELETED",
+                "사진을 삭제했습니다.",
+                null
         );
     }
 
