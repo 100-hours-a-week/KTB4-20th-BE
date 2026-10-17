@@ -5,7 +5,6 @@ import com.planit.domain.User;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
 import com.planit.photomission.domain.Mission;
-import com.planit.photomission.domain.MissionCompletionStatus;
 import com.planit.photomission.domain.MissionGroupState;
 import com.planit.photomission.domain.MissionParticipation;
 import com.planit.photomission.domain.MissionPhoto;
@@ -92,7 +91,7 @@ public class PhotoMissionManualCompletionService {
     ) {
         MissionParticipation participation = participationRepository
                 .findByMissionIdAndTripMemberId(missionId, memberId)
-                .filter(this::canCompleteManually)
+                .filter(MissionParticipation::canCompleteManually)
                 .orElseThrow(this::notAllowed);
         photoRepository.findActiveByParticipationId(participation.getId())
                 .orElseThrow(this::notAllowed);
@@ -105,7 +104,7 @@ public class PhotoMissionManualCompletionService {
     ) {
         MissionGroupState state = groupStateRepository
                 .findByMissionId(missionId)
-                .filter(this::canCompleteManually)
+                .filter(MissionGroupState::canCompleteManually)
                 .orElseThrow(this::notAllowed);
         MissionPhoto representative = photoRepository
                 .findFirstByMissionIdAndDeletedAtIsNullAndReplacedAtIsNullOrderBySubmittedAtAscIdAsc(
@@ -114,19 +113,6 @@ public class PhotoMissionManualCompletionService {
                 .orElseThrow(this::notAllowed);
         state.completeManually(completedAt);
         representative.markRepresentative();
-    }
-
-    private boolean canCompleteManually(
-            MissionParticipation participation
-    ) {
-        return participation.getStatus() == MissionCompletionStatus.PENDING
-                && participation.getRetryCount()
-                >= MissionParticipation.MAX_RETRY_COUNT;
-    }
-
-    private boolean canCompleteManually(MissionGroupState state) {
-        return state.getStatus() == MissionCompletionStatus.PENDING
-                && state.getRetryCount() >= MissionGroupState.MAX_RETRY_COUNT;
     }
 
     private BusinessException notAllowed() {
