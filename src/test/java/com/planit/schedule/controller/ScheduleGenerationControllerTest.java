@@ -2,11 +2,13 @@ package com.planit.schedule.controller;
 
 import com.planit.ai.AiPlaceSelectionResponse;
 import com.planit.global.error.GlobalExceptionHandler;
+import com.planit.schedule.domain.ScheduleGenerationReason;
 import com.planit.schedule.dto.SchedulePlaceSelectionResponse;
 import com.planit.schedule.service.ScheduleGenerationService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -41,7 +43,11 @@ class ScheduleGenerationControllerTest {
     @DisplayName("일정에 사용할 장소 후보를 생성한다")
     @Test
     void generatesSchedulePlaceCandidates() throws Exception {
-        when(service.generate(USER_PUBLIC_ID, 100L))
+        when(service.generate(
+                USER_PUBLIC_ID,
+                100L,
+                ScheduleGenerationReason.GENERAL
+        ))
                 .thenReturn(new SchedulePlaceSelectionResponse(
                         "100",
                         List.of(List.of(new AiPlaceSelectionResponse.Place(
@@ -80,6 +86,36 @@ class ScheduleGenerationControllerTest {
                         "$.data.places[0][0].matched_preferences[0]"
                 ).value("HISTORY_CULTURE"));
 
-        verify(service).generate(USER_PUBLIC_ID, 100L);
+        verify(service).generate(
+                USER_PUBLIC_ID,
+                100L,
+                ScheduleGenerationReason.GENERAL
+        );
+    }
+
+    @DisplayName("요청 본문의 사유로 날씨 재생성을 요청한다")
+    @Test
+    void generatesWithWeatherReason() throws Exception {
+        when(service.generate(
+                USER_PUBLIC_ID,
+                100L,
+                ScheduleGenerationReason.WEATHER
+        )).thenReturn(new SchedulePlaceSelectionResponse("100", List.of()));
+
+        mockMvc.perform(post("/api/trips/100/schedule-generation")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        ))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"WEATHER\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.tripId").value("100"));
+
+        verify(service).generate(
+                USER_PUBLIC_ID,
+                100L,
+                ScheduleGenerationReason.WEATHER
+        );
     }
 }
