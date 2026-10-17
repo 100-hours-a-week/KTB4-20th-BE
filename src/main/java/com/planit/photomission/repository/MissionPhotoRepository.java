@@ -37,6 +37,20 @@ public interface MissionPhotoRepository
     );
 
     @Query("""
+            SELECT photo
+            FROM MissionPhoto photo
+            WHERE photo.mission.id = :missionId
+              AND photo.id <> :excludedPhotoId
+              AND photo.deletedAt IS NULL
+              AND photo.replacedAt IS NULL
+            ORDER BY photo.submittedAt ASC, photo.id ASC
+            """)
+    List<MissionPhoto> findAvailableByMissionIdExcludingPhotoId(
+            @Param("missionId") Long missionId,
+            @Param("excludedPhotoId") Long excludedPhotoId
+    );
+
+    @Query("""
             SELECT DISTINCT photo
             FROM PhotoEvaluation evaluation
             JOIN evaluation.missionPhoto photo
