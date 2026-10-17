@@ -1,6 +1,8 @@
 package com.planit.notification.controller;
 
 import com.planit.global.error.GlobalExceptionHandler;
+import com.planit.global.error.BusinessException;
+import com.planit.global.error.ErrorCode;
 import com.planit.notification.domain.NotificationTargetStatus;
 import com.planit.notification.domain.NotificationTargetType;
 import com.planit.notification.domain.NotificationType;
@@ -10,6 +12,7 @@ import com.planit.notification.dto.NotificationReadResponse;
 import com.planit.notification.dto.PendingNotificationDeliveriesResponse;
 import com.planit.notification.dto.UnreadNotificationCountResponse;
 import com.planit.notification.service.NotificationListService;
+import com.planit.notification.service.NotificationDeliveryService;
 import com.planit.notification.service.NotificationReadService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -22,6 +25,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -36,14 +40,20 @@ class NotificationControllerTest {
 
     private NotificationListService service;
     private NotificationReadService readService;
+    private NotificationDeliveryService deliveryService;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         service = mock(NotificationListService.class);
         readService = mock(NotificationReadService.class);
+        deliveryService = mock(NotificationDeliveryService.class);
         mockMvc = MockMvcBuilders.standaloneSetup(
-                        new NotificationController(service, readService)
+                        new NotificationController(
+                                service,
+                                readService,
+                                deliveryService
+                        )
                 )
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -218,5 +228,42 @@ class NotificationControllerTest {
                 .andExpect(jsonPath("$.data.navigable").value(false));
 
         verify(readService).markAsRead(USER_PUBLIC_ID, 16001L);
+    }
+
+    @DisplayName("현재 사용자의 알림 수신을 확인한다")
+    @Test
+    void acknowledgesNotificationDelivery() throws Exception {
+        mockMvc.perform(put("/api/notifications/16001/delivery-ack")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code")
+                        .value("NOTIFICATION_DELIVERY_ACKNOWLEDGED"))
+                .andExpect(jsonPath("$.message")
+                        .value("알림 수신을 확인했습니다."))
+                .andExpect(jsonPath("$.data").isEmpty());
+
+        verify(deliveryService).acknowledge(USER_PUBLIC_ID, 16001L);
+    }
+
+    @DisplayName("소유하지 않았거나 삭제된 알림의 수신 확인은 404를 반환한다")
+    @Test
+    void rejectsUnavailableNotificationDelivery() throws Exception {
+        doThrow(new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND))
+                .when(deliveryService)
+                .acknowledge(USER_PUBLIC_ID, 16001L);
+
+        mockMvc.perform(put("/api/notifications/16001/delivery-ack")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        )))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code")
+                        .value("NOTIFICATION_NOT_FOUND"))
+                .andExpect(jsonPath("$.message")
+                        .value("알림을 찾을 수 없습니다."));
     }
 }
