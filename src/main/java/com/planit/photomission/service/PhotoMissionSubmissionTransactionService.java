@@ -6,7 +6,6 @@ import com.planit.domain.User;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
 import com.planit.photomission.domain.Mission;
-import com.planit.photomission.domain.MissionCompletionStatus;
 import com.planit.photomission.domain.MissionGroupState;
 import com.planit.photomission.domain.MissionParticipation;
 import com.planit.photomission.domain.MissionPhoto;
@@ -111,7 +110,7 @@ public class PhotoMissionSubmissionTransactionService {
             }
         } else {
             groupStateRepository.findByMissionId(missionId)
-                    .filter(this::isPendingAndRetryable)
+                    .filter(MissionGroupState::canSubmitPhoto)
                     .orElseThrow(this::submissionNotAllowed);
             photo = MissionPhoto.group(
                     mission,
@@ -220,22 +219,11 @@ public class PhotoMissionSubmissionTransactionService {
         }
     }
 
-    private boolean isPendingAndRetryable(MissionParticipation participation) {
-        return participation.getStatus() == MissionCompletionStatus.PENDING
-                && participation.getRetryCount()
-                < MissionParticipation.MAX_RETRY_COUNT;
-    }
-
     private boolean canSubmitPersonalPhoto(
             MissionParticipation participation
     ) {
         return participation.getStatus() == MissionCompletionStatus.COMPLETED
-                || isPendingAndRetryable(participation);
-    }
-
-    private boolean isPendingAndRetryable(MissionGroupState state) {
-        return state.getStatus() == MissionCompletionStatus.PENDING
-                && state.getRetryCount() < MissionGroupState.MAX_RETRY_COUNT;
+                || participation.canSubmitPhoto();
     }
 
     private BusinessException submissionNotAllowed() {
