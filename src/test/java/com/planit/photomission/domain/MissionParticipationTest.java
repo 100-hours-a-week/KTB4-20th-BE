@@ -111,6 +111,24 @@ class MissionParticipationTest {
         assertThat(participation.canCompleteManually()).isFalse();
     }
 
+    @DisplayName("대기 상태이고 실패 횟수가 3회 미만일 때만 사진을 제출할 수 있다")
+    @Test
+    void checksPhotoSubmissionAvailability() {
+        MissionParticipation participation = MissionParticipation.create(
+                personalMission(),
+                mock(TripMember.class),
+                now()
+        );
+
+        assertThat(participation.canSubmitPhoto()).isTrue();
+
+        participation.recordUnsuccessfulEvaluation(now());
+        participation.recordUnsuccessfulEvaluation(now());
+        participation.recordUnsuccessfulEvaluation(now());
+
+        assertThat(participation.canSubmitPhoto()).isFalse();
+    }
+
     @DisplayName("AI 성공 판정으로 개인 미션을 완료한다")
     @Test
     void completesByAi() {

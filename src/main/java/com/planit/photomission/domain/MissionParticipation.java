@@ -135,6 +135,11 @@ public class MissionParticipation {
                 && retryCount >= MAX_RETRY_COUNT;
     }
 
+    public boolean canSubmitPhoto() {
+        return status == MissionCompletionStatus.PENDING
+                && retryCount < MAX_RETRY_COUNT;
+    }
+
     private void fail(LocalDateTime failedAt) {
         status = MissionCompletionStatus.FAILED;
         completionMethod = null;
