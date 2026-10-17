@@ -2,6 +2,7 @@ package com.planit.notification.controller;
 
 import com.planit.global.response.ApiResponse;
 import com.planit.notification.dto.NotificationListResponse;
+import com.planit.notification.dto.UnreadNotificationCountResponse;
 import com.planit.notification.service.NotificationListService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
@@ -28,6 +29,19 @@ public class NotificationController {
                 notificationListService.getNotifications(
                         authentication.getName(),
                         cursor
+                )
+        );
+    }
+
+    @GetMapping("/unread-count")
+    public ApiResponse<UnreadNotificationCountResponse> getUnreadCount(
+            Authentication authentication
+    ) {
+        return ApiResponse.success(
+                "UNREAD_NOTIFICATION_COUNT_RETRIEVED",
+                "읽지 않은 알림 수를 조회했습니다.",
+                notificationListService.getUnreadCount(
+                        authentication.getName()
                 )
         );
     }

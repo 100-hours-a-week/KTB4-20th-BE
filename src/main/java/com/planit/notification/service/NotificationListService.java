@@ -4,6 +4,7 @@ import com.planit.domain.Trip;
 import com.planit.notification.domain.Notification;
 import com.planit.notification.domain.NotificationTargetStatus;
 import com.planit.notification.dto.NotificationListResponse;
+import com.planit.notification.dto.UnreadNotificationCountResponse;
 import com.planit.notification.pagination.NotificationListCursorCodec;
 import com.planit.notification.pagination.NotificationListCursorCodec.Cursor;
 import com.planit.notification.repository.NotificationRepository;
@@ -63,6 +64,20 @@ public class NotificationListService {
         return new NotificationListResponse(
                 items,
                 new NotificationListResponse.Page(nextCursor, hasNext)
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public UnreadNotificationCountResponse getUnreadCount(
+            String userPublicId
+    ) {
+        long unreadCount = notificationRepository
+                .countByRecipientPublicIdAndReadAtIsNullAndDeletedAtIsNull(
+                        UUID.fromString(userPublicId)
+                );
+        return new UnreadNotificationCountResponse(
+                unreadCount,
+                unreadCount > 0
         );
     }
 

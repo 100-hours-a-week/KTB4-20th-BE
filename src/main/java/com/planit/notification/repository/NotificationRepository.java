@@ -17,6 +17,10 @@ public interface NotificationRepository
 
     Optional<Notification> findByDedupeKey(String dedupeKey);
 
+    long countByRecipientPublicIdAndReadAtIsNullAndDeletedAtIsNull(
+            UUID recipientPublicId
+    );
+
     @Query("""
             SELECT notification
             FROM Notification notification
