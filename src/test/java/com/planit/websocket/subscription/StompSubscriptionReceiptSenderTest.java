@@ -1,4 +1,4 @@
-package com.planit.chat.websocket.subscription;
+package com.planit.websocket.subscription;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -12,16 +12,16 @@ import static org.mockito.ArgumentCaptor.forClass;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
-class ChatSubscriptionReceiptSenderTest {
+class StompSubscriptionReceiptSenderTest {
 
     @DisplayName("구독 처리 확인 응답을 요청한 세션에 전송한다")
     @Test
     void sendsReceiptToRequestingSession() {
         MessageChannel outboundChannel = mock(MessageChannel.class);
-        ChatSubscriptionReceiptSender sender =
-                new ChatSubscriptionReceiptSender(outboundChannel);
+        StompSubscriptionReceiptSender sender =
+                new StompSubscriptionReceiptSender(outboundChannel);
 
-        sender.send(new ChatSubscriptionReceiptEvent(
+        sender.send(new StompSubscriptionReceiptEvent(
                 "session-1",
                 "subscribe-3001"
         ));
