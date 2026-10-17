@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -33,5 +34,21 @@ public interface MissionPhotoRepository
             """)
     Optional<MissionPhoto> findRepresentativeByMissionId(
             @Param("missionId") Long missionId
+    );
+
+    @Query("""
+            SELECT DISTINCT photo
+            FROM PhotoEvaluation evaluation
+            JOIN evaluation.missionPhoto photo
+            WHERE photo.mission.id = :missionId
+              AND photo.id <> :excludedPhotoId
+              AND photo.deletedAt IS NULL
+              AND photo.replacedAt IS NULL
+              AND evaluation.result = com.planit.photomission.domain.PhotoEvaluationResult.SUCCESS
+            ORDER BY photo.submittedAt ASC, photo.id ASC
+            """)
+    List<MissionPhoto> findSuccessfulByMissionIdExcludingPhotoId(
+            @Param("missionId") Long missionId,
+            @Param("excludedPhotoId") Long excludedPhotoId
     );
 }
