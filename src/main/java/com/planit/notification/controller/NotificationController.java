@@ -7,6 +7,7 @@ import com.planit.notification.dto.NotificationReadResponse;
 import com.planit.notification.dto.PendingNotificationDeliveriesResponse;
 import com.planit.notification.dto.UnreadNotificationCountResponse;
 import com.planit.notification.service.NotificationListService;
+import com.planit.notification.service.NotificationDeliveryService;
 import com.planit.notification.service.NotificationReadService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
@@ -24,6 +25,7 @@ public class NotificationController {
 
     private final NotificationListService notificationListService;
     private final NotificationReadService notificationReadService;
+    private final NotificationDeliveryService notificationDeliveryService;
 
     @GetMapping
     public ApiResponse<NotificationListResponse> getNotifications(
@@ -90,6 +92,22 @@ public class NotificationController {
                         authentication.getName(),
                         notificationId
                 )
+        );
+    }
+
+    @PutMapping("/{notificationId}/delivery-ack")
+    public ApiResponse<Void> acknowledgeDelivery(
+                    Authentication authentication,
+                    @PathVariable Long notificationId
+            ) {
+        notificationDeliveryService.acknowledge(
+                authentication.getName(),
+                notificationId
+        );
+        return ApiResponse.success(
+                "NOTIFICATION_DELIVERY_ACKNOWLEDGED",
+                "알림 수신을 확인했습니다.",
+                null
         );
     }
 }
