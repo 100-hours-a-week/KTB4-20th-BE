@@ -2,6 +2,7 @@ package com.planit.photomission.controller;
 
 import com.planit.global.response.ApiResponse;
 import com.planit.photomission.ai.PhotoMissionVerifyResponse;
+import com.planit.photomission.service.PhotoMissionManualCompletionService;
 import com.planit.photomission.service.PhotoMissionPhotoManagementService;
 import com.planit.photomission.service.PhotoMissionSubmissionService;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +27,7 @@ public class PhotoMissionController {
 
     private final PhotoMissionSubmissionService submissionService;
     private final PhotoMissionPhotoManagementService photoManagementService;
+    private final PhotoMissionManualCompletionService manualCompletionService;
 
     @PostMapping(path = "/{missionId}/photos", consumes = "multipart/form-data")
     public ApiResponse<PhotoMissionVerifyResponse> submitPhoto(
@@ -65,6 +67,22 @@ public class PhotoMissionController {
         return ApiResponse.success(
                 "PHOTO_MISSION_PHOTO_DELETED",
                 "사진을 삭제했습니다.",
+                null
+        );
+    }
+
+    @PostMapping("/{missionId}/manual-completion")
+    public ApiResponse<Void> completeManually(
+            Authentication authentication,
+            @PathVariable Long missionId
+    ) {
+        manualCompletionService.complete(
+                authentication.getName(),
+                missionId
+        );
+        return ApiResponse.success(
+                "PHOTO_MISSION_MANUALLY_COMPLETED",
+                "미션을 직접 완료했습니다.",
                 null
         );
     }
