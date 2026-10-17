@@ -5,8 +5,10 @@ import com.planit.notification.domain.NotificationTargetStatus;
 import com.planit.notification.domain.NotificationTargetType;
 import com.planit.notification.domain.NotificationType;
 import com.planit.notification.dto.NotificationListResponse;
+import com.planit.notification.dto.NotificationReadResponse;
 import com.planit.notification.dto.UnreadNotificationCountResponse;
 import com.planit.notification.service.NotificationListService;
+import com.planit.notification.service.NotificationReadService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,6 +23,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -30,13 +33,15 @@ class NotificationControllerTest {
             "01991f6e-7300-7b21-a3cc-1436db3df95e";
 
     private NotificationListService service;
+    private NotificationReadService readService;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         service = mock(NotificationListService.class);
+        readService = mock(NotificationReadService.class);
         mockMvc = MockMvcBuilders.standaloneSetup(
-                        new NotificationController(service)
+                        new NotificationController(service, readService)
                 )
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -111,5 +116,38 @@ class NotificationControllerTest {
                 .andExpect(jsonPath("$.data.hasUnread").value(true));
 
         verify(service).getUnreadCount(USER_PUBLIC_ID);
+    }
+
+    @DisplayName("현재 사용자의 알림을 읽음 처리한다")
+    @Test
+    void marksNotificationAsRead() throws Exception {
+        when(readService.markAsRead(USER_PUBLIC_ID, 16001L))
+                .thenReturn(new NotificationReadResponse(
+                        "16001",
+                        true,
+                        OffsetDateTime.parse(
+                                "2026-10-17T11:00:00.123456+09:00"
+                        ),
+                        NotificationTargetStatus.EXPIRED,
+                        false
+                ));
+
+        mockMvc.perform(put("/api/notifications/16001/read")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("NOTIFICATION_READ"))
+                .andExpect(jsonPath("$.data.notificationId")
+                        .value("16001"))
+                .andExpect(jsonPath("$.data.read").value(true))
+                .andExpect(jsonPath("$.data.readAt")
+                        .value("2026-10-17T11:00:00.123456+09:00"))
+                .andExpect(jsonPath("$.data.targetStatus")
+                        .value("EXPIRED"))
+                .andExpect(jsonPath("$.data.navigable").value(false));
+
+        verify(readService).markAsRead(USER_PUBLIC_ID, 16001L);
     }
 }

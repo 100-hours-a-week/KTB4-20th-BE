@@ -328,6 +328,44 @@ class NotificationRepositoryTest {
         assertThat(notificationRepository.findById(unreadId)).isPresent();
     }
 
+    @DisplayName("소유한 미삭제 알림을 조회해 읽음 시각을 저장한다")
+    @Test
+    void findsOwnedNotificationAndPreservesSequentialReadAt() {
+        User recipient = userRepository.save(new User(
+                null,
+                UUID.randomUUID(),
+                "개별읽음수신자"
+        ));
+        Long notificationId = notificationStore.saveIdempotently(notification(
+                recipient,
+                5001L,
+                LocalDate.of(2026, 10, 18),
+                NotificationType.TRIP_D1,
+                LocalDateTime.of(2026, 10, 17, 10, 0)
+        ));
+        LocalDateTime firstReadAt = LocalDateTime.of(2026, 10, 17, 11, 0);
+
+        Notification notification = notificationRepository
+                .findOwnedActiveById(
+                        notificationId,
+                        recipient.getPublicId()
+                )
+                .orElseThrow();
+        notification.markAsRead(firstReadAt);
+        notification.markAsRead(firstReadAt.plusMinutes(1));
+        notificationRepository.flush();
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT read_at FROM notifications WHERE id = ?",
+                LocalDateTime.class,
+                notificationId
+        )).isEqualTo(firstReadAt);
+        assertThat(notificationRepository.findOwnedActiveById(
+                notificationId,
+                UUID.randomUUID()
+        )).isEmpty();
+    }
+
     private Notification notification(
             User recipient,
             LocalDate tripStartDate,
