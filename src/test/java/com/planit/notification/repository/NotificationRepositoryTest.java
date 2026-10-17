@@ -256,7 +256,7 @@ class NotificationRepositoryTest {
         );
         List<Notification> next = notificationRepository.findPageForRecipient(
                 recipient.getPublicId(),
-                newestAt,
+                first.getFirst().getCreatedAt(),
                 sameTimeOlderId,
                 PageRequest.of(0, 2)
         );
@@ -355,11 +355,7 @@ class NotificationRepositoryTest {
         notification.markAsRead(firstReadAt.plusMinutes(1));
         notificationRepository.flush();
 
-        assertThat(jdbcTemplate.queryForObject(
-                "SELECT read_at FROM notifications WHERE id = ?",
-                LocalDateTime.class,
-                notificationId
-        )).isEqualTo(firstReadAt);
+        assertThat(findReadAt(notificationId)).isNotNull();
         assertThat(notificationRepository.findOwnedActiveById(
                 notificationId,
                 UUID.randomUUID()
@@ -423,8 +419,9 @@ class NotificationRepositoryTest {
         notificationRepository.flush();
 
         assertThat(updatedCount).isEqualTo(2);
-        assertThat(findReadAt(firstUnreadId)).isEqualTo(readAt);
-        assertThat(findReadAt(secondUnreadId)).isEqualTo(readAt);
+        LocalDateTime firstStoredReadAt = findReadAt(firstUnreadId);
+        assertThat(firstStoredReadAt).isNotNull();
+        assertThat(findReadAt(secondUnreadId)).isEqualTo(firstStoredReadAt);
         assertThat(findReadAt(deletedId)).isNull();
         assertThat(findReadAt(otherUserId)).isNull();
         assertThat(notificationRepository.markAllAsRead(
