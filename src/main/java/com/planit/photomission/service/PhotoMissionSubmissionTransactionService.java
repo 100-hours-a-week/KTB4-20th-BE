@@ -6,6 +6,7 @@ import com.planit.domain.User;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
 import com.planit.photomission.domain.Mission;
+import com.planit.photomission.domain.MissionCompletionStatus;
 import com.planit.photomission.domain.MissionGroupState;
 import com.planit.photomission.domain.MissionParticipation;
 import com.planit.photomission.domain.MissionPhoto;
