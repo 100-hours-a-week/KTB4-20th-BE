@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -202,6 +203,68 @@ class NotificationRepositoryTest {
                 .containsExactly(eligibleId);
         assertThat(notifications.getFirst().getRecipient().getPublicId())
                 .isEqualTo(recipient.getPublicId());
+    }
+
+    @DisplayName("사용자별 알림을 생성 시각과 ID 역순의 커서 경계로 조회한다")
+    @Test
+    void findsRecipientNotificationPageAfterCursor() {
+        User recipient = userRepository.save(new User(
+                null,
+                UUID.randomUUID(),
+                "목록조회수신자"
+        ));
+        User otherUser = userRepository.save(new User(
+                null,
+                UUID.randomUUID(),
+                "다른목록수신자"
+        ));
+        LocalDateTime newestAt = LocalDateTime.of(2026, 10, 16, 10, 0);
+        Long newestId = notificationStore.saveIdempotently(notification(
+                recipient,
+                3001L,
+                LocalDate.of(2026, 10, 17),
+                NotificationType.TRIP_D1,
+                newestAt
+        ));
+        Long sameTimeOlderId = notificationStore.saveIdempotently(notification(
+                recipient,
+                3002L,
+                LocalDate.of(2026, 10, 17),
+                NotificationType.TRIP_D1,
+                newestAt
+        ));
+        Long olderId = notificationStore.saveIdempotently(notification(
+                recipient,
+                3003L,
+                LocalDate.of(2026, 10, 17),
+                NotificationType.TRIP_D1,
+                newestAt.minusMinutes(1)
+        ));
+        notificationStore.saveIdempotently(notification(
+                otherUser,
+                3004L,
+                LocalDate.of(2026, 10, 17),
+                NotificationType.TRIP_D1,
+                newestAt.minusMinutes(2)
+        ));
+
+        List<Notification> first = notificationRepository.findPageForRecipient(
+                recipient.getPublicId(),
+                null,
+                null,
+                PageRequest.of(0, 2)
+        );
+        List<Notification> next = notificationRepository.findPageForRecipient(
+                recipient.getPublicId(),
+                newestAt,
+                sameTimeOlderId,
+                PageRequest.of(0, 2)
+        );
+
+        assertThat(first).extracting(Notification::getId)
+                .containsExactly(sameTimeOlderId, newestId);
+        assertThat(next).extracting(Notification::getId)
+                .containsExactly(newestId, olderId);
     }
 
     private Notification notification(
