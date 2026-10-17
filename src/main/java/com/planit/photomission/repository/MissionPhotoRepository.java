@@ -65,4 +65,9 @@ public interface MissionPhotoRepository
             @Param("missionId") Long missionId,
             @Param("excludedPhotoId") Long excludedPhotoId
     );
+
+    Optional<MissionPhoto>
+    findFirstByMissionIdAndDeletedAtIsNullAndReplacedAtIsNullOrderBySubmittedAtAscIdAsc(
+            Long missionId
+    );
 }
