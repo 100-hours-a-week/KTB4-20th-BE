@@ -50,4 +50,30 @@ public class PhotoMissionAiClient {
 
         return response;
     }
+
+    public PhotoMissionGenerateResponse generate(
+            PhotoMissionGenerateRequest request
+    ) {
+        PhotoMissionGenerateResponse response = restClient.post()
+                .uri(aiProperties.baseUrl().resolve(
+                        "/photomissions/generate"
+                ))
+                .header(
+                        INTERNAL_TOKEN_HEADER,
+                        aiProperties.internalToken()
+                )
+                .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.APPLICATION_JSON)
+                .body(request)
+                .retrieve()
+                .body(PhotoMissionGenerateResponse.class);
+
+        if (response == null) {
+            throw new RestClientException(
+                    "AI 포토미션 생성 응답이 없습니다."
+            );
+        }
+
+        return response;
+    }
 }
