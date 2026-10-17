@@ -22,6 +22,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -52,6 +53,37 @@ class PhotoMissionVerificationServiceTest {
 
         assertThat(result).isSameAs(response);
         verify(transactionService).complete(51L, response);
+    }
+
+    @DisplayName("판정 결과 DB 반영 오류를 AI 실행 오류로 기록하지 않는다")
+    @Test
+    void doesNotRecordPersistenceFailureAsAiExecutionError() {
+        PhotoMissionVerifyRequest request = request();
+        PhotoMissionVerificationTransactionService.PreparedVerification prepared =
+                new PhotoMissionVerificationTransactionService.PreparedVerification(
+                        51L, 31L, request
+                );
+        PhotoMissionVerifyResponse response = successResponse();
+        IllegalStateException exception =
+                new IllegalStateException("판정 결과 반영 실패");
+        when(transactionService.prepare(41L)).thenReturn(prepared);
+        when(aiClient.verify(31L, request)).thenReturn(response);
+        org.mockito.Mockito.doThrow(exception)
+                .when(transactionService).complete(51L, response);
+
+        assertThatThrownBy(() -> service.verify(41L))
+                .isSameAs(exception);
+        verify(transactionService, never())
+                .waitForRetry(
+                        org.mockito.ArgumentMatchers.anyLong(),
+                        org.mockito.ArgumentMatchers.anyString(),
+                        org.mockito.ArgumentMatchers.any(LocalDateTime.class)
+                );
+        verify(transactionService, never())
+                .fail(
+                        org.mockito.ArgumentMatchers.anyLong(),
+                        org.mockito.ArgumentMatchers.anyString()
+                );
     }
 
     @DisplayName("네트워크 호출 오류는 재시도 대기로 기록하고 서비스 오류로 변환한다")

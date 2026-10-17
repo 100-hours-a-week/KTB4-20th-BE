@@ -6,7 +6,6 @@ import com.planit.domain.User;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
 import com.planit.photomission.domain.Mission;
-import com.planit.photomission.domain.MissionCompletionStatus;
 import com.planit.photomission.domain.MissionGroupState;
 import com.planit.photomission.domain.MissionParticipation;
 import com.planit.photomission.domain.MissionPhoto;
@@ -97,7 +96,7 @@ public class PhotoMissionSubmissionTransactionService {
         if (mission.isPersonal()) {
             MissionParticipation participation = participationRepository
                     .findByMissionIdAndTripMemberId(missionId, member.getId())
-                    .filter(this::isPendingAndRetryable)
+                    .filter(MissionParticipation::canSubmitPhoto)
                     .orElseThrow(this::submissionNotAllowed);
             photoRepository.findActiveByParticipationId(participation.getId())
                     .ifPresent(activePhoto -> {
@@ -114,7 +113,7 @@ public class PhotoMissionSubmissionTransactionService {
             );
         } else {
             groupStateRepository.findByMissionId(missionId)
-                    .filter(this::isPendingAndRetryable)
+                    .filter(MissionGroupState::canSubmitPhoto)
                     .orElseThrow(this::submissionNotAllowed);
             photo = MissionPhoto.group(
                     mission,
@@ -135,17 +134,6 @@ public class PhotoMissionSubmissionTransactionService {
                     ErrorCode.PHOTO_MISSION_IDEMPOTENCY_KEY_REUSED
             );
         }
-    }
-
-    private boolean isPendingAndRetryable(MissionParticipation participation) {
-        return participation.getStatus() == MissionCompletionStatus.PENDING
-                && participation.getRetryCount()
-                < MissionParticipation.MAX_RETRY_COUNT;
-    }
-
-    private boolean isPendingAndRetryable(MissionGroupState state) {
-        return state.getStatus() == MissionCompletionStatus.PENDING
-                && state.getRetryCount() < MissionGroupState.MAX_RETRY_COUNT;
     }
 
     private BusinessException submissionNotAllowed() {
