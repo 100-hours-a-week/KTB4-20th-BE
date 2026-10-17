@@ -55,6 +55,41 @@ class PhotoMissionVerificationServiceTest {
         verify(transactionService).complete(51L, response);
     }
 
+    @DisplayName("재시도 대기 판정을 새 AI 실행으로 이어간다")
+    @Test
+    void retriesPendingEvaluation() {
+        PhotoMissionVerifyRequest request = request();
+        LocalDateTime now = LocalDateTime.of(2026, 10, 17, 10, 0);
+        PhotoMissionVerificationTransactionService.PreparedVerification prepared =
+                new PhotoMissionVerificationTransactionService.PreparedVerification(
+                        52L,
+                        31L,
+                        request
+                );
+        PhotoMissionVerifyResponse response = successResponse();
+        when(transactionService.prepareRetry(51L, now)).thenReturn(prepared);
+        when(aiClient.verify(31L, request)).thenReturn(response);
+
+        service.retry(51L, now);
+
+        verify(transactionService).complete(52L, response);
+    }
+
+    @DisplayName("재시도할 수 없어진 대기 판정은 실패로 종료한다")
+    @Test
+    void discardsUnavailablePendingEvaluation() {
+        LocalDateTime now = LocalDateTime.of(2026, 10, 17, 10, 0);
+        IllegalStateException exception =
+                new IllegalStateException("이미 완료된 미션");
+        when(transactionService.prepareRetry(51L, now))
+                .thenThrow(exception);
+
+        assertThatThrownBy(() -> service.retry(51L, now))
+                .isSameAs(exception);
+
+        verify(transactionService).discardRetry(51L, now);
+    }
+
     @DisplayName("판정 결과 DB 반영 오류를 AI 실행 오류로 기록하지 않는다")
     @Test
     void doesNotRecordPersistenceFailureAsAiExecutionError() {

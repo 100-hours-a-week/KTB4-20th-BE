@@ -31,6 +31,28 @@ public class PhotoMissionVerificationService {
         PhotoMissionVerificationTransactionService.PreparedVerification
                 prepared = transactionService.prepare(missionPhotoId);
 
+        return execute(prepared);
+    }
+
+    public void retry(Long evaluationId, LocalDateTime retriedAt) {
+        PhotoMissionVerificationTransactionService.PreparedVerification prepared;
+        try {
+            prepared = transactionService.prepareRetry(
+                    evaluationId,
+                    retriedAt
+            );
+        } catch (RuntimeException exception) {
+            transactionService.discardRetry(evaluationId, retriedAt);
+            throw exception;
+        }
+        execute(prepared);
+    }
+
+    private PhotoMissionVerifyResponse execute(
+            PhotoMissionVerificationTransactionService
+                    .PreparedVerification prepared
+    ) {
+
         PhotoMissionVerifyResponse response;
         try {
             response = aiClient.verify(

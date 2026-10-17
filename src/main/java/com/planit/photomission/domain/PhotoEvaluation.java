@@ -154,6 +154,20 @@ public class PhotoEvaluation {
         this.retryAfterAt = retryAfterAt;
     }
 
+    public void markRetryStarted(LocalDateTime retriedAt) {
+        if (executionStatus != PhotoEvaluationExecutionStatus.RETRY_PENDING) {
+            throw new IllegalStateException(
+                    "재시도 대기 중인 AI 판정만 재실행할 수 있습니다"
+            );
+        }
+        if (retriedAt == null) {
+            throw new IllegalArgumentException("AI 재시도 시각은 필수입니다");
+        }
+        executionStatus = PhotoEvaluationExecutionStatus.FAILED;
+        evaluatedAt = retriedAt;
+        retryAfterAt = null;
+    }
+
     private void validateResult(PhotoEvaluationResult result) {
         if (result == null) {
             throw new IllegalArgumentException("AI 판정 결과는 필수입니다");

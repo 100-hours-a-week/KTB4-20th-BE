@@ -259,6 +259,65 @@ class PhotoMissionVerificationTransactionServiceTest {
         assertThat(participation.getRetryCount()).isZero();
     }
 
+    @DisplayName("대기 중인 기술 오류를 종료하고 다음 판정 시도를 준비한다")
+    @Test
+    void preparesPendingEvaluationRetry() {
+        Mission mission = mission(MissionScope.GROUP);
+        MissionGroupState state = MissionGroupState.create(mission, NOW);
+        MissionPhoto photo = groupPhoto(mission);
+        PhotoEvaluation pending = PhotoEvaluation.start(photo, 1, NOW);
+        ReflectionTestUtils.setField(pending, "id", 51L);
+        pending.waitForRetry("HTTP_502", NOW.plusSeconds(30));
+        when(evaluationRepository.findById(51L))
+                .thenReturn(Optional.of(pending));
+        when(photoRepository.findById(41L)).thenReturn(Optional.of(photo));
+        when(groupStateRepository.findByMissionId(31L))
+                .thenReturn(Optional.of(state));
+        when(evaluationRepository.save(any(PhotoEvaluation.class)))
+                .thenAnswer(invocation -> {
+                    PhotoEvaluation evaluation = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(evaluation, "id", 52L);
+                    return evaluation;
+                });
+        when(imageStorage.createReadUrl("missions/31/photo.jpg"))
+                .thenReturn("https://bucket.example/photo.jpg");
+
+        PhotoMissionVerificationTransactionService.PreparedVerification result =
+                service.prepareRetry(51L, NOW.plusSeconds(31));
+
+        assertThat(pending.getExecutionStatus())
+                .isEqualTo(PhotoEvaluationExecutionStatus.FAILED);
+        assertThat(result.evaluationId()).isEqualTo(52L);
+        assertThat(result.request().imageUrl())
+                .isEqualTo("https://bucket.example/photo.jpg");
+    }
+
+    @DisplayName("세 번째 기술 오류는 추가 대기 없이 실행 실패로 종료한다")
+    @Test
+    void stopsAfterThirdTechnicalAttempt() {
+        Mission mission = mission(MissionScope.PERSONAL);
+        MissionParticipation participation = MissionParticipation.create(
+                mission,
+                mock(TripMember.class),
+                NOW
+        );
+        PhotoEvaluation third = PhotoEvaluation.start(
+                personalPhoto(participation),
+                3,
+                NOW
+        );
+        ReflectionTestUtils.setField(third, "id", 53L);
+        when(evaluationRepository.findById(53L))
+                .thenReturn(Optional.of(third));
+
+        service.waitForRetry(53L, "HTTP_504", NOW.plusSeconds(30));
+
+        assertThat(third.getExecutionStatus())
+                .isEqualTo(PhotoEvaluationExecutionStatus.FAILED);
+        assertThat(third.getRetryAfterAt()).isNull();
+        assertThat(participation.getRetryCount()).isZero();
+    }
+
     private Mission mission(MissionScope scope) {
         Trip trip = mock(Trip.class);
         when(trip.getEndDate()).thenReturn(LocalDate.of(2026, 10, 12));

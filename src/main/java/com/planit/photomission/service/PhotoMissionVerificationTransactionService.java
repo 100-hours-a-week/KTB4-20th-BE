@@ -10,6 +10,7 @@ import com.planit.photomission.domain.MissionGroupState;
 import com.planit.photomission.domain.MissionParticipation;
 import com.planit.photomission.domain.MissionPhoto;
 import com.planit.photomission.domain.PhotoEvaluation;
+import com.planit.photomission.domain.PhotoEvaluationExecutionStatus;
 import com.planit.photomission.domain.PhotoEvaluationResult;
 import com.planit.photomission.repository.MissionGroupStateRepository;
 import com.planit.photomission.repository.MissionPhotoRepository;
@@ -21,6 +22,8 @@ import java.time.LocalDateTime;
 
 @Service
 public class PhotoMissionVerificationTransactionService {
+
+    private static final int MAX_TECHNICAL_ATTEMPTS = 3;
 
     private final MissionPhotoRepository photoRepository;
     private final PhotoEvaluationRepository evaluationRepository;
@@ -54,8 +57,38 @@ public class PhotoMissionVerificationTransactionService {
                 .findTopByMissionPhotoIdOrderByAttemptNoDesc(missionPhotoId)
                 .map(evaluation -> evaluation.getAttemptNo() + 1)
                 .orElse(1);
+        return startVerification(photo, attemptNo, LocalDateTime.now());
+    }
+
+    @Transactional
+    public PreparedVerification prepareRetry(
+            Long evaluationId,
+            LocalDateTime retriedAt
+    ) {
+        PhotoEvaluation previous = findEvaluation(evaluationId);
+        if (previous.getExecutionStatus()
+                != PhotoEvaluationExecutionStatus.RETRY_PENDING
+                || previous.getRetryAfterAt().isAfter(retriedAt)
+                || previous.getAttemptNo() >= MAX_TECHNICAL_ATTEMPTS) {
+            throw new IllegalStateException("재시도 가능한 AI 판정이 아닙니다");
+        }
+        MissionPhoto photo = findPhoto(previous.getMissionPhoto().getId());
+        validatePending(photo);
+        previous.markRetryStarted(retriedAt);
+        return startVerification(
+                photo,
+                previous.getAttemptNo() + 1,
+                retriedAt
+        );
+    }
+
+    private PreparedVerification startVerification(
+            MissionPhoto photo,
+            int attemptNo,
+            LocalDateTime requestedAt
+    ) {
         PhotoEvaluation evaluation = evaluationRepository.save(
-                PhotoEvaluation.start(photo, attemptNo, LocalDateTime.now())
+                PhotoEvaluation.start(photo, attemptNo, requestedAt)
         );
         String imageUrl = imageStorage.createReadUrl(
                 photo.getImageFile().getImageKey()
@@ -99,10 +132,24 @@ public class PhotoMissionVerificationTransactionService {
             String errorCode,
             LocalDateTime retryAfterAt
     ) {
-        findEvaluation(evaluationId).waitForRetry(
-                errorCode,
-                retryAfterAt
-        );
+        PhotoEvaluation evaluation = findEvaluation(evaluationId);
+        if (evaluation.getAttemptNo() >= MAX_TECHNICAL_ATTEMPTS) {
+            evaluation.failExecution(errorCode, LocalDateTime.now());
+            return;
+        }
+        evaluation.waitForRetry(errorCode, retryAfterAt);
+    }
+
+    @Transactional
+    public void discardRetry(
+            Long evaluationId,
+            LocalDateTime discardedAt
+    ) {
+        PhotoEvaluation evaluation = findEvaluation(evaluationId);
+        if (evaluation.getExecutionStatus()
+                == PhotoEvaluationExecutionStatus.RETRY_PENDING) {
+            evaluation.markRetryStarted(discardedAt);
+        }
     }
 
     private MissionPhoto findPhoto(Long missionPhotoId) {

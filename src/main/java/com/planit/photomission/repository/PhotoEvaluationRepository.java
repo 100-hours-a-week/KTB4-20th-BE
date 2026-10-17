@@ -1,8 +1,11 @@
 package com.planit.photomission.repository;
 
 import com.planit.photomission.domain.PhotoEvaluation;
+import com.planit.photomission.domain.PhotoEvaluationExecutionStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 public interface PhotoEvaluationRepository
@@ -11,4 +14,10 @@ public interface PhotoEvaluationRepository
     Optional<PhotoEvaluation> findTopByMissionPhotoIdOrderByAttemptNoDesc(
             Long missionPhotoId
     );
+
+    List<PhotoEvaluation>
+            findTop5ByExecutionStatusAndRetryAfterAtLessThanEqualOrderByRetryAfterAtAsc(
+                    PhotoEvaluationExecutionStatus executionStatus,
+                    LocalDateTime retryAfterAt
+            );
 }
