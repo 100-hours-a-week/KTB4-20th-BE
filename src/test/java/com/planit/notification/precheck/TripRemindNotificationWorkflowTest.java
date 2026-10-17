@@ -4,6 +4,9 @@ import com.planit.notification.delivery.NotificationEventPublisher;
 import com.planit.notification.delivery.NotificationPublishEvent;
 import com.planit.notification.delivery.NotificationPublishTargetService;
 import com.planit.notification.domain.NotificationType;
+import com.planit.notification.domain.NotificationTargetType;
+import com.planit.notification.domain.WeatherCondition;
+import com.planit.notification.dto.NotificationTargetResponse;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
@@ -252,8 +255,13 @@ class TripRemindNotificationWorkflowTest {
                 UUID.randomUUID(),
                 notificationId,
                 NotificationType.TRIP_D1,
+                null,
                 "내일 여행이 시작돼요",
                 "여행 일정과 날씨를 확인해 주세요.",
+                new NotificationTargetResponse(
+                        NotificationTargetType.TRIP,
+                        "1001"
+                ),
                 OffsetDateTime.parse("2026-10-16T10:00:00+09:00")
         );
     }

@@ -29,11 +29,13 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.IntStream;
 
 import static com.planit.global.error.ErrorCode.SCHEDULE_ALREADY_EXISTS;
+import static com.planit.global.error.ErrorCode.SCHEDULE_REGENERATION_LIMIT_EXCEEDED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -195,6 +197,71 @@ class SchedulePersistenceServiceTest {
                 visitRepository,
                 legRepository
         );
+    }
+
+    @DisplayName("일반 재생성은 기존 일정을 삭제하고 새 일정으로 대체하며 재생성 횟수를 차감한다")
+    @Test
+    void replacesExistingScheduleAndCountsGeneralRegeneration() {
+        givenExistingSchedule();
+        when(trip.getScheduleRegenerationCount()).thenReturn(2);
+
+        GeneratedScheduleResult result = service.save(
+                1L,
+                List.of(recommendations()),
+                ScheduleGenerationMode.GENERAL_REGENERATION
+        );
+
+        assertThat(result.scheduleId()).isEqualTo("200");
+        verify(scheduleRepository).findByTripId(1L);
+        verify(scheduleRepository).deleteAll(any());
+        verify(scheduleRepository).flush();
+        verify(trip).increaseScheduleRegenerationCount();
+    }
+
+    @DisplayName("날씨 재생성은 기존 일정을 대체하지만 재생성 횟수를 차감하지 않는다")
+    @Test
+    void replacesExistingScheduleWithoutCountingWeatherRegeneration() {
+        givenExistingSchedule();
+        when(trip.getScheduleRegenerationCount()).thenReturn(5);
+
+        service.save(
+                1L,
+                List.of(recommendations()),
+                ScheduleGenerationMode.WEATHER_REGENERATION
+        );
+
+        verify(scheduleRepository).deleteAll(any());
+        verify(trip, never()).increaseScheduleRegenerationCount();
+    }
+
+    @DisplayName("일반 재생성 횟수를 모두 사용했으면 기존 일정을 유지하고 거부한다")
+    @Test
+    void rejectsGeneralRegenerationOverLimit() {
+        givenExistingSchedule();
+        when(trip.getScheduleRegenerationCount()).thenReturn(5);
+
+        assertThatThrownBy(() -> service.save(
+                1L,
+                List.of(recommendations()),
+                ScheduleGenerationMode.GENERAL_REGENERATION
+        ))
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode())
+                                .isEqualTo(SCHEDULE_REGENERATION_LIMIT_EXCEEDED)
+                );
+        verify(scheduleRepository, never()).deleteAll(any());
+        verify(trip, never()).increaseScheduleRegenerationCount();
+    }
+
+    private void givenExistingSchedule() {
+        when(trip.getId()).thenReturn(1L);
+        when(scheduleRepository.existsByTripIdAndActiveConfirmedSlot(
+                1L,
+                (byte) 1
+        )).thenReturn(true);
+        when(scheduleRepository.findByTripId(1L))
+                .thenReturn(List.of(mock(Schedule.class)));
     }
 
     private List<RecommendedPlace> recommendations() {
