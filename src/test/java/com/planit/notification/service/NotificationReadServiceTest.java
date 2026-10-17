@@ -30,6 +30,57 @@ class NotificationReadServiceTest {
             ZoneId.of("Asia/Seoul")
     );
 
+    @DisplayName("현재 사용자의 모든 미읽음 알림을 같은 시각으로 처리한다")
+    @Test
+    void marksAllNotificationsAsRead() {
+        NotificationRepository notificationRepository =
+                mock(NotificationRepository.class);
+        NotificationReadService service = new NotificationReadService(
+                notificationRepository,
+                mock(TripRepository.class),
+                CLOCK
+        );
+        UUID recipientPublicId = UUID.randomUUID();
+        LocalDateTime readAt = LocalDateTime.of(2026, 10, 17, 11, 0);
+        when(notificationRepository.markAllAsRead(
+                recipientPublicId,
+                readAt
+        )).thenReturn(3);
+
+        var response = service.markAllAsRead(recipientPublicId.toString());
+
+        assertThat(response.updatedCount()).isEqualTo(3);
+        assertThat(response.readAt().toString())
+                .isEqualTo("2026-10-17T11:00+09:00");
+        assertThat(response.unreadCount()).isZero();
+        verify(notificationRepository).markAllAsRead(
+                recipientPublicId,
+                readAt
+        );
+        verify(notificationRepository)
+                .countByRecipientPublicIdAndReadAtIsNullAndDeletedAtIsNull(
+                        recipientPublicId
+                );
+    }
+
+    @DisplayName("이미 모두 읽었으면 갱신 건수가 0이다")
+    @Test
+    void returnsZeroWhenAllNotificationsAreRead() {
+        NotificationRepository notificationRepository =
+                mock(NotificationRepository.class);
+        NotificationReadService service = new NotificationReadService(
+                notificationRepository,
+                mock(TripRepository.class),
+                CLOCK
+        );
+        UUID recipientPublicId = UUID.randomUUID();
+
+        var response = service.markAllAsRead(recipientPublicId.toString());
+
+        assertThat(response.updatedCount()).isZero();
+        assertThat(response.unreadCount()).isZero();
+    }
+
     @DisplayName("알림을 최초 시각으로 읽음 처리하고 활성 대상을 반환한다")
     @Test
     void marksNotificationAsRead() {

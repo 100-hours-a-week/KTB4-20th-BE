@@ -4,6 +4,7 @@ import com.planit.global.error.GlobalExceptionHandler;
 import com.planit.notification.domain.NotificationTargetStatus;
 import com.planit.notification.domain.NotificationTargetType;
 import com.planit.notification.domain.NotificationType;
+import com.planit.notification.dto.AllNotificationsReadResponse;
 import com.planit.notification.dto.NotificationListResponse;
 import com.planit.notification.dto.NotificationReadResponse;
 import com.planit.notification.dto.UnreadNotificationCountResponse;
@@ -116,6 +117,36 @@ class NotificationControllerTest {
                 .andExpect(jsonPath("$.data.hasUnread").value(true));
 
         verify(service).getUnreadCount(USER_PUBLIC_ID);
+    }
+
+    @DisplayName("현재 사용자의 모든 알림을 읽음 처리한다")
+    @Test
+    void marksAllNotificationsAsRead() throws Exception {
+        when(readService.markAllAsRead(USER_PUBLIC_ID))
+                .thenReturn(new AllNotificationsReadResponse(
+                        3,
+                        OffsetDateTime.parse(
+                                "2026-10-17T11:05:00.123456+09:00"
+                        ),
+                        0L
+                ));
+
+        mockMvc.perform(put("/api/notifications/read-all")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code")
+                        .value("ALL_NOTIFICATIONS_READ"))
+                .andExpect(jsonPath("$.message")
+                        .value("모든 알림을 읽음 처리했습니다."))
+                .andExpect(jsonPath("$.data.updatedCount").value(3))
+                .andExpect(jsonPath("$.data.readAt")
+                        .value("2026-10-17T11:05:00.123456+09:00"))
+                .andExpect(jsonPath("$.data.unreadCount").value(0));
+
+        verify(readService).markAllAsRead(USER_PUBLIC_ID);
     }
 
     @DisplayName("현재 사용자의 알림을 읽음 처리한다")

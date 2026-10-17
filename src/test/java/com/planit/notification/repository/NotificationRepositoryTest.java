@@ -366,6 +366,73 @@ class NotificationRepositoryTest {
         )).isEmpty();
     }
 
+    @DisplayName("현재 사용자의 미삭제·미읽음 알림만 같은 시각으로 일괄 처리한다")
+    @Test
+    void marksAllUnreadNotificationsForRecipient() {
+        User recipient = userRepository.save(new User(
+                null,
+                UUID.randomUUID(),
+                "전체읽음수신자"
+        ));
+        User otherUser = userRepository.save(new User(
+                null,
+                UUID.randomUUID(),
+                "다른전체읽음수신자"
+        ));
+        LocalDate targetDate = LocalDate.of(2026, 10, 18);
+        LocalDateTime createdAt = LocalDateTime.of(2026, 10, 17, 10, 0);
+        Long firstUnreadId = notificationStore.saveIdempotently(notification(
+                recipient,
+                6001L,
+                targetDate,
+                NotificationType.TRIP_D1,
+                createdAt
+        ));
+        Long secondUnreadId = notificationStore.saveIdempotently(notification(
+                recipient,
+                6002L,
+                targetDate,
+                NotificationType.TRIP_D1,
+                createdAt
+        ));
+        Long deletedId = notificationStore.saveIdempotently(notification(
+                recipient,
+                6003L,
+                targetDate,
+                NotificationType.TRIP_D1,
+                createdAt
+        ));
+        Long otherUserId = notificationStore.saveIdempotently(notification(
+                otherUser,
+                6004L,
+                targetDate,
+                NotificationType.TRIP_D1,
+                createdAt
+        ));
+        jdbcTemplate.update(
+                "UPDATE notifications SET deleted_at = ? WHERE id = ?",
+                createdAt.plusMinutes(1),
+                deletedId
+        );
+        LocalDateTime readAt = createdAt.plusHours(1);
+
+        int updatedCount = notificationRepository.markAllAsRead(
+                recipient.getPublicId(),
+                readAt
+        );
+        notificationRepository.flush();
+
+        assertThat(updatedCount).isEqualTo(2);
+        assertThat(findReadAt(firstUnreadId)).isEqualTo(readAt);
+        assertThat(findReadAt(secondUnreadId)).isEqualTo(readAt);
+        assertThat(findReadAt(deletedId)).isNull();
+        assertThat(findReadAt(otherUserId)).isNull();
+        assertThat(notificationRepository.markAllAsRead(
+                recipient.getPublicId(),
+                readAt.plusMinutes(1)
+        )).isZero();
+    }
+
     private Notification notification(
             User recipient,
             LocalDate tripStartDate,
@@ -404,6 +471,14 @@ class NotificationRepositoryTest {
     private LocalDateTime findCreatedAt(Long notificationId) {
         return jdbcTemplate.queryForObject(
                 "SELECT created_at FROM notifications WHERE id = ?",
+                LocalDateTime.class,
+                notificationId
+        );
+    }
+
+    private LocalDateTime findReadAt(Long notificationId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT read_at FROM notifications WHERE id = ?",
                 LocalDateTime.class,
                 notificationId
         );
