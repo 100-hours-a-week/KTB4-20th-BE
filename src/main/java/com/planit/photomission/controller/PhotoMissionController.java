@@ -12,8 +12,8 @@ import com.planit.photomission.service.PhotoMissionSubmissionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -69,6 +69,7 @@ public class PhotoMissionController {
                 missionId,
                 photoId
         );
+
         return ApiResponse.success(
                 "PHOTO_MISSION_PHOTO_DELETED",
                 "사진을 삭제했습니다.",
