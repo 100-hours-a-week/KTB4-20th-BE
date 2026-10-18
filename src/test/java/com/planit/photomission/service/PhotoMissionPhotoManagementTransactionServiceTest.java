@@ -24,8 +24,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -39,6 +42,12 @@ class PhotoMissionPhotoManagementTransactionServiceTest {
 
     private static final UUID USER_PUBLIC_ID =
             UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
+    private static final LocalDateTime SEOUL_NOW =
+            LocalDateTime.of(2026, 10, 18, 10, 0);
+    private static final Clock SEOUL_CLOCK = Clock.fixed(
+            Instant.parse("2026-10-18T01:00:00Z"),
+            ZoneId.of("Asia/Seoul")
+    );
 
     private MissionPhotoRepository photoRepository;
     private MissionGroupStateRepository groupStateRepository;
@@ -56,7 +65,8 @@ class PhotoMissionPhotoManagementTransactionServiceTest {
                 photoRepository,
                 groupStateRepository,
                 userRepository,
-                tripMemberRepository
+                tripMemberRepository,
+                SEOUL_CLOCK
         );
     }
 
@@ -78,7 +88,7 @@ class PhotoMissionPhotoManagementTransactionServiceTest {
         );
 
         assertThat(imageKey).isEqualTo("personal.jpg");
-        assertThat(photo.getDeletedAt()).isNotNull();
+        assertThat(photo.getDeletedAt()).isEqualTo(SEOUL_NOW);
         assertThat(participation.getStatus())
                 .isEqualTo(MissionCompletionStatus.PENDING);
     }
@@ -361,7 +371,9 @@ class PhotoMissionPhotoManagementTransactionServiceTest {
 
     private Fixture fixture(MissionScope scope, UUID userPublicId) {
         Trip trip = mock(Trip.class);
-        when(trip.getEndDate()).thenReturn(LocalDate.now().plusDays(1));
+        when(trip.getEndDate()).thenReturn(
+                LocalDate.now(SEOUL_CLOCK).plusDays(1)
+        );
         User user = new User(null, userPublicId, "여행자");
         TripMember member = TripMember.createMember(trip, user);
         ReflectionTestUtils.setField(member, "id", 21L);
@@ -379,7 +391,7 @@ class PhotoMissionPhotoManagementTransactionServiceTest {
     }
 
     private LocalDateTime now() {
-        return LocalDateTime.now();
+        return LocalDateTime.now(SEOUL_CLOCK);
     }
 
     private record Fixture(

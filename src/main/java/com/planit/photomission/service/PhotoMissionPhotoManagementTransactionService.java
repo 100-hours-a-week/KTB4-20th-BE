@@ -11,9 +11,11 @@ import com.planit.photomission.repository.MissionGroupStateRepository;
 import com.planit.photomission.repository.MissionPhotoRepository;
 import com.planit.repository.TripMemberRepository;
 import com.planit.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -25,17 +27,20 @@ public class PhotoMissionPhotoManagementTransactionService {
     private final MissionGroupStateRepository groupStateRepository;
     private final UserRepository userRepository;
     private final TripMemberRepository tripMemberRepository;
+    private final Clock clock;
 
     public PhotoMissionPhotoManagementTransactionService(
             MissionPhotoRepository photoRepository,
             MissionGroupStateRepository groupStateRepository,
             UserRepository userRepository,
-            TripMemberRepository tripMemberRepository
+            TripMemberRepository tripMemberRepository,
+            @Qualifier("photoMissionClock") Clock clock
     ) {
         this.photoRepository = photoRepository;
         this.groupStateRepository = groupStateRepository;
         this.userRepository = userRepository;
         this.tripMemberRepository = tripMemberRepository;
+        this.clock = clock;
     }
 
     @Transactional
@@ -70,7 +75,7 @@ public class PhotoMissionPhotoManagementTransactionService {
             throw new BusinessException(ErrorCode.ACCESS_DENIED);
         }
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         if (photo.getMission().isExpired(now)) {
             throw new BusinessException(
                     ErrorCode.PHOTO_MISSION_SUBMISSION_NOT_ALLOWED

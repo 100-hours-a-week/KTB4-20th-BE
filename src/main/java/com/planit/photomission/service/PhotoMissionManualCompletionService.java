@@ -14,9 +14,11 @@ import com.planit.photomission.repository.MissionPhotoRepository;
 import com.planit.photomission.repository.MissionRepository;
 import com.planit.repository.TripMemberRepository;
 import com.planit.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -29,6 +31,7 @@ public class PhotoMissionManualCompletionService {
     private final MissionPhotoRepository photoRepository;
     private final UserRepository userRepository;
     private final TripMemberRepository tripMemberRepository;
+    private final Clock clock;
 
     public PhotoMissionManualCompletionService(
             MissionRepository missionRepository,
@@ -36,7 +39,8 @@ public class PhotoMissionManualCompletionService {
             MissionGroupStateRepository groupStateRepository,
             MissionPhotoRepository photoRepository,
             UserRepository userRepository,
-            TripMemberRepository tripMemberRepository
+            TripMemberRepository tripMemberRepository,
+            @Qualifier("photoMissionClock") Clock clock
     ) {
         this.missionRepository = missionRepository;
         this.participationRepository = participationRepository;
@@ -44,6 +48,7 @@ public class PhotoMissionManualCompletionService {
         this.photoRepository = photoRepository;
         this.userRepository = userRepository;
         this.tripMemberRepository = tripMemberRepository;
+        this.clock = clock;
     }
 
     @Transactional
@@ -53,7 +58,7 @@ public class PhotoMissionManualCompletionService {
                         ErrorCode.RESOURCE_NOT_FOUND
                 ));
         TripMember member = findActiveMember(userPublicId, mission);
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         if (mission.isExpired(now)) {
             throw notAllowed();
         }

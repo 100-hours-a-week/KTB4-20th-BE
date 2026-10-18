@@ -27,8 +27,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -41,6 +44,12 @@ class PhotoMissionManualCompletionServiceTest {
 
     private static final UUID USER_PUBLIC_ID =
             UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
+    private static final LocalDateTime SEOUL_NOW =
+            LocalDateTime.of(2026, 10, 18, 10, 0);
+    private static final Clock SEOUL_CLOCK = Clock.fixed(
+            Instant.parse("2026-10-18T01:00:00Z"),
+            ZoneId.of("Asia/Seoul")
+    );
 
     private MissionRepository missionRepository;
     private MissionParticipationRepository participationRepository;
@@ -64,7 +73,8 @@ class PhotoMissionManualCompletionServiceTest {
                 groupStateRepository,
                 photoRepository,
                 userRepository,
-                tripMemberRepository
+                tripMemberRepository,
+                SEOUL_CLOCK
         );
     }
 
@@ -86,6 +96,7 @@ class PhotoMissionManualCompletionServiceTest {
                 .isEqualTo(MissionCompletionStatus.COMPLETED);
         assertThat(participation.getCompletionMethod())
                 .isEqualTo(MissionCompletionMethod.MANUAL);
+        assertThat(participation.getCompletedAt()).isEqualTo(SEOUL_NOW);
     }
 
     @DisplayName("단체 미션은 활성 멤버가 직접 완료하면 가장 오래된 사진을 대표로 지정한다")
@@ -112,6 +123,7 @@ class PhotoMissionManualCompletionServiceTest {
                 .isEqualTo(MissionCompletionStatus.COMPLETED);
         assertThat(state.getCompletionMethod())
                 .isEqualTo(MissionCompletionMethod.MANUAL);
+        assertThat(state.getCompletedAt()).isEqualTo(SEOUL_NOW);
         assertThat(oldest.getRepresentativeSlot()).isEqualTo((byte) 1);
     }
 

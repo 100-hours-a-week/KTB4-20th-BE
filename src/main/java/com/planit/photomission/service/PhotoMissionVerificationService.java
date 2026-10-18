@@ -4,10 +4,12 @@ import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
 import com.planit.photomission.ai.PhotoMissionAiClient;
 import com.planit.photomission.ai.PhotoMissionVerifyResponse;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 
 @Service
@@ -18,18 +20,44 @@ public class PhotoMissionVerificationService {
     private final PhotoMissionVerificationTransactionService
             transactionService;
     private final PhotoMissionAiClient aiClient;
+    private final Clock clock;
 
     public PhotoMissionVerificationService(
             PhotoMissionVerificationTransactionService transactionService,
-            PhotoMissionAiClient aiClient
+            PhotoMissionAiClient aiClient,
+            @Qualifier("photoMissionClock") Clock clock
     ) {
         this.transactionService = transactionService;
         this.aiClient = aiClient;
+        this.clock = clock;
     }
 
     public PhotoMissionVerifyResponse verify(Long missionPhotoId) {
         PhotoMissionVerificationTransactionService.PreparedVerification
                 prepared = transactionService.prepare(missionPhotoId);
+
+        return execute(prepared);
+    }
+
+    public void retry(Long evaluationId, LocalDateTime retriedAt) {
+        PhotoMissionVerificationTransactionService.PreparedVerification prepared;
+        try {
+            prepared = transactionService.prepareRetry(
+                    evaluationId,
+                    retriedAt
+            );
+        } catch (PhotoMissionVerificationTransactionService
+                .RetryUnavailableException exception) {
+            transactionService.discardRetry(evaluationId, retriedAt);
+            return;
+        }
+        execute(prepared);
+    }
+
+    private PhotoMissionVerifyResponse execute(
+            PhotoMissionVerificationTransactionService
+                    .PreparedVerification prepared
+    ) {
 
         PhotoMissionVerifyResponse response;
         try {
@@ -94,7 +122,7 @@ public class PhotoMissionVerificationService {
                     : response.getResponseHeaders().getFirst("Retry-After");
             delaySeconds = parseRetryAfter(retryAfter);
         }
-        return LocalDateTime.now().plusSeconds(delaySeconds);
+        return LocalDateTime.now(clock).plusSeconds(delaySeconds);
     }
 
     private int parseRetryAfter(String retryAfter) {
