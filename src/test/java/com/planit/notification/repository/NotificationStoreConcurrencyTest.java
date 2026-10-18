@@ -13,6 +13,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -72,6 +73,67 @@ class NotificationStoreConcurrencyTest {
         }
     }
 
+    @DisplayName("같은 알림을 동시에 수신 확인해도 최초 전달 시각을 함께 반환한다")
+    @Test
+    void concurrentlyAcknowledgesDeliveryOnce() throws Exception {
+        User recipient = userRepository.save(new User(
+                null,
+                UUID.randomUUID(),
+                "알림ACK동시성테스트"
+        ));
+        Notification notification = notification(recipient, "수신 확인 알림");
+        Long notificationId = notificationStore.saveIdempotently(notification);
+        LocalDateTime firstAttempt = LocalDateTime.of(
+                2026,
+                10,
+                17,
+                11,
+                0
+        );
+        LocalDateTime secondAttempt = firstAttempt.plusSeconds(1);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            List<Future<Optional<LocalDateTime>>> results = List.of(
+                    executor.submit(() -> acknowledgeAfterStart(
+                            notificationId,
+                            recipient.getId(),
+                            firstAttempt,
+                            ready,
+                            start
+                    )),
+                    executor.submit(() -> acknowledgeAfterStart(
+                            notificationId,
+                            recipient.getId(),
+                            secondAttempt,
+                            ready,
+                            start
+                    ))
+            );
+            ready.await();
+            start.countDown();
+
+            LocalDateTime firstResult = results.get(0).get().orElseThrow();
+            LocalDateTime secondResult = results.get(1).get().orElseThrow();
+            LocalDateTime stored = jdbcTemplate.queryForObject(
+                    "SELECT delivered_at FROM notifications WHERE id = ?",
+                    LocalDateTime.class,
+                    notificationId
+            );
+
+            assertThat(firstResult).isEqualTo(secondResult);
+            assertThat(stored).isEqualTo(firstResult);
+            assertThat(stored).isIn(firstAttempt, secondAttempt);
+        } finally {
+            jdbcTemplate.update(
+                    "DELETE FROM notifications WHERE id = ?",
+                    notificationId
+            );
+            userRepository.deleteById(recipient.getId());
+        }
+    }
+
     private Long saveAfterStart(
             Notification notification,
             CountDownLatch ready,
@@ -80,6 +142,22 @@ class NotificationStoreConcurrencyTest {
         ready.countDown();
         start.await();
         return notificationStore.saveIdempotently(notification);
+    }
+
+    private Optional<LocalDateTime> acknowledgeAfterStart(
+            Long notificationId,
+            Long recipientId,
+            LocalDateTime acknowledgedAt,
+            CountDownLatch ready,
+            CountDownLatch start
+    ) throws InterruptedException {
+        ready.countDown();
+        start.await();
+        return notificationStore.acknowledgeDelivery(
+                notificationId,
+                recipientId,
+                acknowledgedAt
+        );
     }
 
     private Notification notification(User recipient, String title) {

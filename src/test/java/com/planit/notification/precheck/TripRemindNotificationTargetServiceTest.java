@@ -3,8 +3,10 @@ package com.planit.notification.precheck;
 import com.planit.domain.Region;
 import com.planit.domain.Trip;
 import com.planit.domain.TripMember;
+import com.planit.domain.TripMemberRole;
 import com.planit.domain.User;
 import com.planit.notification.domain.NotificationType;
+import com.planit.notification.domain.WeatherCondition;
 import com.planit.repository.TripMemberRepository;
 import com.planit.repository.TripRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -52,10 +54,14 @@ class TripRemindNotificationTargetServiceTest {
                 targetDate,
                 targetDate.plusDays(2)
         );
-        User normalRecipient = mock(User.class);
-        User issueRecipient = mock(User.class);
-        TripMember normalMember = member(normalTrip, normalRecipient);
-        TripMember issueMember = member(issueTrip, issueRecipient);
+        User normalRecipient = user("일반멤버");
+        User normalHost = user("서울방장");
+        User issueHost = user("Daniel");
+        User issueRecipient = user("채령");
+        TripMember normalMember = member(normalTrip, normalRecipient, false);
+        TripMember normalHostMember = member(normalTrip, normalHost, true);
+        TripMember issueHostMember = member(issueTrip, issueHost, true);
+        TripMember issueMember = member(issueTrip, issueRecipient, false);
 
         when(precheckStore.find(targetDate)).thenReturn(Optional.of(
                 new TripRemindPrecheckSnapshot(cache(targetDate), 1_000L)
@@ -63,7 +69,12 @@ class TripRemindNotificationTargetServiceTest {
         when(tripRepository.findActiveTripsStartingOn(targetDate))
                 .thenReturn(List.of(normalTrip, issueTrip));
         when(tripMemberRepository.findActiveMembersByTripIds(List.of(1L, 2L)))
-                .thenReturn(List.of(normalMember, issueMember));
+                .thenReturn(List.of(
+                        normalMember,
+                        normalHostMember,
+                        issueHostMember,
+                        issueMember
+                ));
 
         List<TripRemindNotificationTarget> targets =
                 service.findTargets(targetDate);
@@ -72,12 +83,75 @@ class TripRemindNotificationTargetServiceTest {
                 new TripRemindNotificationTarget(
                         normalTrip,
                         normalRecipient,
-                        NotificationType.TRIP_D1
+                        TripMemberRole.MEMBER,
+                        NotificationType.TRIP_D1,
+                        null,
+                        "서울방장"
+                ),
+                new TripRemindNotificationTarget(
+                        normalTrip,
+                        normalHost,
+                        TripMemberRole.HOST,
+                        NotificationType.TRIP_D1,
+                        null,
+                        "서울방장"
+                ),
+                new TripRemindNotificationTarget(
+                        issueTrip,
+                        issueHost,
+                        TripMemberRole.HOST,
+                        NotificationType.TRIP_WEATHER_ALERT,
+                        WeatherCondition.HEAVY_RAIN,
+                        "Daniel"
                 ),
                 new TripRemindNotificationTarget(
                         issueTrip,
                         issueRecipient,
-                        NotificationType.TRIP_WEATHER_ALERT
+                        TripMemberRole.MEMBER,
+                        NotificationType.TRIP_WEATHER_ALERT,
+                        WeatherCondition.HEAVY_RAIN,
+                        "Daniel"
+                )
+        );
+    }
+
+    @DisplayName("인식할 수 없는 날씨 사유만 있으면 날씨 조건 없이 이상 기후 알림을 만든다")
+    @Test
+    void keepsWeatherAlertWithoutRecognizedCondition() {
+        LocalDate targetDate = LocalDate.of(2026, 10, 16);
+        Trip trip = trip(3L, "REGION-JEJU", targetDate, targetDate);
+        User host = user("제주방장");
+        TripMember hostMember = member(trip, host, true);
+        when(precheckStore.find(targetDate)).thenReturn(Optional.of(
+                new TripRemindPrecheckSnapshot(
+                        new TripRemindPrecheckCache(
+                                Instant.parse("2026-10-15T01:00:00Z"),
+                                TripRemindNotificationWorkflowStatus.PRECHECKED,
+                                List.of(new TripRemindPrecheckCache.Forecast(
+                                        targetDate,
+                                        List.of(region(
+                                                "REGION-JEJU",
+                                                true,
+                                                "unknown_weather"
+                                        ))
+                                ))
+                        ),
+                        1_000L
+                )
+        ));
+        when(tripRepository.findActiveTripsStartingOn(targetDate))
+                .thenReturn(List.of(trip));
+        when(tripMemberRepository.findActiveMembersByTripIds(List.of(3L)))
+                .thenReturn(List.of(hostMember));
+
+        assertThat(service.findTargets(targetDate)).containsExactly(
+                new TripRemindNotificationTarget(
+                        trip,
+                        host,
+                        TripMemberRole.HOST,
+                        NotificationType.TRIP_WEATHER_ALERT,
+                        null,
+                        "제주방장"
                 )
         );
     }
@@ -125,11 +199,18 @@ class TripRemindNotificationTargetServiceTest {
         return trip;
     }
 
-    private TripMember member(Trip trip, User user) {
+    private TripMember member(Trip trip, User user, boolean host) {
         TripMember member = mock(TripMember.class);
         when(member.getTrip()).thenReturn(trip);
         when(member.getUser()).thenReturn(user);
+        when(member.isCurrentHost()).thenReturn(host);
         return member;
+    }
+
+    private User user(String username) {
+        User user = mock(User.class);
+        when(user.getUsername()).thenReturn(username);
+        return user;
     }
 
     private TripRemindPrecheckCache cache(LocalDate targetDate) {
@@ -148,7 +229,12 @@ class TripRemindNotificationTargetServiceTest {
                                 targetDate.plusDays(2),
                                 List.of(
                                         region("REGION-SEOUL", false),
-                                        region("REGION-BUSAN", true)
+                                        region(
+                                                "REGION-BUSAN",
+                                                true,
+                                                "heat",
+                                                "heavy_rain"
+                                        )
                                 )
                         )
                 )
@@ -157,12 +243,18 @@ class TripRemindNotificationTargetServiceTest {
 
     private TripRemindPrecheckCache.RegionForecast region(
             String code,
-            boolean hasIssue
+            boolean hasIssue,
+            String... weatherDetails
     ) {
         return new TripRemindPrecheckCache.RegionForecast(
                 code,
                 hasIssue,
-                List.of()
+                java.util.Arrays.stream(weatherDetails)
+                        .map(detail -> new TripRemindPrecheckCache.Reason(
+                                "weather_risk",
+                                detail
+                        ))
+                        .toList()
         );
     }
 }
