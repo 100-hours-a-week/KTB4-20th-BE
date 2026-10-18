@@ -10,4 +10,10 @@ public interface ScheduleRepository extends JpaRepository<Schedule, Long> {
     boolean existsByTripIdAndActiveConfirmedSlot(Long tripId, Byte activeConfirmedSlot);
     Optional<Schedule> findByTripIdAndActiveConfirmedSlot(Long tripId, Byte activeConfirmedSlot);
     List<Schedule> findByTripId(Long tripId);
+    List<Schedule> findByTripIdAndStatus(Long tripId, String status);
+    Optional<Schedule> findByIdAndTripIdAndStatus(
+            Long id,
+            Long tripId,
+            String status
+    );
 }
