@@ -49,7 +49,9 @@ import static com.planit.schedule.route.HaversineDistanceCalculator.distanceMete
 public class ScheduleServiceImpl implements ScheduleService {
 
     private static final byte ACTIVE_CONFIRMED_SLOT = 1;
-    private static final int MAXIMUM_SCHEDULE_STOPS = 10;
+    /** 하루(일차)에 둘 수 있는 활성 장소 수 범위 */
+    private static final int MINIMUM_DAY_STOPS = 3;
+    private static final int MAXIMUM_DAY_STOPS = 10;
     private static final ZoneId SEOUL_ZONE = ZoneId.of("Asia/Seoul");
 
     private final UserRepository userRepository;
@@ -317,20 +319,16 @@ public class ScheduleServiceImpl implements ScheduleService {
         if ("REMOVED".equals(target.getStatus())) {
             return deleteResponse(schedule, target, day);
         }
-        if (scheduleVisitRepository.countByDay_Schedule_IdAndStatus(
-                schedule.getId(),
-                "ACTIVE"
-        ) <= 3) {
-            throw new BusinessException(
-                    ErrorCode.SCHEDULE_MINIMUM_STOPS_REQUIRED
-            );
-        }
-
         List<ScheduleVisit> visits = scheduleVisitRepository
                 .findByDayIdAndStatusOrderByVisitOrderAsc(
                         day.getId(),
                         "ACTIVE"
                 );
+        if (visits.size() <= MINIMUM_DAY_STOPS) {
+            throw new BusinessException(
+                    ErrorCode.SCHEDULE_MINIMUM_STOPS_REQUIRED
+            );
+        }
         int targetIndex = findVisitIndex(visits, target.getId());
         if (targetIndex < 0) {
             throw new BusinessException(ErrorCode.SCHEDULE_STOP_NOT_FOUND);
@@ -380,20 +378,16 @@ public class ScheduleServiceImpl implements ScheduleService {
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.SCHEDULE_DAY_NOT_FOUND
                 ));
-        if (scheduleVisitRepository.countByDay_Schedule_IdAndStatus(
-                schedule.getId(),
-                "ACTIVE"
-        ) >= MAXIMUM_SCHEDULE_STOPS) {
-            throw new BusinessException(
-                    ErrorCode.SCHEDULE_MAXIMUM_STOPS_EXCEEDED
-            );
-        }
-
         List<ScheduleVisit> visits = scheduleVisitRepository
                 .findByDayIdAndStatusOrderByVisitOrderAsc(
                         day.getId(),
                         "ACTIVE"
                 );
+        if (visits.size() >= MAXIMUM_DAY_STOPS) {
+            throw new BusinessException(
+                    ErrorCode.SCHEDULE_MAXIMUM_STOPS_EXCEEDED
+            );
+        }
         int position = request.position();
         if (position > visits.size() + 1) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST);
