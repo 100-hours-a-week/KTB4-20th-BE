@@ -17,10 +17,12 @@ import com.planit.photomission.repository.MissionRepository;
 import com.planit.repository.ImageFileRepository;
 import com.planit.repository.TripMemberRepository;
 import com.planit.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -34,6 +36,7 @@ public class PhotoMissionSubmissionTransactionService {
     private final UserRepository userRepository;
     private final TripMemberRepository tripMemberRepository;
     private final ImageFileRepository imageFileRepository;
+    private final Clock clock;
 
     public PhotoMissionSubmissionTransactionService(
             MissionRepository missionRepository,
@@ -42,7 +45,8 @@ public class PhotoMissionSubmissionTransactionService {
             MissionPhotoRepository photoRepository,
             UserRepository userRepository,
             TripMemberRepository tripMemberRepository,
-            ImageFileRepository imageFileRepository
+            ImageFileRepository imageFileRepository,
+            @Qualifier("photoMissionClock") Clock clock
     ) {
         this.missionRepository = missionRepository;
         this.participationRepository = participationRepository;
@@ -51,6 +55,7 @@ public class PhotoMissionSubmissionTransactionService {
         this.userRepository = userRepository;
         this.tripMemberRepository = tripMemberRepository;
         this.imageFileRepository = imageFileRepository;
+        this.clock = clock;
     }
 
     @Transactional
@@ -83,8 +88,11 @@ public class PhotoMissionSubmissionTransactionService {
                         ErrorCode.TRIP_MEMBER_REQUIRED
                 ));
 
-        LocalDateTime now = LocalDateTime.now();
-        if (mission.isExpired(now)) {
+        LocalDateTime now = LocalDateTime.now(clock);
+        if (!PhotoMissionAvailabilityPolicy.isPublished(
+                mission.getScheduleDay().getScheduleDate(),
+                now
+        ) || mission.isExpired(now)) {
             throw submissionNotAllowed();
         }
         ImageFile imageFile = imageFileRepository.save(ImageFile.mission(

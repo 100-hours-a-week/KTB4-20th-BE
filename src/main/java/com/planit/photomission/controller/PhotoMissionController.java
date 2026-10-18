@@ -6,6 +6,7 @@ import com.planit.photomission.dto.PhotoMissionAlbumResponse;
 import com.planit.photomission.dto.PhotoMissionCompletionResponse;
 import com.planit.photomission.dto.PhotoMissionDetailResponse;
 import com.planit.photomission.dto.PhotoMissionListResponse;
+import com.planit.photomission.dto.PhotoMissionPhotoDetailResponse;
 import com.planit.photomission.service.PhotoMissionQueryService;
 import com.planit.photomission.service.PhotoMissionSubmissionService;
 import lombok.RequiredArgsConstructor;
@@ -82,6 +83,23 @@ public class PhotoMissionController {
                 queryService.getMissionDetail(
                         authentication.getName(),
                         missionId
+                )
+        );
+    }
+
+    @GetMapping("/photomissions/{missionId}/photos/{photoId}")
+    public ApiResponse<PhotoMissionPhotoDetailResponse> getPhotoDetail(
+            Authentication authentication,
+            @PathVariable Long missionId,
+            @PathVariable Long photoId
+    ) {
+        return ApiResponse.success(
+                "PHOTO_MISSION_PHOTO_DETAIL_FOUND",
+                "포토미션 사진 상세를 조회했습니다.",
+                queryService.getPhotoDetail(
+                        authentication.getName(),
+                        missionId,
+                        photoId
                 )
         );
     }

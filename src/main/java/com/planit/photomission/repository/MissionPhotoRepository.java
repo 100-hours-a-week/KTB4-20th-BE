@@ -52,4 +52,26 @@ public interface MissionPhotoRepository
     List<MissionPhoto> findVisibleByMissionIdIn(
             @Param("missionIds") List<Long> missionIds
     );
+
+    @Query("""
+            SELECT photo
+            FROM MissionPhoto photo
+            JOIN FETCH photo.mission mission
+            JOIN FETCH mission.scheduleDay
+            JOIN FETCH mission.scheduleVisit visit
+            JOIN FETCH visit.place
+            JOIN FETCH photo.submittedBy submitter
+            JOIN FETCH submitter.user
+            JOIN FETCH photo.imageFile
+            LEFT JOIN FETCH photo.participation
+            WHERE mission.id = :missionId
+              AND photo.id = :photoId
+              AND photo.deletedAt IS NULL
+              AND photo.replacedAt IS NULL
+              AND (photo.activeSlot = 1 OR photo.participation IS NULL)
+            """)
+    Optional<MissionPhoto> findVisibleDetailByMissionIdAndPhotoId(
+            @Param("missionId") Long missionId,
+            @Param("photoId") Long photoId
+    );
 }

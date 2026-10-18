@@ -4,6 +4,8 @@ import com.planit.domain.ImageFile;
 import com.planit.domain.Trip;
 import com.planit.domain.TripMember;
 import com.planit.domain.User;
+import com.planit.global.error.BusinessException;
+import com.planit.global.error.ErrorCode;
 import com.planit.image.storage.ImageStorage;
 import com.planit.photomission.domain.Mission;
 import com.planit.photomission.domain.MissionCompletionMethod;
@@ -19,6 +21,7 @@ import com.planit.photomission.dto.PhotoMissionAlbumResponse;
 import com.planit.photomission.dto.PhotoMissionCompletionResponse;
 import com.planit.photomission.dto.PhotoMissionDetailResponse;
 import com.planit.photomission.dto.PhotoMissionListResponse;
+import com.planit.photomission.dto.PhotoMissionPhotoDetailResponse;
 import com.planit.photomission.repository.MissionGroupStateRepository;
 import com.planit.photomission.repository.MissionParticipationRepository;
 import com.planit.photomission.repository.MissionPhotoRepository;
@@ -41,6 +44,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -245,6 +249,101 @@ class PhotoMissionQueryServiceTest {
         assertThat(response.photos().get(0).photoId()).isEqualTo(301L);
     }
 
+    @DisplayName("앨범 사진 상세는 미션·장소·제출자 정보를 반환한다")
+    @Test
+    void getsPhotoDetail() {
+        ScheduleDay day = day(1, today.minusDays(1));
+        Mission mission = mission(
+                101L, day, 1, MissionScope.PERSONAL, "유적지 전경 담기"
+        );
+        MissionParticipation participation = participation(
+                201L, mission, myMember, MissionCompletionStatus.COMPLETED
+        );
+        MissionPhoto photo = photo(
+                301L, mission, myMember, false, "mine.jpg"
+        );
+        when(photo.getParticipation()).thenReturn(participation);
+        when(photoRepository.findVisibleDetailByMissionIdAndPhotoId(101L, 301L))
+                .thenReturn(Optional.of(photo));
+        when(imageStorage.createReadUrl("mine.jpg"))
+                .thenReturn("https://image/mine.jpg");
+
+        PhotoMissionPhotoDetailResponse response = service.getPhotoDetail(
+                UUID.randomUUID().toString(),
+                101L,
+                301L
+        );
+
+        assertThat(response.photoId()).isEqualTo(301L);
+        assertThat(response.imageUrl()).isEqualTo("https://image/mine.jpg");
+        assertThat(response.mission().missionId()).isEqualTo(101L);
+        assertThat(response.mission().scope()).isEqualTo("PERSONAL");
+        assertThat(response.place().placeId()).isEqualTo("place-101");
+        assertThat(response.place().placeName()).isEqualTo("장소-101");
+        assertThat(response.submittedBy().username()).isEqualTo("나");
+    }
+
+    @DisplayName("다른 멤버의 개인 미션 사진 상세는 조회할 수 없다")
+    @Test
+    void rejectsOtherMembersPersonalPhotoDetail() {
+        Mission mission = mission(
+                101L,
+                day(1, today.minusDays(1)),
+                1,
+                MissionScope.PERSONAL,
+                "유적지 전경 담기"
+        );
+        MissionParticipation participation = participation(
+                201L,
+                mission,
+                otherMember,
+                MissionCompletionStatus.COMPLETED
+        );
+        MissionPhoto photo = photo(
+                301L, mission, otherMember, false, "others.jpg"
+        );
+        when(photo.getParticipation()).thenReturn(participation);
+        when(photoRepository.findVisibleDetailByMissionIdAndPhotoId(101L, 301L))
+                .thenReturn(Optional.of(photo));
+
+        assertThatThrownBy(() -> service.getPhotoDetail(
+                UUID.randomUUID().toString(),
+                101L,
+                301L
+        ))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception ->
+                        ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
+    }
+
+    @DisplayName("공개 전 Day의 사진 상세는 조회할 수 없다")
+    @Test
+    void rejectsUnpublishedPhotoDetail() {
+        Mission mission = mission(
+                101L,
+                day(3, today.plusDays(1)),
+                1,
+                MissionScope.GROUP,
+                "미래 미션"
+        );
+        MissionPhoto photo = photo(
+                301L, mission, otherMember, true, "future.jpg"
+        );
+        when(photoRepository.findVisibleDetailByMissionIdAndPhotoId(101L, 301L))
+                .thenReturn(Optional.of(photo));
+
+        assertThatThrownBy(() -> service.getPhotoDetail(
+                UUID.randomUUID().toString(),
+                101L,
+                301L
+        ))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception ->
+                        ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
+    }
+
     @DisplayName("아직 공개되지 않은 미래 Day는 미션을 반환하지 않는다")
     @Test
     void hidesFutureDayMissions() {
@@ -280,6 +379,9 @@ class PhotoMissionQueryServiceTest {
         when(groupState.getMission()).thenReturn(group);
         when(groupState.getStatus())
                 .thenReturn(MissionCompletionStatus.COMPLETED);
+        LocalDateTime groupCompletedAt = secondDay.getScheduleDate()
+                .atTime(12, 0);
+        when(groupState.getCompletedAt()).thenReturn(groupCompletedAt);
 
         MissionPhoto myPhoto = photo(
                 301L, personal, myMember, false, "mine.jpg"
@@ -298,6 +400,11 @@ class PhotoMissionQueryServiceTest {
         MissionPhoto failedAttempt = photo(
                 305L, group, myMember, false, "group-failed.jpg"
         );
+        when(representative.getSubmittedAt()).thenReturn(groupCompletedAt);
+        when(additional.getSubmittedAt())
+                .thenReturn(groupCompletedAt.plusMinutes(1));
+        when(failedAttempt.getSubmittedAt())
+                .thenReturn(groupCompletedAt.minusMinutes(1));
 
         when(missionRepository.findByTripIdOrderByDayAndMissionOrder(10L))
                 .thenReturn(List.of(personal, group));
@@ -315,7 +422,7 @@ class PhotoMissionQueryServiceTest {
                 ));
         when(evaluationRepository.findSuccessfulMissionPhotoIds(
                 List.of(301L, 302L, 303L, 304L, 305L)
-        )).thenReturn(List.of(301L, 302L, 303L, 304L));
+        )).thenReturn(List.of(301L, 302L, 303L));
         when(imageStorage.createReadUrl("mine.jpg"))
                 .thenReturn("https://image/mine.jpg");
         when(imageStorage.createReadUrl("group-main.jpg"))
@@ -607,6 +714,7 @@ class PhotoMissionQueryServiceTest {
         when(mission.getScheduleVisit()).thenReturn(visit);
         when(visit.getPlace()).thenReturn(place);
         when(place.getGooglePlaceId()).thenReturn("place-" + id);
+        when(place.getName()).thenReturn("장소-" + id);
         return mission;
     }
 
