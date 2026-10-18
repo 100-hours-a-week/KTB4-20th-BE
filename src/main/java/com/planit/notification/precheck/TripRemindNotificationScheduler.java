@@ -1,8 +1,8 @@
 package com.planit.notification.precheck;
 
-import lombok.RequiredArgsConstructor;
 import net.javacrumbs.shedlock.core.LockAssert;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -10,7 +10,6 @@ import java.time.Clock;
 import java.time.LocalDate;
 
 @Component
-@RequiredArgsConstructor
 public class TripRemindNotificationScheduler {
 
     static final String LOCK_NAME = "tripRemindNotificationWorkflow";
@@ -18,6 +17,14 @@ public class TripRemindNotificationScheduler {
 
     private final TripRemindNotificationWorkflow workflow;
     private final Clock clock;
+
+    public TripRemindNotificationScheduler(
+            TripRemindNotificationWorkflow workflow,
+            @Qualifier("tripRemindClock") Clock clock
+    ) {
+        this.workflow = workflow;
+        this.clock = clock;
+    }
 
     @Scheduled(cron = "0 0 10 * * *", zone = SEOUL_ZONE)
     @SchedulerLock(
