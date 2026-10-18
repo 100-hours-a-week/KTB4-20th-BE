@@ -2,7 +2,7 @@ package com.planit.notification.delivery;
 
 import com.planit.notification.domain.NotificationType;
 import com.planit.notification.repository.NotificationRepository;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,7 +12,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
-@RequiredArgsConstructor
 public class NotificationPublishTargetService {
 
     private static final List<NotificationType> PUBLISHABLE_TYPES = List.of(
@@ -22,6 +21,14 @@ public class NotificationPublishTargetService {
 
     private final NotificationRepository notificationRepository;
     private final Clock clock;
+
+    public NotificationPublishTargetService(
+            NotificationRepository notificationRepository,
+            @Qualifier("tripRemindClock") Clock clock
+    ) {
+        this.notificationRepository = notificationRepository;
+        this.clock = clock;
+    }
 
     @Transactional(readOnly = true)
     public List<NotificationPublishEvent> findTodayUndelivered() {
