@@ -12,6 +12,7 @@ import com.planit.photomission.domain.MissionCompletionStatus;
 import com.planit.photomission.domain.MissionGroupState;
 import com.planit.photomission.domain.MissionParticipation;
 import com.planit.photomission.domain.MissionPhoto;
+import com.planit.photomission.dto.PhotoMissionAlbumResponse;
 import com.planit.photomission.dto.PhotoMissionDetailResponse;
 import com.planit.photomission.dto.PhotoMissionListResponse;
 import com.planit.photomission.repository.MissionGroupStateRepository;
@@ -32,9 +33,11 @@ import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -209,6 +212,155 @@ public class PhotoMissionQueryService {
                 completedAt,
                 members,
                 photos
+        );
+    }
+
+    public PhotoMissionAlbumResponse getAlbum(
+            String userPublicId,
+            Long tripId
+    ) {
+        User user = requireUser(userPublicId);
+        Trip trip = requireTrip(tripId);
+        TripMember viewer = requireActiveMember(
+                tripMemberRepository.findActiveMembersByTrip(trip),
+                user
+        );
+        List<Mission> missions = missionRepository
+                .findByTripIdOrderByDayAndMissionOrder(tripId);
+        if (missions.isEmpty()) {
+            return emptyAlbum(trip);
+        }
+
+        List<Long> missionIds = missions.stream().map(Mission::getId).toList();
+        Map<Long, List<MissionParticipation>> participationsByMission =
+                participationRepository.findByMissionIdIn(missionIds)
+                        .stream()
+                        .collect(Collectors.groupingBy(
+                                participation -> participation.getMission()
+                                        .getId()
+                        ));
+        Map<Long, MissionGroupState> groupStateByMission =
+                groupStateRepository.findByMissionIdIn(missionIds)
+                        .stream()
+                        .collect(Collectors.toMap(
+                                state -> state.getMission().getId(),
+                                Function.identity()
+                        ));
+        Map<Long, List<MissionPhoto>> photosByMission = photoRepository
+                .findVisibleByMissionIdIn(missionIds)
+                .stream()
+                .collect(Collectors.groupingBy(
+                        photo -> photo.getMission().getId()
+                ));
+
+        Map<Integer, List<PhotoMissionAlbumResponse.MissionAlbum>> personal =
+                new LinkedHashMap<>();
+        Map<Integer, List<PhotoMissionAlbumResponse.MissionAlbum>> group =
+                new LinkedHashMap<>();
+        Set<Integer> includedDays = new TreeSet<>();
+        int totalPhotos = 0;
+        int completedMissions = 0;
+
+        for (Mission mission : missions) {
+            List<MissionPhoto> photos = completedAlbumPhotos(
+                    mission,
+                    viewer,
+                    participationsByMission.getOrDefault(
+                            mission.getId(),
+                            List.of()
+                    ),
+                    groupStateByMission.get(mission.getId()),
+                    photosByMission.getOrDefault(mission.getId(), List.of())
+            );
+            if (photos.isEmpty()) {
+                continue;
+            }
+
+            PhotoMissionAlbumResponse.MissionAlbum card = albumCard(
+                    mission,
+                    photos
+            );
+            int day = mission.getScheduleDay().getDayNumber();
+            Map<Integer, List<PhotoMissionAlbumResponse.MissionAlbum>> target =
+                    mission.isPersonal() ? personal : group;
+            target.computeIfAbsent(day, ignored -> new ArrayList<>()).add(card);
+            includedDays.add(day);
+            completedMissions++;
+            totalPhotos += photos.size();
+        }
+
+        List<PhotoMissionAlbumResponse.DayAlbum> days = includedDays.stream()
+                .map(day -> new PhotoMissionAlbumResponse.DayAlbum(
+                        day,
+                        trip.getStartDate().plusDays(day - 1L),
+                        List.copyOf(personal.getOrDefault(day, List.of())),
+                        List.copyOf(group.getOrDefault(day, List.of()))
+                ))
+                .toList();
+        return new PhotoMissionAlbumResponse(
+                trip.getId(),
+                trip.getName(),
+                completedMissions,
+                totalPhotos,
+                days
+        );
+    }
+
+    private PhotoMissionAlbumResponse emptyAlbum(Trip trip) {
+        return new PhotoMissionAlbumResponse(
+                trip.getId(),
+                trip.getName(),
+                0,
+                0,
+                List.of()
+        );
+    }
+
+    private List<MissionPhoto> completedAlbumPhotos(
+            Mission mission,
+            TripMember viewer,
+            List<MissionParticipation> participations,
+            MissionGroupState groupState,
+            List<MissionPhoto> photos
+    ) {
+        if (mission.isPersonal()) {
+            boolean completed = participations.stream()
+                    .filter(participation -> participation.getTripMember()
+                            .getId().equals(viewer.getId()))
+                    .anyMatch(participation -> participation.getStatus()
+                            == MissionCompletionStatus.COMPLETED);
+            if (!completed) {
+                return List.of();
+            }
+            return photos.stream()
+                    .filter(photo -> belongsTo(photo, viewer))
+                    .sorted(photoOrder())
+                    .toList();
+        }
+        if (groupState == null || groupState.getStatus()
+                != MissionCompletionStatus.COMPLETED) {
+            return List.of();
+        }
+        return photos.stream().sorted(photoOrder()).toList();
+    }
+
+    private PhotoMissionAlbumResponse.MissionAlbum albumCard(
+            Mission mission,
+            List<MissionPhoto> photos
+    ) {
+        MissionPhoto thumbnail = photos.get(0);
+        User submitter = thumbnail.getSubmittedBy().getUser();
+        return new PhotoMissionAlbumResponse.MissionAlbum(
+                mission.getId(),
+                mission.getScope().name(),
+                mission.getDescription(),
+                mission.getPrimaryCategory(),
+                imageUrl(thumbnail),
+                photos.size(),
+                new PhotoMissionAlbumResponse.SubmittedBy(
+                        submitter.getPublicId(),
+                        submitter.getUsername()
+                )
         );
     }
 

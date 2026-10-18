@@ -12,6 +12,7 @@ import com.planit.photomission.domain.MissionGroupState;
 import com.planit.photomission.domain.MissionParticipation;
 import com.planit.photomission.domain.MissionPhoto;
 import com.planit.photomission.domain.MissionScope;
+import com.planit.photomission.dto.PhotoMissionAlbumResponse;
 import com.planit.photomission.dto.PhotoMissionDetailResponse;
 import com.planit.photomission.dto.PhotoMissionListResponse;
 import com.planit.photomission.repository.MissionGroupStateRepository;
@@ -37,7 +38,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-@DisplayName("포토미션 목록·상세 조회 서비스")
+@DisplayName("포토미션 목록·상세·앨범 조회 서비스")
 class PhotoMissionQueryServiceTest {
 
     private final UserRepository userRepository = mock(UserRepository.class);
@@ -246,6 +247,79 @@ class PhotoMissionQueryServiceTest {
         assertThat(response.selectedDay().published()).isFalse();
         assertThat(response.selectedDay().missions()).isEmpty();
         assertThat(response.days().get(2).selectable()).isFalse();
+    }
+
+    @DisplayName("앨범은 내 개인 완료 사진과 단체 완료 사진을 Day별로 구분한다")
+    @Test
+    void getsAlbumGroupedByDayAndScope() {
+        ScheduleDay firstDay = day(1, today.minusDays(1));
+        ScheduleDay secondDay = day(2, today);
+        Mission personal = mission(
+                101L, firstDay, 1, MissionScope.PERSONAL, "유적지 전경 담기"
+        );
+        Mission group = mission(
+                102L, secondDay, 1, MissionScope.GROUP, "다 같이 그룹 사진 찍기"
+        );
+        MissionParticipation mine = participation(
+                201L, personal, myMember, MissionCompletionStatus.COMPLETED
+        );
+        MissionParticipation others = participation(
+                202L, personal, otherMember, MissionCompletionStatus.COMPLETED
+        );
+        MissionGroupState groupState = mock(MissionGroupState.class);
+        when(groupState.getMission()).thenReturn(group);
+        when(groupState.getStatus())
+                .thenReturn(MissionCompletionStatus.COMPLETED);
+
+        MissionPhoto myPhoto = photo(
+                301L, personal, myMember, false, "mine.jpg"
+        );
+        when(myPhoto.getParticipation()).thenReturn(mine);
+        MissionPhoto othersPhoto = photo(
+                302L, personal, otherMember, false, "others.jpg"
+        );
+        when(othersPhoto.getParticipation()).thenReturn(others);
+        MissionPhoto representative = photo(
+                303L, group, otherMember, true, "group-main.jpg"
+        );
+        MissionPhoto additional = photo(
+                304L, group, myMember, false, "group-additional.jpg"
+        );
+
+        when(missionRepository.findByTripIdOrderByDayAndMissionOrder(10L))
+                .thenReturn(List.of(personal, group));
+        when(participationRepository.findByMissionIdIn(List.of(101L, 102L)))
+                .thenReturn(List.of(mine, others));
+        when(groupStateRepository.findByMissionIdIn(List.of(101L, 102L)))
+                .thenReturn(List.of(groupState));
+        when(photoRepository.findVisibleByMissionIdIn(List.of(101L, 102L)))
+                .thenReturn(List.of(
+                        myPhoto,
+                        othersPhoto,
+                        representative,
+                        additional
+                ));
+        when(imageStorage.createReadUrl("mine.jpg"))
+                .thenReturn("https://image/mine.jpg");
+        when(imageStorage.createReadUrl("group-main.jpg"))
+                .thenReturn("https://image/group-main.jpg");
+
+        PhotoMissionAlbumResponse response = service.getAlbum(
+                UUID.randomUUID().toString(),
+                10L
+        );
+
+        assertThat(response.completedMissionCount()).isEqualTo(2);
+        assertThat(response.totalPhotoCount()).isEqualTo(3);
+        assertThat(response.days()).hasSize(2);
+        assertThat(response.days().get(0).personalMissions()).hasSize(1);
+        assertThat(response.days().get(0).personalMissions().get(0)
+                .thumbnailUrl()).isEqualTo("https://image/mine.jpg");
+        assertThat(response.days().get(1).groupMissions()).hasSize(1);
+        assertThat(response.days().get(1).groupMissions().get(0)
+                .photoCount()).isEqualTo(2);
+        assertThat(response.days().get(1).groupMissions().get(0)
+                .thumbnailUrl()).isEqualTo("https://image/group-main.jpg");
     }
 
     private TripMember member(Long id, User user, String username) {

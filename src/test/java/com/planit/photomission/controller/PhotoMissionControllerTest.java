@@ -1,6 +1,7 @@
 package com.planit.photomission.controller;
 
 import com.planit.photomission.ai.PhotoMissionVerifyResponse;
+import com.planit.photomission.dto.PhotoMissionAlbumResponse;
 import com.planit.photomission.dto.PhotoMissionDetailResponse;
 import com.planit.photomission.dto.PhotoMissionListResponse;
 import com.planit.photomission.service.PhotoMissionQueryService;
@@ -170,5 +171,30 @@ class PhotoMissionControllerTest {
                 .andExpect(jsonPath("$.data.missionId").value(31))
                 .andExpect(jsonPath("$.data.scope").value("PERSONAL"))
                 .andExpect(jsonPath("$.data.retryCount").value(1));
+    }
+
+    @DisplayName("여행의 개인·단체 포토미션 앨범을 조회한다")
+    @Test
+    void getsPhotoMissionAlbum() throws Exception {
+        when(queryService.getAlbum(any(), any()))
+                .thenReturn(new PhotoMissionAlbumResponse(
+                        10L,
+                        "경주 여행",
+                        2,
+                        3,
+                        List.of()
+                ));
+
+        mockMvc.perform(get("/api/trips/10/photomissions/album")
+                        .principal(new UsernamePasswordAuthenticationToken(
+                                "550e8400-e29b-41d4-a716-446655440000",
+                                ""
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code")
+                        .value("PHOTO_MISSION_ALBUM_FOUND"))
+                .andExpect(jsonPath("$.data.completedMissionCount")
+                        .value(2))
+                .andExpect(jsonPath("$.data.totalPhotoCount").value(3));
     }
 }

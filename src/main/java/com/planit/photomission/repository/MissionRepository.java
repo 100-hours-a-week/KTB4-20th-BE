@@ -21,4 +21,17 @@ public interface MissionRepository extends JpaRepository<Mission, Long> {
             @Param("tripId") Long tripId,
             @Param("dayNumber") byte dayNumber
     );
+
+    @Query("""
+            SELECT mission
+            FROM Mission mission
+            JOIN FETCH mission.scheduleDay scheduleDay
+            WHERE mission.trip.id = :tripId
+            ORDER BY scheduleDay.dayNumber ASC,
+                     mission.missionOrder ASC,
+                     mission.id ASC
+            """)
+    List<Mission> findByTripIdOrderByDayAndMissionOrder(
+            @Param("tripId") Long tripId
+    );
 }

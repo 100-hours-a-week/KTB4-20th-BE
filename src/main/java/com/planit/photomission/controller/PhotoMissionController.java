@@ -2,6 +2,7 @@ package com.planit.photomission.controller;
 
 import com.planit.global.response.ApiResponse;
 import com.planit.photomission.ai.PhotoMissionVerifyResponse;
+import com.planit.photomission.dto.PhotoMissionAlbumResponse;
 import com.planit.photomission.dto.PhotoMissionDetailResponse;
 import com.planit.photomission.dto.PhotoMissionListResponse;
 import com.planit.photomission.service.PhotoMissionQueryService;
@@ -81,6 +82,18 @@ public class PhotoMissionController {
                         authentication.getName(),
                         missionId
                 )
+        );
+    }
+
+    @GetMapping("/trips/{tripId}/photomissions/album")
+    public ApiResponse<PhotoMissionAlbumResponse> getPhotoMissionAlbum(
+            Authentication authentication,
+            @PathVariable Long tripId
+    ) {
+        return ApiResponse.success(
+                "PHOTO_MISSION_ALBUM_FOUND",
+                "포토미션 앨범을 조회했습니다.",
+                queryService.getAlbum(authentication.getName(), tripId)
         );
     }
 }
