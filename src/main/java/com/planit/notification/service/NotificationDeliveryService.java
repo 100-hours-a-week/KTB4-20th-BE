@@ -5,7 +5,7 @@ import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
 import com.planit.notification.repository.NotificationStore;
 import com.planit.repository.UserRepository;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,12 +14,21 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Service
-@RequiredArgsConstructor
 public class NotificationDeliveryService {
 
     private final UserRepository userRepository;
     private final NotificationStore notificationStore;
     private final Clock clock;
+
+    public NotificationDeliveryService(
+            UserRepository userRepository,
+            NotificationStore notificationStore,
+            @Qualifier("tripRemindClock") Clock clock
+    ) {
+        this.userRepository = userRepository;
+        this.notificationStore = notificationStore;
+        this.clock = clock;
+    }
 
     @Transactional
     public void acknowledge(
