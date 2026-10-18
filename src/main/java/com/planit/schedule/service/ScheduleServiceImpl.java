@@ -18,6 +18,8 @@ import com.planit.schedule.domain.ScheduleVisit;
 import com.planit.schedule.dto.ScheduleCandidateDetailResponse;
 import com.planit.schedule.dto.ScheduleCandidateListResponse;
 import com.planit.schedule.dto.ScheduleDetailResponse;
+import com.planit.schedule.dto.ScheduleConfirmRequest;
+import com.planit.schedule.dto.ScheduleConfirmResponse;
 import com.planit.schedule.dto.ScheduleStopAddRequest;
 import com.planit.schedule.dto.ScheduleStopAddResponse;
 import com.planit.schedule.dto.ScheduleStopDeleteResponse;
@@ -31,7 +33,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Comparator;
@@ -58,6 +59,80 @@ public class ScheduleServiceImpl implements ScheduleService {
     private final ScheduleDayRepository scheduleDayRepository;
     private final ScheduleVisitRepository scheduleVisitRepository;
     private final ScheduleLegRepository scheduleLegRepository;
+
+    @Override
+    @Transactional
+    public ScheduleConfirmResponse confirmSchedule(
+            String userPublicId,
+            Long tripId,
+            ScheduleConfirmRequest request
+    ) {
+        User user = findActiveUser(userPublicId);
+        Trip trip = tripRepository.findByIdForUpdate(tripId)
+                .filter(value -> value.getDeletedAt() == null)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.TRIP_NOT_FOUND
+                ));
+        TripMember host = tripMemberAccessService.findActiveHost(
+                trip,
+                user,
+                ErrorCode.TRIP_HOST_REQUIRED
+        );
+        validateScheduleChangeDeadline(trip);
+
+        Schedule selected = scheduleRepository
+                .findByIdAndTripId(request.scheduleId(), tripId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.SCHEDULE_CANDIDATE_NOT_FOUND
+                ));
+        Schedule latest = scheduleRepository
+                .findFirstByTripIdOrderByCreatedAtDesc(tripId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.SCHEDULE_CANDIDATE_NOT_FOUND
+                ));
+        if (!isCandidateStrategy(selected)
+                || !selected.getCreatedAt().equals(latest.getCreatedAt())) {
+            throw new BusinessException(
+                    ErrorCode.SCHEDULE_CANDIDATES_SUPERSEDED
+            );
+        }
+        if (!selected.isActive()) {
+            scheduleRepository
+                    .findByTripIdAndActiveConfirmedSlot(
+                            tripId,
+                            ACTIVE_CONFIRMED_SLOT
+                    )
+                    .ifPresent(Schedule::supersede);
+            scheduleRepository.flush();
+            selected.confirm(host, LocalDateTime.now(SEOUL_ZONE));
+        }
+
+        return toConfirmResponse(trip, selected);
+    }
+
+    private boolean isCandidateStrategy(Schedule schedule) {
+        try {
+            ScheduleStrategy.valueOf(schedule.getStrategy());
+            return true;
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
+    }
+
+    private ScheduleConfirmResponse toConfirmResponse(
+            Trip trip,
+            Schedule schedule
+    ) {
+        return new ScheduleConfirmResponse(
+                trip.getId().toString(),
+                schedule.getId().toString(),
+                schedule.getStrategy(),
+                schedule.getStatus(),
+                schedule.getConfirmedAt()
+                        .atZone(SEOUL_ZONE)
+                        .toOffsetDateTime()
+        );
+    }
 
     @Override
     public ScheduleCandidateListResponse getScheduleCandidates(
@@ -156,7 +231,7 @@ public class ScheduleServiceImpl implements ScheduleService {
     ) {
         User user = findActiveUser(userPublicId);
         Trip trip = findActiveTrip(tripId);
-        findActiveMember(trip, user);
+        TripMember member = findActiveMember(trip, user);
 
         Schedule schedule = scheduleRepository
                 .findByTripIdAndActiveConfirmedSlot(tripId, ACTIVE_CONFIRMED_SLOT)
@@ -179,9 +254,9 @@ public class ScheduleServiceImpl implements ScheduleService {
                 schedule.getId().toString(),
                 schedule.getStrategy(),
                 schedule.getStatus(),
-                false,
+                member.isCurrentHost() && isScheduleChangeAllowed(trip),
                 totalDistanceMeters,
-                schedule.getCreatedAt().atZone(SEOUL_ZONE).toOffsetDateTime(),
+                schedule.getConfirmedAt().atZone(SEOUL_ZONE).toOffsetDateTime(),
                 ScheduleRegenerationPolicy.remainingRegenerations(trip),
                 days
         );
@@ -205,9 +280,7 @@ public class ScheduleServiceImpl implements ScheduleService {
                 user,
                 ErrorCode.TRIP_HOST_REQUIRED
         );
-        if (!LocalDate.now(SEOUL_ZONE).isBefore(trip.getStartDate())) {
-            throw new BusinessException(ErrorCode.SCHEDULE_CHANGE_NOT_ALLOWED);
-        }
+        validateScheduleChangeDeadline(trip);
 
         Schedule schedule = scheduleRepository
                 .findByTripIdAndActiveConfirmedSlot(
@@ -274,9 +347,7 @@ public class ScheduleServiceImpl implements ScheduleService {
                 user,
                 ErrorCode.TRIP_HOST_REQUIRED
         );
-        if (!LocalDate.now(SEOUL_ZONE).isBefore(trip.getStartDate())) {
-            throw new BusinessException(ErrorCode.SCHEDULE_CHANGE_NOT_ALLOWED);
-        }
+        validateScheduleChangeDeadline(trip);
 
         Schedule schedule = scheduleRepository
                 .findByTripIdAndActiveConfirmedSlot(
@@ -549,6 +620,19 @@ public class ScheduleServiceImpl implements ScheduleService {
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.TRIP_MEMBER_REQUIRED
                 ));
+    }
+
+    private void validateScheduleChangeDeadline(Trip trip) {
+        if (!isScheduleChangeAllowed(trip)) {
+            throw new BusinessException(ErrorCode.SCHEDULE_CHANGE_NOT_ALLOWED);
+        }
+    }
+
+    private boolean isScheduleChangeAllowed(Trip trip) {
+        return ScheduleChangeDeadline.isAllowed(
+                trip.getStartDate(),
+                LocalDateTime.now(SEOUL_ZONE)
+        );
     }
 
     private Trip findActiveTrip(Long tripId) {
