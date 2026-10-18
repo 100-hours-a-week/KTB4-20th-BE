@@ -19,12 +19,13 @@ public class NotificationStore {
                 title,
                 body,
                 notification_type,
+                weather_condition,
                 target_type,
                 target_id,
                 target_status,
                 dedupe_key,
                 created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)
             """;
 
@@ -65,6 +66,9 @@ public class NotificationStore {
                 notification.getTitle(),
                 notification.getBody(),
                 notification.getType().name(),
+                notification.getWeatherCondition() == null
+                        ? null
+                        : notification.getWeatherCondition().name(),
                 notification.getTargetType().name(),
                 notification.getTargetId(),
                 notification.getTargetStatus().name(),

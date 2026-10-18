@@ -3,6 +3,8 @@ package com.planit.notification.delivery;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.planit.notification.domain.Notification;
 import com.planit.notification.domain.NotificationType;
+import com.planit.notification.domain.WeatherCondition;
+import com.planit.notification.dto.NotificationTargetResponse;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -13,8 +15,10 @@ public record NotificationPublishEvent(
         UUID recipientPublicId,
         Long notificationId,
         NotificationType notificationType,
+        WeatherCondition weatherCondition,
         String title,
         String body,
+        NotificationTargetResponse target,
         @JsonFormat(
                 without = JsonFormat.Feature.ADJUST_DATES_TO_CONTEXT_TIME_ZONE
         )
@@ -30,8 +34,10 @@ public record NotificationPublishEvent(
                 notification.getRecipient().getPublicId(),
                 notification.getId(),
                 notification.getType(),
+                notification.getWeatherCondition(),
                 notification.getTitle(),
                 notification.getBody(),
+                NotificationTargetResponse.from(notification),
                 notification.getCreatedAt()
                         .atZone(SEOUL_ZONE)
                         .toOffsetDateTime()
