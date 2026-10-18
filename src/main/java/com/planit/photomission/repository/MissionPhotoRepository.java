@@ -66,6 +66,11 @@ public interface MissionPhotoRepository
             @Param("excludedPhotoId") Long excludedPhotoId
     );
 
+    Optional<MissionPhoto>
+    findFirstByMissionIdAndDeletedAtIsNullAndReplacedAtIsNullOrderBySubmittedAtAscIdAsc(
+            Long missionId
+    );
+
     @Query("""
             SELECT photo
             FROM MissionPhoto photo

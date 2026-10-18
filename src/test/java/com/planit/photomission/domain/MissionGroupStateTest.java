@@ -67,6 +67,21 @@ class MissionGroupStateTest {
         assertThat(state.canCompleteManually()).isFalse();
     }
 
+    @DisplayName("대기 상태이고 실패 횟수가 3회 미만일 때만 단체 사진을 제출할 수 있다")
+    @Test
+    void checksPhotoSubmissionAvailability() {
+        MissionGroupState state =
+                MissionGroupState.create(groupMission(), now());
+
+        assertThat(state.canSubmitPhoto()).isTrue();
+
+        state.recordUnsuccessfulEvaluation(now());
+        state.recordUnsuccessfulEvaluation(now());
+        state.recordUnsuccessfulEvaluation(now());
+
+        assertThat(state.canSubmitPhoto()).isFalse();
+    }
+
     @DisplayName("한 멤버의 AI 성공으로 단체 공유 상태를 완료한다")
     @Test
     void completesSharedStateByAi() {

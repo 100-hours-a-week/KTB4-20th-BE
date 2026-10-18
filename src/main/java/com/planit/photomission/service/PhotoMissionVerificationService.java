@@ -31,16 +31,12 @@ public class PhotoMissionVerificationService {
         PhotoMissionVerificationTransactionService.PreparedVerification
                 prepared = transactionService.prepare(missionPhotoId);
 
+        PhotoMissionVerifyResponse response;
         try {
-            PhotoMissionVerifyResponse response = aiClient.verify(
+            response = aiClient.verify(
                     prepared.missionId(),
                     prepared.request()
             );
-            transactionService.complete(
-                    prepared.evaluationId(),
-                    response
-            );
-            return response;
         } catch (RuntimeException exception) {
             recordExecutionError(prepared.evaluationId(), exception);
             throw new BusinessException(
@@ -48,6 +44,11 @@ public class PhotoMissionVerificationService {
                     exception
             );
         }
+        transactionService.complete(
+                prepared.evaluationId(),
+                response
+        );
+        return response;
     }
 
     private void recordExecutionError(
