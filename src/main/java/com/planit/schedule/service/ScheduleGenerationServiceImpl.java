@@ -19,6 +19,7 @@ import com.planit.repository.UserRepository;
 import com.planit.schedule.domain.ScheduleGenerationReason;
 import com.planit.schedule.dto.SchedulePlaceSelectionResponse;
 import com.planit.schedule.ai.AiRecommendedPlaceMapper;
+import com.planit.schedule.ai.RecommendedRoute;
 import com.planit.schedule.route.RouteCalculationException;
 import com.planit.trip.service.TripMemberAccessService;
 import lombok.RequiredArgsConstructor;
@@ -102,9 +103,12 @@ public class ScheduleGenerationServiceImpl
         }
 
         try {
+            List<RecommendedRoute> routes = recommendedPlaceMapper.mapRoutes(
+                    response
+            );
             schedulePersistenceService.save(
                     tripId,
-                    recommendedPlaceMapper.mapDailyPlaces(response),
+                    routes.getFirst().days(),
                     mode
             );
         } catch (RouteCalculationException exception) {
