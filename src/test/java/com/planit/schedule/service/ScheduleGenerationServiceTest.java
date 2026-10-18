@@ -143,6 +143,12 @@ class ScheduleGenerationServiceTest {
                 .thenReturn(List.of(seafood));
         when(aiTripClient.selectPlaces(any()))
                 .thenReturn(aiResponse());
+        AiRecommendedPlaceMapper actualMapper =
+                new AiRecommendedPlaceMapper();
+        when(recommendedPlaceMapper.mapRoutes(any()))
+                .thenAnswer(invocation -> actualMapper.mapRoutes(
+                        invocation.getArgument(0)
+                ));
         when(regenerationPolicy.resolve(
                 any(Trip.class),
                 any(ScheduleGenerationReason.class)

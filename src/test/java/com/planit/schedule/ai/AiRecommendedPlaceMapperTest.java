@@ -1,6 +1,7 @@
 package com.planit.schedule.ai;
 
 import com.planit.ai.AiPlaceSelectionResponse;
+import com.planit.schedule.domain.ScheduleStrategy;
 import com.planit.schedule.route.PlaceCategoryGroup;
 import com.planit.schedule.route.RouteCalculationException;
 import org.junit.jupiter.api.DisplayName;
@@ -45,6 +46,69 @@ class AiRecommendedPlaceMapperTest {
                 .isEqualTo("day-1-place-1");
         assertThat(result.get(1).getFirst().googlePlaceId())
                 .isEqualTo("day-2-place-1");
+    }
+
+    @DisplayName("최단거리·취향 우선·균형 코스를 전략별 추천 경로로 변환한다")
+    @Test
+    void mapsThreeRecommendedRoutes() {
+        List<List<AiPlaceSelectionResponse.Place>> shortest = List.of(
+                selectionPlaces("shortest")
+        );
+        List<List<AiPlaceSelectionResponse.Place>> preference = List.of(
+                selectionPlaces("preference")
+        );
+        List<List<AiPlaceSelectionResponse.Place>> balanced = List.of(
+                selectionPlaces("balanced")
+        );
+        AiPlaceSelectionResponse response = new AiPlaceSelectionResponse(
+                200,
+                new AiPlaceSelectionResponse.Data(
+                        shortest,
+                        List.of(
+                                new AiPlaceSelectionResponse.Route(
+                                        AiPlaceSelectionResponse.Strategy.BALANCED,
+                                        68,
+                                        balanced
+                                ),
+                                new AiPlaceSelectionResponse.Route(
+                                        AiPlaceSelectionResponse.Strategy.PREFERENCE,
+                                        92,
+                                        preference
+                                )
+                        )
+                )
+        );
+
+        List<RecommendedRoute> result = mapper.mapRoutes(response);
+
+        assertThat(result)
+                .extracting(RecommendedRoute::strategy)
+                .containsExactly(
+                        ScheduleStrategy.SHORTEST,
+                        ScheduleStrategy.PREFERENCE,
+                        ScheduleStrategy.BALANCED
+                );
+        assertThat(result)
+                .extracting(RecommendedRoute::preferenceScore)
+                .containsExactly(null, 92, 68);
+        assertThat(result.get(1).days().getFirst())
+                .extracting(RecommendedPlace::googlePlaceId)
+                .containsExactly(
+                        "preference-place-1",
+                        "preference-place-2",
+                        "preference-place-3",
+                        "preference-place-4",
+                        "preference-place-5"
+                );
+        assertThat(result.get(2).days().getFirst())
+                .extracting(RecommendedPlace::googlePlaceId)
+                .containsExactly(
+                        "balanced-place-1",
+                        "balanced-place-2",
+                        "balanced-place-3",
+                        "balanced-place-4",
+                        "balanced-place-5"
+                );
     }
 
     @DisplayName("AI 응답의 사용자별 추천 대상과 선호 항목을 올바르게 읽는다")
