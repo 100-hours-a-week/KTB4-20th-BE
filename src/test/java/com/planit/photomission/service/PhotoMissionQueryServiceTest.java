@@ -12,17 +12,24 @@ import com.planit.photomission.domain.MissionGroupState;
 import com.planit.photomission.domain.MissionParticipation;
 import com.planit.photomission.domain.MissionPhoto;
 import com.planit.photomission.domain.MissionScope;
+import com.planit.photomission.domain.PhotoEvaluation;
+import com.planit.photomission.domain.PhotoEvaluationExecutionStatus;
+import com.planit.photomission.domain.PhotoEvaluationResult;
 import com.planit.photomission.dto.PhotoMissionAlbumResponse;
+import com.planit.photomission.dto.PhotoMissionCompletionResponse;
 import com.planit.photomission.dto.PhotoMissionDetailResponse;
 import com.planit.photomission.dto.PhotoMissionListResponse;
 import com.planit.photomission.repository.MissionGroupStateRepository;
 import com.planit.photomission.repository.MissionParticipationRepository;
 import com.planit.photomission.repository.MissionPhotoRepository;
 import com.planit.photomission.repository.MissionRepository;
+import com.planit.photomission.repository.PhotoEvaluationRepository;
 import com.planit.repository.TripMemberRepository;
 import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
+import com.planit.schedule.domain.Place;
 import com.planit.schedule.domain.ScheduleDay;
+import com.planit.schedule.domain.ScheduleVisit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -53,6 +60,8 @@ class PhotoMissionQueryServiceTest {
             mock(MissionGroupStateRepository.class);
     private final MissionPhotoRepository photoRepository =
             mock(MissionPhotoRepository.class);
+    private final PhotoEvaluationRepository evaluationRepository =
+            mock(PhotoEvaluationRepository.class);
     private final ImageStorage imageStorage = mock(ImageStorage.class);
 
     private PhotoMissionQueryService service;
@@ -72,6 +81,7 @@ class PhotoMissionQueryServiceTest {
                 participationRepository,
                 groupStateRepository,
                 photoRepository,
+                evaluationRepository,
                 imageStorage
         );
         today = LocalDate.now(PhotoMissionQueryService.SEOUL_ZONE);
@@ -322,6 +332,167 @@ class PhotoMissionQueryServiceTest {
                 .thumbnailUrl()).isEqualTo("https://image/group-main.jpg");
     }
 
+    @DisplayName("Day 완주 결과는 내 개인 미션과 공유 단체 미션을 함께 집계한다")
+    @Test
+    void getsDayCompletionSummary() {
+        ScheduleDay day = day(1, today.minusDays(1));
+        Mission completedPersonal = mission(
+                101L, day, 1, MissionScope.PERSONAL, "유적지 전경 담기"
+        );
+        Mission pendingPersonal = mission(
+                102L, day, 2, MissionScope.PERSONAL, "골목 사진 찍기"
+        );
+        Mission completedGroup = mission(
+                103L, day, 3, MissionScope.GROUP, "다 같이 사진 찍기"
+        );
+        MissionParticipation myCompleted = participation(
+                201L,
+                completedPersonal,
+                myMember,
+                MissionCompletionStatus.COMPLETED
+        );
+        MissionParticipation myPending = participation(
+                202L,
+                pendingPersonal,
+                myMember,
+                MissionCompletionStatus.PENDING
+        );
+        MissionGroupState groupState = mock(MissionGroupState.class);
+        when(groupState.getMission()).thenReturn(completedGroup);
+        when(groupState.getStatus())
+                .thenReturn(MissionCompletionStatus.COMPLETED);
+
+        MissionPhoto personalPhoto = photo(
+                301L, completedPersonal, myMember, false, "personal.jpg"
+        );
+        when(personalPhoto.getParticipation()).thenReturn(myCompleted);
+        MissionPhoto groupMain = photo(
+                302L, completedGroup, otherMember, true, "group-main.jpg"
+        );
+        MissionPhoto groupAdditional = photo(
+                303L, completedGroup, myMember, false, "group-more.jpg"
+        );
+        PhotoEvaluation personalEvaluation = recognized(personalPhoto);
+        PhotoEvaluation groupMainEvaluation = recognized(groupMain);
+        PhotoEvaluation groupAdditionalEvaluation = recognized(groupAdditional);
+
+        List<Long> missionIds = List.of(101L, 102L, 103L);
+        when(missionRepository
+                .findByTripIdAndScheduleDayDayNumberOrderByMissionOrderAsc(
+                        10L,
+                        (byte) 1
+                )).thenReturn(List.of(
+                        completedPersonal,
+                        pendingPersonal,
+                        completedGroup
+                ));
+        when(participationRepository.findByMissionIdIn(missionIds))
+                .thenReturn(List.of(myCompleted, myPending));
+        when(groupStateRepository.findByMissionIdIn(missionIds))
+                .thenReturn(List.of(groupState));
+        when(photoRepository.findVisibleByMissionIdIn(missionIds))
+                .thenReturn(List.of(
+                        groupAdditional,
+                        personalPhoto,
+                        groupMain
+                ));
+        when(evaluationRepository.findRecognizedByMissionPhotoIdIn(
+                List.of(301L, 302L, 303L)
+        )).thenReturn(List.of(
+                personalEvaluation,
+                groupMainEvaluation,
+                groupAdditionalEvaluation
+        ));
+        when(imageStorage.createReadUrl("personal.jpg"))
+                .thenReturn("https://image/personal.jpg");
+        when(imageStorage.createReadUrl("group-main.jpg"))
+                .thenReturn("https://image/group-main.jpg");
+        when(imageStorage.createReadUrl("group-more.jpg"))
+                .thenReturn("https://image/group-more.jpg");
+
+        PhotoMissionCompletionResponse response = service.getCompletion(
+                UUID.randomUUID().toString(),
+                10L,
+                1
+        );
+
+        assertThat(response.scope()).isEqualTo("DAY");
+        assertThat(response.dayNumber()).isEqualTo(1);
+        assertThat(response.completedMissionCount()).isEqualTo(2);
+        assertThat(response.totalMissionCount()).isEqualTo(3);
+        assertThat(response.incompleteMissionCount()).isEqualTo(1);
+        assertThat(response.totalPhotoCount()).isEqualTo(3);
+        assertThat(response.landmarkCount()).isEqualTo(2);
+        assertThat(response.completed()).isFalse();
+        assertThat(response.tripEnded()).isFalse();
+        assertThat(response.nextDayExists()).isTrue();
+        assertThat(response.previewPhotos())
+                .extracting(PhotoMissionCompletionResponse.PreviewPhoto::photoId)
+                .containsExactly(302L, 301L, 303L);
+    }
+
+    @DisplayName("여행 종료 결과는 사진 유무와 별개로 완료·미완료 미션을 집계한다")
+    @Test
+    void getsEndedTripCompletionSummary() {
+        when(trip.getStartDate()).thenReturn(today.minusDays(2));
+        when(trip.getEndDate()).thenReturn(today.minusDays(1));
+        ScheduleDay day = day(1, today.minusDays(2));
+        Mission completedPersonal = mission(
+                101L, day, 1, MissionScope.PERSONAL, "유적지 전경 담기"
+        );
+        Mission pendingGroup = mission(
+                102L, day, 2, MissionScope.GROUP, "다 같이 사진 찍기"
+        );
+        MissionParticipation myCompleted = participation(
+                201L,
+                completedPersonal,
+                myMember,
+                MissionCompletionStatus.COMPLETED
+        );
+        MissionGroupState groupState = mock(MissionGroupState.class);
+        when(groupState.getMission()).thenReturn(pendingGroup);
+        when(groupState.getStatus()).thenReturn(MissionCompletionStatus.PENDING);
+
+        List<Long> missionIds = List.of(101L, 102L);
+        when(missionRepository.findByTripIdOrderByDayAndMissionOrder(10L))
+                .thenReturn(List.of(completedPersonal, pendingGroup));
+        when(participationRepository.findByMissionIdIn(missionIds))
+                .thenReturn(List.of(myCompleted));
+        when(groupStateRepository.findByMissionIdIn(missionIds))
+                .thenReturn(List.of(groupState));
+        when(photoRepository.findVisibleByMissionIdIn(missionIds))
+                .thenReturn(List.of());
+
+        PhotoMissionCompletionResponse response = service.getCompletion(
+                UUID.randomUUID().toString(),
+                10L,
+                null
+        );
+
+        assertThat(response.scope()).isEqualTo("TRIP");
+        assertThat(response.dayNumber()).isNull();
+        assertThat(response.completedMissionCount()).isEqualTo(1);
+        assertThat(response.totalMissionCount()).isEqualTo(2);
+        assertThat(response.incompleteMissionCount()).isEqualTo(1);
+        assertThat(response.totalPhotoCount()).isZero();
+        assertThat(response.landmarkCount()).isZero();
+        assertThat(response.completed()).isFalse();
+        assertThat(response.tripEnded()).isTrue();
+        assertThat(response.nextDayExists()).isFalse();
+        assertThat(response.previewPhotos()).isEmpty();
+    }
+
+    private PhotoEvaluation recognized(MissionPhoto photo) {
+        PhotoEvaluation evaluation = mock(PhotoEvaluation.class);
+        when(evaluation.getMissionPhoto()).thenReturn(photo);
+        when(evaluation.getExecutionStatus())
+                .thenReturn(PhotoEvaluationExecutionStatus.SUCCEEDED);
+        when(evaluation.getResult()).thenReturn(PhotoEvaluationResult.SUCCESS);
+        when(evaluation.getLandmarkConfidence())
+                .thenReturn(java.math.BigDecimal.valueOf(92));
+        return evaluation;
+    }
+
     private TripMember member(Long id, User user, String username) {
         TripMember member = mock(TripMember.class);
         when(member.getId()).thenReturn(id);
@@ -356,6 +527,11 @@ class PhotoMissionQueryServiceTest {
         when(mission.isPersonal()).thenReturn(scope == MissionScope.PERSONAL);
         when(mission.isGroup()).thenReturn(scope == MissionScope.GROUP);
         when(mission.isExpired(any())).thenReturn(false);
+        ScheduleVisit visit = mock(ScheduleVisit.class);
+        Place place = mock(Place.class);
+        when(mission.getScheduleVisit()).thenReturn(visit);
+        when(visit.getPlace()).thenReturn(place);
+        when(place.getGooglePlaceId()).thenReturn("place-" + id);
         return mission;
     }
 

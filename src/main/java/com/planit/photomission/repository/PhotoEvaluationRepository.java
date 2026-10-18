@@ -2,7 +2,10 @@ package com.planit.photomission.repository;
 
 import com.planit.photomission.domain.PhotoEvaluation;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface PhotoEvaluationRepository
@@ -10,5 +13,20 @@ public interface PhotoEvaluationRepository
 
     Optional<PhotoEvaluation> findTopByMissionPhotoIdOrderByAttemptNoDesc(
             Long missionPhotoId
+    );
+
+    @Query("""
+            SELECT evaluation
+            FROM PhotoEvaluation evaluation
+            JOIN FETCH evaluation.missionPhoto photo
+            WHERE photo.id IN :missionPhotoIds
+              AND evaluation.executionStatus =
+                  com.planit.photomission.domain.PhotoEvaluationExecutionStatus.SUCCEEDED
+              AND evaluation.result =
+                  com.planit.photomission.domain.PhotoEvaluationResult.SUCCESS
+              AND evaluation.landmarkConfidence IS NOT NULL
+            """)
+    List<PhotoEvaluation> findRecognizedByMissionPhotoIdIn(
+            @Param("missionPhotoIds") List<Long> missionPhotoIds
     );
 }

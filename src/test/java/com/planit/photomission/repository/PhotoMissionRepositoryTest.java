@@ -12,6 +12,7 @@ import com.planit.photomission.domain.MissionParticipation;
 import com.planit.photomission.domain.MissionPhoto;
 import com.planit.photomission.domain.MissionScope;
 import com.planit.photomission.domain.PhotoEvaluation;
+import com.planit.photomission.domain.PhotoEvaluationResult;
 import com.planit.photomission.ai.PhotoMissionGenerateRequest;
 import com.planit.photomission.ai.PhotoMissionGenerateResponse;
 import com.planit.photomission.service.PhotoMissionGenerationTransactionService;
@@ -243,6 +244,57 @@ class PhotoMissionRepositoryTest {
         assertThat(evaluationRepository
                 .findTopByMissionPhotoIdOrderByAttemptNoDesc(photo.getId()))
                 .contains(latest);
+    }
+
+    @DisplayName("성공했고 랜드마크가 인식된 사진 판정만 조회한다")
+    @Test
+    void findsRecognizedPhotoEvaluations() {
+        Fixture fixture = createFixture();
+        Mission mission = missionRepository.save(Mission.create(
+                fixture.visit(), 1, MissionScope.PERSONAL,
+                "유적지 전경 담기", "역사", NOW
+        ));
+        MissionParticipation participation = participationRepository.save(
+                MissionParticipation.create(mission, fixture.member(), NOW)
+        );
+        MissionPhoto photo = photoRepository.save(MissionPhoto.personal(
+                participation,
+                createImageFile(),
+                UUID.randomUUID(),
+                null,
+                null,
+                NOW
+        ));
+        PhotoEvaluation recognized = PhotoEvaluation.start(photo, 1, NOW);
+        recognized.succeed(
+                PhotoEvaluationResult.SUCCESS,
+                null,
+                BigDecimal.valueOf(95),
+                "[]",
+                BigDecimal.valueOf(92),
+                null,
+                NOW.plusSeconds(1)
+        );
+        evaluationRepository.save(recognized);
+        PhotoEvaluation unrecognized = PhotoEvaluation.start(
+                photo,
+                2,
+                NOW.plusSeconds(2)
+        );
+        unrecognized.succeed(
+                PhotoEvaluationResult.FAIL,
+                null,
+                BigDecimal.valueOf(20),
+                "[]",
+                null,
+                null,
+                NOW.plusSeconds(3)
+        );
+        evaluationRepository.save(unrecognized);
+
+        assertThat(evaluationRepository.findRecognizedByMissionPhotoIdIn(
+                List.of(photo.getId())
+        )).containsExactly(recognized);
     }
 
     @DisplayName("여행 단위 포토미션 생성 작업을 조회한다")

@@ -2,6 +2,7 @@ package com.planit.photomission.controller;
 
 import com.planit.photomission.ai.PhotoMissionVerifyResponse;
 import com.planit.photomission.dto.PhotoMissionAlbumResponse;
+import com.planit.photomission.dto.PhotoMissionCompletionResponse;
 import com.planit.photomission.dto.PhotoMissionDetailResponse;
 import com.planit.photomission.dto.PhotoMissionListResponse;
 import com.planit.photomission.service.PhotoMissionQueryService;
@@ -196,5 +197,48 @@ class PhotoMissionControllerTest {
                 .andExpect(jsonPath("$.data.completedMissionCount")
                         .value(2))
                 .andExpect(jsonPath("$.data.totalPhotoCount").value(3));
+    }
+
+    @DisplayName("포토미션 Day 완주 결과를 조회한다")
+    @Test
+    void getsPhotoMissionCompletion() throws Exception {
+        when(queryService.getCompletion(any(), any(), any()))
+                .thenReturn(new PhotoMissionCompletionResponse(
+                        10L,
+                        "경주 여행",
+                        LocalDate.of(2026, 8, 31),
+                        LocalDate.of(2026, 9, 2),
+                        "DAY",
+                        2,
+                        LocalDate.of(2026, 9, 1),
+                        5,
+                        5,
+                        0,
+                        9,
+                        2,
+                        true,
+                        false,
+                        true,
+                        List.of(new PhotoMissionCompletionResponse.PreviewPhoto(
+                                31L,
+                                "https://image/photo.jpg"
+                        ))
+                ));
+
+        mockMvc.perform(get("/api/trips/10/photomissions/completion")
+                        .param("day", "2")
+                        .principal(new UsernamePasswordAuthenticationToken(
+                                "550e8400-e29b-41d4-a716-446655440000",
+                                ""
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code")
+                        .value("PHOTO_MISSION_COMPLETION_FOUND"))
+                .andExpect(jsonPath("$.data.scope").value("DAY"))
+                .andExpect(jsonPath("$.data.completedMissionCount").value(5))
+                .andExpect(jsonPath("$.data.totalPhotoCount").value(9))
+                .andExpect(jsonPath("$.data.landmarkCount").value(2))
+                .andExpect(jsonPath("$.data.previewPhotos[0].photoId")
+                        .value(31));
     }
 }
