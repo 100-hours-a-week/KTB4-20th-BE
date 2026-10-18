@@ -88,6 +88,7 @@ public class ScheduleServiceImpl implements ScheduleService {
                 false,
                 totalDistanceMeters,
                 schedule.getCreatedAt().atZone(SEOUL_ZONE).toOffsetDateTime(),
+                ScheduleRegenerationPolicy.remainingRegenerations(trip),
                 days
         );
     }

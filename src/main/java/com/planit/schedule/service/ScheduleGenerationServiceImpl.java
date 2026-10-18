@@ -16,6 +16,7 @@ import com.planit.repository.SurveyRepository;
 import com.planit.repository.TripMemberRepository;
 import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
+import com.planit.schedule.domain.ScheduleGenerationReason;
 import com.planit.schedule.dto.SchedulePlaceSelectionResponse;
 import com.planit.schedule.ai.AiRecommendedPlaceMapper;
 import com.planit.schedule.route.RouteCalculationException;
@@ -49,12 +50,14 @@ public class ScheduleGenerationServiceImpl
     private final AiTripClient aiTripClient;
     private final AiRecommendedPlaceMapper recommendedPlaceMapper;
     private final SchedulePersistenceService schedulePersistenceService;
+    private final ScheduleRegenerationPolicy regenerationPolicy;
 
     @Override
     @Transactional
     public SchedulePlaceSelectionResponse generate(
             String userPublicId,
-            Long tripId
+            Long tripId,
+            ScheduleGenerationReason reason
     ) {
         User user = findActiveUser(userPublicId);
         Trip trip = findActiveTrip(tripId);
@@ -69,6 +72,7 @@ public class ScheduleGenerationServiceImpl
         List<Survey> submittedSurveys = surveyRepository
                 .findByTripMemberInAndSubmittedAtIsNotNull(activeMembers);
         validateSurveyState(trip, host, activeMembers, submittedSurveys);
+        ScheduleGenerationMode mode = regenerationPolicy.resolve(trip, reason);
 
         AiPlaceSelectionRequest request = new AiPlaceSelectionRequest(
                 resolveAiRegion(trip.getRegion()),
@@ -98,7 +102,8 @@ public class ScheduleGenerationServiceImpl
         try {
             schedulePersistenceService.save(
                     tripId,
-                    recommendedPlaceMapper.mapDailyPlaces(response)
+                    recommendedPlaceMapper.mapDailyPlaces(response),
+                    mode
             );
         } catch (RouteCalculationException exception) {
             throw new BusinessException(

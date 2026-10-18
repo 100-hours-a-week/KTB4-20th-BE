@@ -1,6 +1,7 @@
 package com.planit.notification.repository;
 
 import com.planit.notification.domain.Notification;
+import com.planit.notification.domain.NotificationTargetType;
 import com.planit.notification.domain.NotificationType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -17,6 +18,13 @@ public interface NotificationRepository
         extends JpaRepository<Notification, Long> {
 
     Optional<Notification> findByDedupeKey(String dedupeKey);
+
+    boolean existsByTargetTypeAndTargetIdAndTypeAndCreatedAtGreaterThanEqualAndDeletedAtIsNull(
+            NotificationTargetType targetType,
+            Long targetId,
+            NotificationType type,
+            LocalDateTime createdAt
+    );
 
     long countByRecipientPublicIdAndReadAtIsNullAndDeletedAtIsNull(
             UUID recipientPublicId

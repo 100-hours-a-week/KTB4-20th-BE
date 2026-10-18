@@ -20,6 +20,7 @@ import com.planit.repository.SurveyRepository;
 import com.planit.repository.TripMemberRepository;
 import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
+import com.planit.schedule.domain.ScheduleGenerationReason;
 import com.planit.schedule.dto.SchedulePlaceSelectionResponse;
 import com.planit.schedule.ai.AiRecommendedPlaceMapper;
 import com.planit.trip.service.TripMemberAccessService;
@@ -60,6 +61,7 @@ class ScheduleGenerationServiceTest {
     private AiTripClient aiTripClient;
     private AiRecommendedPlaceMapper recommendedPlaceMapper;
     private SchedulePersistenceService schedulePersistenceService;
+    private ScheduleRegenerationPolicy regenerationPolicy;
     private ScheduleGenerationServiceImpl service;
     private User user;
     private Trip trip;
@@ -79,6 +81,7 @@ class ScheduleGenerationServiceTest {
         aiTripClient = mock(AiTripClient.class);
         recommendedPlaceMapper = mock(AiRecommendedPlaceMapper.class);
         schedulePersistenceService = mock(SchedulePersistenceService.class);
+        regenerationPolicy = mock(ScheduleRegenerationPolicy.class);
         service = new ScheduleGenerationServiceImpl(
                 userRepository,
                 tripRepository,
@@ -89,7 +92,8 @@ class ScheduleGenerationServiceTest {
                 excludedCategoryRepository,
                 aiTripClient,
                 recommendedPlaceMapper,
-                schedulePersistenceService
+                schedulePersistenceService,
+                regenerationPolicy
         );
 
         user = mock(User.class);
@@ -139,6 +143,45 @@ class ScheduleGenerationServiceTest {
                 .thenReturn(List.of(seafood));
         when(aiTripClient.selectPlaces(any()))
                 .thenReturn(aiResponse());
+        when(regenerationPolicy.resolve(
+                any(Trip.class),
+                any(ScheduleGenerationReason.class)
+        )).thenReturn(ScheduleGenerationMode.INITIAL);
+    }
+
+    @DisplayName("날씨 재생성으로 판정되면 같은 AI 요청을 다시 보내고 재생성 방식으로 저장한다")
+    @Test
+    void regeneratesScheduleForWeather() {
+        when(regenerationPolicy.resolve(trip, ScheduleGenerationReason.WEATHER))
+                .thenReturn(ScheduleGenerationMode.WEATHER_REGENERATION);
+
+        service.generate(
+                USER_ID.toString(),
+                TRIP_ID,
+                ScheduleGenerationReason.WEATHER
+        );
+
+        verify(aiTripClient).selectPlaces(any());
+        verify(schedulePersistenceService).save(
+                org.mockito.ArgumentMatchers.eq(TRIP_ID),
+                any(),
+                org.mockito.ArgumentMatchers.eq(
+                        ScheduleGenerationMode.WEATHER_REGENERATION
+                )
+        );
+    }
+
+    @DisplayName("재생성이 허용되지 않으면 AI를 호출하지 않는다")
+    @Test
+    void doesNotCallAiWhenRegenerationIsRejected() {
+        when(regenerationPolicy.resolve(trip, ScheduleGenerationReason.GENERAL))
+                .thenThrow(new BusinessException(
+                        ErrorCode.SCHEDULE_REGENERATION_LIMIT_EXCEEDED
+                ));
+
+        assertError(ErrorCode.SCHEDULE_REGENERATION_LIMIT_EXCEEDED);
+
+        verify(aiTripClient, never()).selectPlaces(any());
     }
 
     @DisplayName("여행 기간에 사용할 장소를 선정한다")
@@ -150,7 +193,8 @@ class ScheduleGenerationServiceTest {
 
         SchedulePlaceSelectionResponse response = service.generate(
                 USER_ID.toString(),
-                TRIP_ID
+                TRIP_ID,
+                ScheduleGenerationReason.GENERAL
         );
 
         ArgumentCaptor<AiPlaceSelectionRequest> requestCaptor =
@@ -178,7 +222,8 @@ class ScheduleGenerationServiceTest {
                 .allSatisfy(places -> assertThat(places).hasSize(6));
         verify(schedulePersistenceService).save(
                 org.mockito.ArgumentMatchers.eq(TRIP_ID),
-                any()
+                any(),
+                org.mockito.ArgumentMatchers.eq(ScheduleGenerationMode.INITIAL)
         );
     }
 
@@ -191,7 +236,8 @@ class ScheduleGenerationServiceTest {
 
         SchedulePlaceSelectionResponse response = service.generate(
                 USER_ID.toString(),
-                TRIP_ID
+                TRIP_ID,
+                ScheduleGenerationReason.GENERAL
         );
 
         assertThat(response.places()).hasSize(2);
@@ -199,7 +245,8 @@ class ScheduleGenerationServiceTest {
                 .allSatisfy(places -> assertThat(places).hasSize(5));
         verify(schedulePersistenceService).save(
                 org.mockito.ArgumentMatchers.eq(TRIP_ID),
-                any()
+                any(),
+                org.mockito.ArgumentMatchers.eq(ScheduleGenerationMode.INITIAL)
         );
     }
 
@@ -210,7 +257,8 @@ class ScheduleGenerationServiceTest {
 
         assertError(ErrorCode.AI_SCHEDULE_GENERATION_FAILED);
 
-        verify(schedulePersistenceService, never()).save(any(Long.class), any());
+        verify(schedulePersistenceService, never())
+                .save(any(Long.class), any(), any());
     }
 
     @DisplayName("방장이 아닌 사용자의 일정 생성을 거부한다")
@@ -277,7 +325,11 @@ class ScheduleGenerationServiceTest {
                 List.of(host, member)
         )).thenReturn(List.of(hostSurvey));
 
-        service.generate(USER_ID.toString(), TRIP_ID);
+        service.generate(
+                USER_ID.toString(),
+                TRIP_ID,
+                ScheduleGenerationReason.GENERAL
+        );
 
         verify(aiTripClient).selectPlaces(any());
     }
@@ -333,7 +385,8 @@ class ScheduleGenerationServiceTest {
 
         SchedulePlaceSelectionResponse response = service.generate(
                 USER_ID.toString(),
-                TRIP_ID
+                TRIP_ID,
+                ScheduleGenerationReason.GENERAL
         );
 
         assertThat(response.places()).hasSize(1);
@@ -369,7 +422,8 @@ class ScheduleGenerationServiceTest {
     private void assertError(ErrorCode expected) {
         assertThatThrownBy(() -> service.generate(
                 USER_ID.toString(),
-                TRIP_ID
+                TRIP_ID,
+                ScheduleGenerationReason.GENERAL
         )).isInstanceOfSatisfying(
                 BusinessException.class,
                 exception -> assertThat(exception.getErrorCode())

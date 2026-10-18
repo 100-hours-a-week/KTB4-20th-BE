@@ -48,6 +48,10 @@ public class Notification {
     private NotificationType type;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "weather_condition", length = 30)
+    private WeatherCondition weatherCondition;
+
+    @Enumerated(EnumType.STRING)
     @Column(name = "target_type", length = 50)
     private NotificationTargetType targetType;
 
@@ -88,6 +92,28 @@ public class Notification {
             String body,
             LocalDateTime createdAt
     ) {
+        return createTripNotification(
+                recipient,
+                tripId,
+                tripStartDate,
+                type,
+                null,
+                title,
+                body,
+                createdAt
+        );
+    }
+
+    public static Notification createTripNotification(
+            User recipient,
+            Long tripId,
+            LocalDate tripStartDate,
+            NotificationType type,
+            WeatherCondition weatherCondition,
+            String title,
+            String body,
+            LocalDateTime createdAt
+    ) {
         validateTripNotification(
                 recipient,
                 tripId,
@@ -103,6 +129,7 @@ public class Notification {
         notification.title = title;
         notification.body = body;
         notification.type = type;
+        notification.weatherCondition = weatherCondition;
         notification.targetType = NotificationTargetType.TRIP;
         notification.targetId = tripId;
         notification.targetStatus = NotificationTargetStatus.ACTIVE;
@@ -168,6 +195,10 @@ public class Notification {
 
     public NotificationType getType() {
         return type;
+    }
+
+    public WeatherCondition getWeatherCondition() {
+        return weatherCondition;
     }
 
     public NotificationTargetType getTargetType() {

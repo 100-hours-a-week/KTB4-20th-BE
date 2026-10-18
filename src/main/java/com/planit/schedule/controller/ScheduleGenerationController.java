@@ -1,12 +1,15 @@
 package com.planit.schedule.controller;
 
 import com.planit.global.response.ApiResponse;
+import com.planit.schedule.domain.ScheduleGenerationReason;
+import com.planit.schedule.dto.ScheduleGenerationRequest;
 import com.planit.schedule.dto.SchedulePlaceSelectionResponse;
 import com.planit.schedule.service.ScheduleGenerationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -25,12 +28,16 @@ public class ScheduleGenerationController {
     @PostMapping("/{tripId}/schedule-generation")
     public ApiResponse<SchedulePlaceSelectionResponse> generate(
             Authentication authentication,
-            @PathVariable Long tripId
+            @PathVariable Long tripId,
+            @RequestBody(required = false) ScheduleGenerationRequest request
     ) {
         SchedulePlaceSelectionResponse response =
                 scheduleGenerationService.generate(
                         authentication.getName(),
-                        tripId
+                        tripId,
+                        request == null
+                                ? ScheduleGenerationReason.GENERAL
+                                : request.reasonOrDefault()
                 );
 
         return ApiResponse.success(
