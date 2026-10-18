@@ -25,6 +25,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
@@ -33,6 +34,7 @@ import java.util.stream.IntStream;
 import static com.planit.global.error.ErrorCode.INVALID_AI_PLACE_RESULT;
 import static com.planit.global.error.ErrorCode.SCHEDULE_ALREADY_EXISTS;
 import static com.planit.global.error.ErrorCode.SCHEDULE_REGENERATION_LIMIT_EXCEEDED;
+import static com.planit.global.error.ErrorCode.TRIP_NOT_FOUND;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -271,6 +273,33 @@ class SchedulePersistenceServiceTest {
 
         verify(scheduleRepository, never()).deleteAll(any());
         verify(trip, never()).increaseScheduleRegenerationCount();
+    }
+
+    @DisplayName("진행 중이던 AI 생성이 여행방 삭제 뒤 완료되면 후보를 반영하지 않는다")
+    @Test
+    void rejectsCandidatesForDeletedTrip() {
+        when(trip.getDeletedAt()).thenReturn(
+                LocalDateTime.of(2026, 9, 30, 23, 50)
+        );
+
+        assertThatThrownBy(() -> service.saveCandidates(
+                1L,
+                candidates(),
+                ScheduleGenerationMode.INITIAL
+        ))
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode())
+                                .isEqualTo(TRIP_NOT_FOUND)
+                );
+        verify(tripRepository).findByIdForUpdate(1L);
+        verify(scheduleRepository, never()).save(any(Schedule.class));
+        verifyNoInteractions(
+                placeRepository,
+                dayRepository,
+                visitRepository,
+                legRepository
+        );
     }
 
     @DisplayName("이미 활성 일정이 있는 여행의 일정 저장을 거부한다")
