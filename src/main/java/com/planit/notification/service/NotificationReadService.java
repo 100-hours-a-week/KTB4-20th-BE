@@ -9,7 +9,7 @@ import com.planit.notification.dto.AllNotificationsReadResponse;
 import com.planit.notification.dto.NotificationReadResponse;
 import com.planit.notification.repository.NotificationRepository;
 import com.planit.repository.TripRepository;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,7 +19,6 @@ import java.time.ZoneOffset;
 import java.util.UUID;
 
 @Service
-@RequiredArgsConstructor
 public class NotificationReadService {
 
     private static final ZoneOffset SEOUL_OFFSET = ZoneOffset.ofHours(9);
@@ -27,6 +26,16 @@ public class NotificationReadService {
     private final NotificationRepository notificationRepository;
     private final TripRepository tripRepository;
     private final Clock clock;
+
+    public NotificationReadService(
+            NotificationRepository notificationRepository,
+            TripRepository tripRepository,
+            @Qualifier("tripRemindClock") Clock clock
+    ) {
+        this.notificationRepository = notificationRepository;
+        this.tripRepository = tripRepository;
+        this.clock = clock;
+    }
 
     @Transactional
     public NotificationReadResponse markAsRead(

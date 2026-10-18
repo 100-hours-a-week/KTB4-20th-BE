@@ -12,8 +12,8 @@ import com.planit.notification.pagination.NotificationListCursorCodec;
 import com.planit.notification.pagination.NotificationListCursorCodec.Cursor;
 import com.planit.notification.repository.NotificationRepository;
 import com.planit.repository.TripRepository;
-import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,7 +27,6 @@ import java.util.Set;
 import java.util.UUID;
 
 @Service
-@RequiredArgsConstructor
 public class NotificationListService {
 
     private static final int FIRST_PAGE_SIZE = 20;
@@ -42,6 +41,18 @@ public class NotificationListService {
     private final TripRepository tripRepository;
     private final NotificationListCursorCodec cursorCodec;
     private final Clock clock;
+
+    public NotificationListService(
+            NotificationRepository notificationRepository,
+            TripRepository tripRepository,
+            NotificationListCursorCodec cursorCodec,
+            @Qualifier("tripRemindClock") Clock clock
+    ) {
+        this.notificationRepository = notificationRepository;
+        this.tripRepository = tripRepository;
+        this.cursorCodec = cursorCodec;
+        this.clock = clock;
+    }
 
     @Transactional(readOnly = true)
     public NotificationListResponse getNotifications(

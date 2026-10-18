@@ -8,7 +8,7 @@ import com.planit.notification.domain.NotificationType;
 import com.planit.notification.repository.NotificationRepository;
 import com.planit.schedule.domain.ScheduleGenerationReason;
 import com.planit.schedule.repository.ScheduleRepository;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
@@ -21,7 +21,6 @@ import java.util.Objects;
  * 재생성은 서울 날짜 기준 여행 시작 전까지만 허용한다.
  */
 @Component
-@RequiredArgsConstructor
 public class ScheduleRegenerationPolicy {
 
     public static final int MAX_GENERAL_REGENERATIONS = 5;
@@ -30,6 +29,16 @@ public class ScheduleRegenerationPolicy {
     private final ScheduleRepository scheduleRepository;
     private final NotificationRepository notificationRepository;
     private final Clock clock;
+
+    public ScheduleRegenerationPolicy(
+            ScheduleRepository scheduleRepository,
+            NotificationRepository notificationRepository,
+            @Qualifier("tripRemindClock") Clock clock
+    ) {
+        this.scheduleRepository = scheduleRepository;
+        this.notificationRepository = notificationRepository;
+        this.clock = clock;
+    }
 
     public static int remainingRegenerations(Trip trip) {
         return Math.max(
