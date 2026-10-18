@@ -168,7 +168,7 @@ class ScheduleGenerationServiceTest {
         );
 
         verify(aiTripClient).selectPlaces(any());
-        verify(schedulePersistenceService).save(
+        verify(schedulePersistenceService).saveCandidates(
                 org.mockito.ArgumentMatchers.eq(TRIP_ID),
                 any(),
                 org.mockito.ArgumentMatchers.eq(
@@ -226,7 +226,7 @@ class ScheduleGenerationServiceTest {
         assertThat(response.places()).hasSize(3);
         assertThat(response.places())
                 .allSatisfy(places -> assertThat(places).hasSize(6));
-        verify(schedulePersistenceService).save(
+        verify(schedulePersistenceService).saveCandidates(
                 org.mockito.ArgumentMatchers.eq(TRIP_ID),
                 any(),
                 org.mockito.ArgumentMatchers.eq(ScheduleGenerationMode.INITIAL)
@@ -249,7 +249,7 @@ class ScheduleGenerationServiceTest {
         assertThat(response.places()).hasSize(2);
         assertThat(response.places())
                 .allSatisfy(places -> assertThat(places).hasSize(5));
-        verify(schedulePersistenceService).save(
+        verify(schedulePersistenceService).saveCandidates(
                 org.mockito.ArgumentMatchers.eq(TRIP_ID),
                 any(),
                 org.mockito.ArgumentMatchers.eq(ScheduleGenerationMode.INITIAL)
@@ -264,7 +264,7 @@ class ScheduleGenerationServiceTest {
         assertError(ErrorCode.AI_SCHEDULE_GENERATION_FAILED);
 
         verify(schedulePersistenceService, never())
-                .save(any(Long.class), any(), any());
+                .saveCandidates(any(Long.class), any(), any());
     }
 
     @DisplayName("방장이 아닌 사용자의 일정 생성을 거부한다")
@@ -393,7 +393,7 @@ class ScheduleGenerationServiceTest {
         );
 
         assertThat(response.places()).hasSize(1);
-        verify(schedulePersistenceService).save(
+        verify(schedulePersistenceService).saveCandidates(
                 org.mockito.ArgumentMatchers.eq(TRIP_ID),
                 any(),
                 org.mockito.ArgumentMatchers.eq(ScheduleGenerationMode.INITIAL)
@@ -417,7 +417,7 @@ class ScheduleGenerationServiceTest {
         assertError(ErrorCode.AI_SCHEDULE_GENERATION_FAILED);
 
         verify(schedulePersistenceService, never())
-                .save(any(Long.class), any(), any());
+                .saveCandidates(any(Long.class), any(), any());
     }
 
     @DisplayName("AI 응답에 같은 전략의 코스가 중복되면 거부한다")
