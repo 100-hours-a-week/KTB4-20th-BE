@@ -225,18 +225,21 @@ public class PhotoMissionQueryService {
     ) {
         LocalDateTime now = LocalDateTime.now(SEOUL_ZONE);
         User user = requireUser(userPublicId);
+        Mission mission = missionRepository.findById(missionId)
+                .orElseThrow(this::resourceNotFound);
+        Trip trip = mission.getTrip();
+        requireActiveTrip(trip);
+        TripMember viewer = requireActiveMember(
+                tripMemberRepository.findActiveMembersByTrip(trip),
+                user
+        );
+        if (!isPublished(mission.getScheduleDay().getScheduleDate(), now)) {
+            throw resourceNotFound();
+        }
         MissionPhoto photo = photoRepository
                 .findVisibleDetailByMissionIdAndPhotoId(missionId, photoId)
                 .orElseThrow(this::resourceNotFound);
-        Mission mission = photo.getMission();
-        TripMember viewer = requireActiveMember(
-                tripMemberRepository.findActiveMembersByTrip(
-                        mission.getTrip()
-                ),
-                user
-        );
-        if (!isPublished(mission.getScheduleDay().getScheduleDate(), now)
-                || !isCompletedPhotoVisibleTo(photo, viewer)) {
+        if (!isCompletedPhotoVisibleTo(photo, viewer)) {
             throw resourceNotFound();
         }
 

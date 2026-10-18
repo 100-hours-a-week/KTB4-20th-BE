@@ -47,6 +47,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @DisplayName("포토미션 목록·상세·앨범 조회 서비스")
@@ -263,6 +265,8 @@ class PhotoMissionQueryServiceTest {
                 301L, mission, myMember, false, "mine.jpg"
         );
         when(photo.getParticipation()).thenReturn(participation);
+        when(missionRepository.findById(101L))
+                .thenReturn(Optional.of(mission));
         when(photoRepository.findVisibleDetailByMissionIdAndPhotoId(101L, 301L))
                 .thenReturn(Optional.of(photo));
         when(imageStorage.createReadUrl("mine.jpg"))
@@ -303,6 +307,8 @@ class PhotoMissionQueryServiceTest {
                 301L, mission, otherMember, false, "others.jpg"
         );
         when(photo.getParticipation()).thenReturn(participation);
+        when(missionRepository.findById(101L))
+                .thenReturn(Optional.of(mission));
         when(photoRepository.findVisibleDetailByMissionIdAndPhotoId(101L, 301L))
                 .thenReturn(Optional.of(photo));
 
@@ -330,6 +336,8 @@ class PhotoMissionQueryServiceTest {
         MissionPhoto photo = photo(
                 301L, mission, otherMember, true, "future.jpg"
         );
+        when(missionRepository.findById(101L))
+                .thenReturn(Optional.of(mission));
         when(photoRepository.findVisibleDetailByMissionIdAndPhotoId(101L, 301L))
                 .thenReturn(Optional.of(photo));
 
@@ -342,6 +350,36 @@ class PhotoMissionQueryServiceTest {
                 .extracting(exception ->
                         ((BusinessException) exception).getErrorCode())
                 .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
+        verify(photoRepository, never())
+                .findVisibleDetailByMissionIdAndPhotoId(101L, 301L);
+    }
+
+    @DisplayName("여행방 멤버가 아니면 사진 존재 여부를 조회하지 않는다")
+    @Test
+    void rejectsNonMemberBeforePhotoLookup() {
+        Mission mission = mission(
+                101L,
+                day(1, today.minusDays(1)),
+                1,
+                MissionScope.GROUP,
+                "단체 미션"
+        );
+        when(missionRepository.findById(101L))
+                .thenReturn(Optional.of(mission));
+        when(tripMemberRepository.findActiveMembersByTrip(trip))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.getPhotoDetail(
+                UUID.randomUUID().toString(),
+                101L,
+                301L
+        ))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception ->
+                        ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.TRIP_MEMBER_REQUIRED);
+        verify(photoRepository, never())
+                .findVisibleDetailByMissionIdAndPhotoId(101L, 301L);
     }
 
     @DisplayName("아직 공개되지 않은 미래 Day는 미션을 반환하지 않는다")

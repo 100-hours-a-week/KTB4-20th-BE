@@ -260,6 +260,51 @@ class PhotoMissionSubmissionTransactionServiceTest {
         verify(imageFileRepository, never()).save(any());
     }
 
+    @DisplayName("미션 당일 00시 30분부터 사진을 제출할 수 있다")
+    @Test
+    void acceptsPhotoAtDailyPublicationTime() {
+        service = new PhotoMissionSubmissionTransactionService(
+                missionRepository,
+                participationRepository,
+                groupStateRepository,
+                photoRepository,
+                userRepository,
+                tripMemberRepository,
+                imageFileRepository,
+                fixedClock(LocalTime.of(0, 30))
+        );
+        Fixture fixture = fixture(MissionScope.GROUP, TODAY);
+        MissionGroupState state = MissionGroupState.create(
+                fixture.mission(), LocalDateTime.now()
+        );
+        stubCommon(fixture);
+        when(groupStateRepository.findByMissionId(31L))
+                .thenReturn(Optional.of(state));
+        when(imageFileRepository.save(any(ImageFile.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(photoRepository.save(any(MissionPhoto.class)))
+                .thenAnswer(invocation -> {
+                    MissionPhoto photo = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(photo, "id", 43L);
+                    return photo;
+                });
+
+        Long photoId = service.save(
+                USER_PUBLIC_ID.toString(),
+                31L,
+                UUID.randomUUID(),
+                "missions/31/photo.jpg",
+                "photo.jpg",
+                "image/jpeg",
+                1024,
+                null,
+                null
+        );
+
+        assertThat(photoId).isEqualTo(43L);
+        verify(imageFileRepository).save(any(ImageFile.class));
+    }
+
     private void stubCommon(Fixture fixture) {
         when(photoRepository.findByIdempotencyKey(any()))
                 .thenReturn(Optional.empty());
