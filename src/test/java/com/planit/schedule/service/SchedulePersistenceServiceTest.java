@@ -3,6 +3,7 @@ package com.planit.schedule.service;
 import com.planit.domain.Region;
 import com.planit.domain.Trip;
 import com.planit.global.error.BusinessException;
+import com.planit.global.error.ErrorCode;
 import com.planit.repository.TripRepository;
 import com.planit.schedule.ai.RecommendedPlace;
 import com.planit.schedule.ai.RecommendedRoute;
@@ -325,6 +326,28 @@ class SchedulePersistenceServiceTest {
                 visitRepository,
                 legRepository
         );
+    }
+
+    @DisplayName("확정하지 않은 후보가 있으면 잠금 후 다시 확인해 새 후보 저장을 거부한다")
+    @Test
+    void rejectsCandidatesWhileOtherCandidatesPending() {
+        when(scheduleRepository.existsByTripIdAndStatus(1L, "DRAFT"))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> service.saveCandidates(
+                1L,
+                candidates(),
+                ScheduleGenerationMode.INITIAL
+        ))
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode())
+                                .isEqualTo(ErrorCode.SCHEDULE_CANDIDATES_PENDING)
+                );
+        verify(tripRepository).findByIdForUpdate(1L);
+        verify(scheduleRepository, never()).save(any(Schedule.class));
+        verify(scheduleRepository, never()).deleteAll(any());
+        verify(trip, never()).increaseScheduleRegenerationCount();
     }
 
     @DisplayName("일반 재생성은 기존 일정을 삭제하고 새 일정으로 대체하며 재생성 횟수를 차감한다")

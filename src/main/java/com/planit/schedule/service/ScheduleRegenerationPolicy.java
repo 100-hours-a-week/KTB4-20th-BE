@@ -71,6 +71,10 @@ public class ScheduleRegenerationPolicy {
         }
 
         if (!hasSchedule) {
+            // 후보만 만들고 확정하지 않은 상태에서는 다시 만들 수 없다. 방장이 후보 중 하나를 먼저 확정해야 한다.
+            if (scheduleRepository.existsByTripIdAndStatus(trip.getId(), "DRAFT")) {
+                throw new BusinessException(ErrorCode.SCHEDULE_CANDIDATES_PENDING);
+            }
             return ScheduleGenerationMode.INITIAL;
         }
         validateBeforeTripStart(trip);

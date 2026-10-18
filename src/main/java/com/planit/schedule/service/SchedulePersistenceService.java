@@ -38,6 +38,7 @@ import java.util.Set;
 
 import static com.planit.global.error.ErrorCode.INVALID_AI_PLACE_RESULT;
 import static com.planit.global.error.ErrorCode.SCHEDULE_ALREADY_EXISTS;
+import static com.planit.global.error.ErrorCode.SCHEDULE_CANDIDATES_PENDING;
 import static com.planit.global.error.ErrorCode.SCHEDULE_REGENERATION_LIMIT_EXCEEDED;
 import static com.planit.global.error.ErrorCode.SCHEDULE_ROUTE_NOT_FOUND;
 import static com.planit.global.error.ErrorCode.TRIP_NOT_FOUND;
@@ -92,6 +93,9 @@ public class SchedulePersistenceService {
                 (byte) 1
         )) {
             replaceExistingSchedule(trip, mode);
+        } else if (scheduleRepository.existsByTripIdAndStatus(tripId, "DRAFT")) {
+            // 생성 요청은 AI 호출 전에 판정하므로, 동시에 들어온 요청은 여행 행 잠금 아래에서 다시 막는다.
+            throw new BusinessException(SCHEDULE_CANDIDATES_PENDING);
         }
 
         LocalDateTime now = LocalDateTime.now();
