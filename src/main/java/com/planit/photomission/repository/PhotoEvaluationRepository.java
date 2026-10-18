@@ -16,6 +16,19 @@ public interface PhotoEvaluationRepository
     );
 
     @Query("""
+            SELECT DISTINCT evaluation.missionPhoto.id
+            FROM PhotoEvaluation evaluation
+            WHERE evaluation.missionPhoto.id IN :missionPhotoIds
+              AND evaluation.executionStatus =
+                  com.planit.photomission.domain.PhotoEvaluationExecutionStatus.SUCCEEDED
+              AND evaluation.result =
+                  com.planit.photomission.domain.PhotoEvaluationResult.SUCCESS
+            """)
+    List<Long> findSuccessfulMissionPhotoIds(
+            @Param("missionPhotoIds") List<Long> missionPhotoIds
+    );
+
+    @Query("""
             SELECT evaluation
             FROM PhotoEvaluation evaluation
             JOIN FETCH evaluation.missionPhoto photo

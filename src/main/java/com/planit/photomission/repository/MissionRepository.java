@@ -13,6 +13,8 @@ public interface MissionRepository extends JpaRepository<Mission, Long> {
             SELECT mission
             FROM Mission mission
             JOIN FETCH mission.scheduleDay scheduleDay
+            JOIN FETCH mission.scheduleVisit scheduleVisit
+            JOIN FETCH scheduleVisit.place
             WHERE mission.trip.id = :tripId
               AND scheduleDay.dayNumber = :dayNumber
             ORDER BY mission.missionOrder ASC, mission.id ASC
@@ -26,6 +28,8 @@ public interface MissionRepository extends JpaRepository<Mission, Long> {
             SELECT mission
             FROM Mission mission
             JOIN FETCH mission.scheduleDay scheduleDay
+            JOIN FETCH mission.scheduleVisit scheduleVisit
+            JOIN FETCH scheduleVisit.place
             WHERE mission.trip.id = :tripId
             ORDER BY scheduleDay.dayNumber ASC,
                      mission.missionOrder ASC,

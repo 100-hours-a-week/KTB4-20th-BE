@@ -295,6 +295,9 @@ class PhotoMissionQueryServiceTest {
         MissionPhoto additional = photo(
                 304L, group, myMember, false, "group-additional.jpg"
         );
+        MissionPhoto failedAttempt = photo(
+                305L, group, myMember, false, "group-failed.jpg"
+        );
 
         when(missionRepository.findByTripIdOrderByDayAndMissionOrder(10L))
                 .thenReturn(List.of(personal, group));
@@ -307,8 +310,12 @@ class PhotoMissionQueryServiceTest {
                         myPhoto,
                         othersPhoto,
                         representative,
-                        additional
+                        additional,
+                        failedAttempt
                 ));
+        when(evaluationRepository.findSuccessfulMissionPhotoIds(
+                List.of(301L, 302L, 303L, 304L, 305L)
+        )).thenReturn(List.of(301L, 302L, 303L, 304L));
         when(imageStorage.createReadUrl("mine.jpg"))
                 .thenReturn("https://image/mine.jpg");
         when(imageStorage.createReadUrl("group-main.jpg"))
@@ -396,6 +403,9 @@ class PhotoMissionQueryServiceTest {
                         personalPhoto,
                         groupMain
                 ));
+        when(evaluationRepository.findSuccessfulMissionPhotoIds(
+                List.of(301L, 302L, 303L)
+        )).thenReturn(List.of(301L, 302L, 303L));
         when(evaluationRepository.findRecognizedByMissionPhotoIdIn(
                 List.of(301L, 302L, 303L)
         )).thenReturn(List.of(
@@ -428,7 +438,7 @@ class PhotoMissionQueryServiceTest {
         assertThat(response.nextDayExists()).isTrue();
         assertThat(response.previewPhotos())
                 .extracting(PhotoMissionCompletionResponse.PreviewPhoto::photoId)
-                .containsExactly(302L, 301L, 303L);
+                .containsExactly(301L, 302L, 303L);
     }
 
     @DisplayName("여행 종료 결과는 사진 유무와 별개로 완료·미완료 미션을 집계한다")
@@ -480,6 +490,71 @@ class PhotoMissionQueryServiceTest {
         assertThat(response.tripEnded()).isTrue();
         assertThat(response.nextDayExists()).isFalse();
         assertThat(response.previewPhotos()).isEmpty();
+    }
+
+    @DisplayName("여행 완료율은 아직 공개되지 않은 Day 미션도 전체 수에 포함한다")
+    @Test
+    void includesFutureMissionsInTripCompletionDenominator() {
+        ScheduleDay currentDay = day(1, today.minusDays(1));
+        ScheduleDay futureDay = day(3, today.plusDays(1));
+        Mission completed = mission(
+                101L, currentDay, 1, MissionScope.PERSONAL, "현재 미션"
+        );
+        Mission future = mission(
+                102L, futureDay, 1, MissionScope.PERSONAL, "미래 미션"
+        );
+        MissionParticipation completedParticipation = participation(
+                201L, completed, myMember, MissionCompletionStatus.COMPLETED
+        );
+        MissionParticipation futureParticipation = participation(
+                202L, future, myMember, MissionCompletionStatus.PENDING
+        );
+        List<Long> missionIds = List.of(101L, 102L);
+
+        when(missionRepository.findByTripIdOrderByDayAndMissionOrder(10L))
+                .thenReturn(List.of(completed, future));
+        when(participationRepository.findByMissionIdIn(missionIds))
+                .thenReturn(List.of(
+                        completedParticipation,
+                        futureParticipation
+                ));
+        when(groupStateRepository.findByMissionIdIn(missionIds))
+                .thenReturn(List.of());
+        when(photoRepository.findVisibleByMissionIdIn(missionIds))
+                .thenReturn(List.of());
+
+        PhotoMissionCompletionResponse response = service.getCompletion(
+                UUID.randomUUID().toString(),
+                10L,
+                null
+        );
+
+        assertThat(response.completedMissionCount()).isEqualTo(1);
+        assertThat(response.totalMissionCount()).isEqualTo(2);
+        assertThat(response.completed()).isFalse();
+    }
+
+    @DisplayName("앨범은 공개 전 Day의 완료 사진을 노출하지 않는다")
+    @Test
+    void hidesUnpublishedMissionsFromAlbum() {
+        Mission future = mission(
+                101L,
+                day(3, today.plusDays(1)),
+                1,
+                MissionScope.GROUP,
+                "미래 미션"
+        );
+        when(missionRepository.findByTripIdOrderByDayAndMissionOrder(10L))
+                .thenReturn(List.of(future));
+
+        PhotoMissionAlbumResponse response = service.getAlbum(
+                UUID.randomUUID().toString(),
+                10L
+        );
+
+        assertThat(response.completedMissionCount()).isZero();
+        assertThat(response.totalPhotoCount()).isZero();
+        assertThat(response.days()).isEmpty();
     }
 
     private PhotoEvaluation recognized(MissionPhoto photo) {
@@ -568,7 +643,9 @@ class PhotoMissionQueryServiceTest {
         when(photo.getImageFile()).thenReturn(image);
         when(photo.getRepresentativeSlot())
                 .thenReturn(representative ? (byte) 1 : null);
-        when(photo.getSubmittedAt()).thenReturn(LocalDateTime.now());
+        when(photo.getSubmittedAt()).thenReturn(
+                today.atStartOfDay().plusSeconds(id)
+        );
         when(image.getImageKey()).thenReturn(imageKey);
         return photo;
     }

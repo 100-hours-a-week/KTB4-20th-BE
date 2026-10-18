@@ -223,6 +223,7 @@ public class PhotoMissionQueryService {
             String userPublicId,
             Long tripId
     ) {
+        LocalDateTime now = LocalDateTime.now(SEOUL_ZONE);
         User user = requireUser(userPublicId);
         Trip trip = requireTrip(tripId);
         TripMember viewer = requireActiveMember(
@@ -230,7 +231,13 @@ public class PhotoMissionQueryService {
                 user
         );
         List<Mission> missions = missionRepository
-                .findByTripIdOrderByDayAndMissionOrder(tripId);
+                .findByTripIdOrderByDayAndMissionOrder(tripId)
+                .stream()
+                .filter(mission -> isPublished(
+                        mission.getScheduleDay().getScheduleDate(),
+                        now
+                ))
+                .toList();
         if (missions.isEmpty()) {
             return emptyAlbum(trip);
         }
@@ -256,6 +263,7 @@ public class PhotoMissionQueryService {
                 .collect(Collectors.groupingBy(
                         photo -> photo.getMission().getId()
                 ));
+        Set<Long> successfulPhotoIds = successfulPhotoIds(photosByMission);
 
         Map<Integer, List<PhotoMissionAlbumResponse.MissionAlbum>> personal =
                 new LinkedHashMap<>();
@@ -274,7 +282,8 @@ public class PhotoMissionQueryService {
                             List.of()
                     ),
                     groupStateByMission.get(mission.getId()),
-                    photosByMission.getOrDefault(mission.getId(), List.of())
+                    photosByMission.getOrDefault(mission.getId(), List.of()),
+                    successfulPhotoIds
             );
             if (photos.isEmpty()) {
                 continue;
@@ -335,12 +344,6 @@ public class PhotoMissionQueryService {
 
         List<Mission> missions = day == null
                 ? missionRepository.findByTripIdOrderByDayAndMissionOrder(tripId)
-                        .stream()
-                        .filter(mission -> isPublished(
-                                mission.getScheduleDay().getScheduleDate(),
-                                now
-                        ))
-                        .toList()
                 : missionRepository
                         .findByTripIdAndScheduleDayDayNumberOrderByMissionOrderAsc(
                                 tripId,
@@ -381,6 +384,7 @@ public class PhotoMissionQueryService {
                 .collect(Collectors.groupingBy(
                         photo -> photo.getMission().getId()
                 ));
+        Set<Long> successfulPhotoIds = successfulPhotoIds(photosByMission);
 
         List<MissionPhoto> completedPhotos = new ArrayList<>();
         int completedMissionCount = 0;
@@ -405,10 +409,11 @@ public class PhotoMissionQueryService {
             completedPhotos.addAll(visiblePhotosForViewer(
                     mission,
                     viewer,
-                    photosByMission.getOrDefault(mission.getId(), List.of())
+                    photosByMission.getOrDefault(mission.getId(), List.of()),
+                    successfulPhotoIds
             ));
         }
-        completedPhotos.sort(photoOrder());
+        completedPhotos.sort(completionPhotoOrder());
 
         int landmarkCount = recognizedLandmarkCount(completedPhotos);
         int totalMissionCount = missions.size();
@@ -500,7 +505,8 @@ public class PhotoMissionQueryService {
             TripMember viewer,
             List<MissionParticipation> participations,
             MissionGroupState groupState,
-            List<MissionPhoto> photos
+            List<MissionPhoto> photos,
+            Set<Long> successfulPhotoIds
     ) {
         if (!completedForViewer(
                 mission,
@@ -510,7 +516,12 @@ public class PhotoMissionQueryService {
         )) {
             return List.of();
         }
-        return visiblePhotosForViewer(mission, viewer, photos);
+        return visiblePhotosForViewer(
+                mission,
+                viewer,
+                photos,
+                successfulPhotoIds
+        );
     }
 
     private boolean completedForViewer(
@@ -533,12 +544,32 @@ public class PhotoMissionQueryService {
     private List<MissionPhoto> visiblePhotosForViewer(
             Mission mission,
             TripMember viewer,
-            List<MissionPhoto> photos
+            List<MissionPhoto> photos,
+            Set<Long> successfulPhotoIds
     ) {
         return photos.stream()
                 .filter(photo -> mission.isGroup() || belongsTo(photo, viewer))
-                .sorted(photoOrder())
+                .filter(photo -> mission.isPersonal()
+                        || isRepresentative(photo)
+                        || successfulPhotoIds.contains(photo.getId()))
+                .sorted(completionPhotoOrder())
                 .toList();
+    }
+
+    private Set<Long> successfulPhotoIds(
+            Map<Long, List<MissionPhoto>> photosByMission
+    ) {
+        List<Long> photoIds = photosByMission.values().stream()
+                .flatMap(List::stream)
+                .map(MissionPhoto::getId)
+                .sorted()
+                .toList();
+        if (photoIds.isEmpty()) {
+            return Set.of();
+        }
+        return Set.copyOf(
+                evaluationRepository.findSuccessfulMissionPhotoIds(photoIds)
+        );
     }
 
     private PhotoMissionAlbumResponse.MissionAlbum albumCard(
@@ -892,6 +923,11 @@ public class PhotoMissionQueryService {
                 .comparing(this::isRepresentative)
                 .reversed()
                 .thenComparing(MissionPhoto::getSubmittedAt)
+                .thenComparing(MissionPhoto::getId);
+    }
+
+    private Comparator<MissionPhoto> completionPhotoOrder() {
+        return Comparator.comparing(MissionPhoto::getSubmittedAt)
                 .thenComparing(MissionPhoto::getId);
     }
 

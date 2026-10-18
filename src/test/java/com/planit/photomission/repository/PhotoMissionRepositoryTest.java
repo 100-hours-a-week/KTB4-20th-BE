@@ -295,6 +295,9 @@ class PhotoMissionRepositoryTest {
         assertThat(evaluationRepository.findRecognizedByMissionPhotoIdIn(
                 List.of(photo.getId())
         )).containsExactly(recognized);
+        assertThat(evaluationRepository.findSuccessfulMissionPhotoIds(
+                List.of(photo.getId())
+        )).containsExactly(photo.getId());
     }
 
     @DisplayName("여행 단위 포토미션 생성 작업을 조회한다")
