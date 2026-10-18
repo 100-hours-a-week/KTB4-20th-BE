@@ -205,4 +205,11 @@ public class Notification {
     public LocalDateTime getDeletedAt() {
         return deletedAt;
     }
+
+    public void markAsRead(LocalDateTime readAt) {
+        Objects.requireNonNull(readAt, "알림 읽음 시각은 필수입니다");
+        if (this.readAt == null) {
+            this.readAt = readAt;
+        }
+    }
 }

@@ -1,4 +1,4 @@
-package com.planit.chat.websocket.subscription;
+package com.planit.websocket.subscription;
 
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.event.EventListener;
@@ -9,18 +9,18 @@ import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Component;
 
 @Component
-public class ChatSubscriptionReceiptSender {
+public class StompSubscriptionReceiptSender {
 
     private final MessageChannel clientOutboundChannel;
 
-    public ChatSubscriptionReceiptSender(
+    public StompSubscriptionReceiptSender(
             @Qualifier("clientOutboundChannel") MessageChannel clientOutboundChannel
     ) {
         this.clientOutboundChannel = clientOutboundChannel;
     }
 
     @EventListener
-    public void send(ChatSubscriptionReceiptEvent event) {
+    public void send(StompSubscriptionReceiptEvent event) {
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.RECEIPT);
         accessor.setSessionId(event.sessionId());
         accessor.setReceiptId(event.receiptId());
