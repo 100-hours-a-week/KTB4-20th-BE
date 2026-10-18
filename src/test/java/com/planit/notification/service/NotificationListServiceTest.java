@@ -12,6 +12,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.PageRequest;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -25,6 +27,11 @@ import static org.mockito.Mockito.when;
 
 class NotificationListServiceTest {
 
+    private static final Clock CLOCK = Clock.fixed(
+            Instant.parse("2026-10-17T02:00:00Z"),
+            java.time.ZoneId.of("Asia/Seoul")
+    );
+
     @DisplayName("현재 사용자의 미읽음 알림 수와 존재 여부를 반환한다")
     @Test
     void returnsUnreadCount() {
@@ -33,7 +40,8 @@ class NotificationListServiceTest {
         NotificationListService service = new NotificationListService(
                 notificationRepository,
                 mock(TripRepository.class),
-                new NotificationListCursorCodec()
+                new NotificationListCursorCodec(),
+                CLOCK
         );
         UUID recipientPublicId = UUID.randomUUID();
         when(notificationRepository
@@ -55,7 +63,8 @@ class NotificationListServiceTest {
         NotificationListService service = new NotificationListService(
                 notificationRepository,
                 mock(TripRepository.class),
-                new NotificationListCursorCodec()
+                new NotificationListCursorCodec(),
+                CLOCK
         );
         UUID recipientPublicId = UUID.randomUUID();
 
@@ -76,7 +85,8 @@ class NotificationListServiceTest {
         NotificationListService service = new NotificationListService(
                 notificationRepository,
                 tripRepository,
-                cursorCodec
+                cursorCodec,
+                CLOCK
         );
         UUID recipientPublicId = UUID.randomUUID();
         List<Notification> notifications = new ArrayList<>();
@@ -135,7 +145,8 @@ class NotificationListServiceTest {
         NotificationListService service = new NotificationListService(
                 notificationRepository,
                 tripRepository,
-                cursorCodec
+                cursorCodec,
+                CLOCK
         );
         UUID recipientPublicId = UUID.randomUUID();
         LocalDateTime createdAt = LocalDateTime.of(2026, 10, 16, 10, 0);
@@ -161,6 +172,46 @@ class NotificationListServiceTest {
         assertThat(response.items()).isEmpty();
         assertThat(response.page().nextCursor()).isNull();
         assertThat(response.page().hasNext()).isFalse();
+    }
+
+    @DisplayName("서울 기준 당일의 현재 사용자 미전달 알림을 반환한다")
+    @Test
+    void returnsPendingDeliveriesForToday() {
+        NotificationRepository notificationRepository =
+                mock(NotificationRepository.class);
+        NotificationListService service = new NotificationListService(
+                notificationRepository,
+                mock(TripRepository.class),
+                new NotificationListCursorCodec(),
+                CLOCK
+        );
+        UUID recipientPublicId = UUID.randomUUID();
+        Notification notification = notification(
+                16001L,
+                1001L,
+                LocalDateTime.of(2026, 10, 17, 10, 0)
+        );
+        when(notificationRepository.findPendingDeliveriesForRecipient(
+                recipientPublicId,
+                LocalDateTime.of(2026, 10, 17, 0, 0),
+                LocalDateTime.of(2026, 10, 18, 0, 0),
+                List.of(
+                        NotificationType.TRIP_D1,
+                        NotificationType.TRIP_WEATHER_ALERT
+                )
+        )).thenReturn(List.of(notification));
+
+        var response = service.getPendingDeliveries(
+                recipientPublicId.toString()
+        );
+
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().getFirst().notificationId())
+                .isEqualTo("16001");
+        assertThat(response.items().getFirst().createdAt())
+                .isEqualTo(OffsetDateTime.parse(
+                        "2026-10-17T10:00:00+09:00"
+                ));
     }
 
     private Notification notification(

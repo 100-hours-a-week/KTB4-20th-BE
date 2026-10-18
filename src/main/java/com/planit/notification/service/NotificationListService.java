@@ -3,17 +3,21 @@ package com.planit.notification.service;
 import com.planit.domain.Trip;
 import com.planit.notification.domain.Notification;
 import com.planit.notification.domain.NotificationTargetStatus;
+import com.planit.notification.domain.NotificationType;
 import com.planit.notification.dto.NotificationListResponse;
+import com.planit.notification.dto.PendingNotificationDeliveriesResponse;
 import com.planit.notification.dto.UnreadNotificationCountResponse;
 import com.planit.notification.pagination.NotificationListCursorCodec;
 import com.planit.notification.pagination.NotificationListCursorCodec.Cursor;
 import com.planit.notification.repository.NotificationRepository;
 import com.planit.repository.TripRepository;
-import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.HashSet;
@@ -22,16 +26,32 @@ import java.util.Set;
 import java.util.UUID;
 
 @Service
-@RequiredArgsConstructor
 public class NotificationListService {
 
     private static final int FIRST_PAGE_SIZE = 20;
     private static final int NEXT_PAGE_SIZE = 10;
     private static final ZoneOffset SEOUL_OFFSET = ZoneOffset.ofHours(9);
+    private static final List<NotificationType> DELIVERABLE_TYPES = List.of(
+            NotificationType.TRIP_D1,
+            NotificationType.TRIP_WEATHER_ALERT
+    );
 
     private final NotificationRepository notificationRepository;
     private final TripRepository tripRepository;
     private final NotificationListCursorCodec cursorCodec;
+    private final Clock clock;
+
+    public NotificationListService(
+            NotificationRepository notificationRepository,
+            TripRepository tripRepository,
+            NotificationListCursorCodec cursorCodec,
+            @Qualifier("tripRemindClock") Clock clock
+    ) {
+        this.notificationRepository = notificationRepository;
+        this.tripRepository = tripRepository;
+        this.cursorCodec = cursorCodec;
+        this.clock = clock;
+    }
 
     @Transactional(readOnly = true)
     public NotificationListResponse getNotifications(
@@ -79,6 +99,34 @@ public class NotificationListService {
                 unreadCount,
                 unreadCount > 0
         );
+    }
+
+    @Transactional(readOnly = true)
+    public PendingNotificationDeliveriesResponse getPendingDeliveries(
+            String userPublicId
+    ) {
+        LocalDate today = LocalDate.now(clock);
+        LocalDateTime startInclusive = today.atStartOfDay();
+        LocalDateTime endExclusive = today.plusDays(1).atStartOfDay();
+
+        List<PendingNotificationDeliveriesResponse.Item> items =
+                notificationRepository.findPendingDeliveriesForRecipient(
+                                UUID.fromString(userPublicId),
+                                startInclusive,
+                                endExclusive,
+                                DELIVERABLE_TYPES
+                        ).stream()
+                        .map(notification ->
+                                new PendingNotificationDeliveriesResponse.Item(
+                                        notification.getId().toString(),
+                                        notification.getType(),
+                                        notification.getTitle(),
+                                        notification.getBody(),
+                                        toOffset(notification.getCreatedAt())
+                                ))
+                        .toList();
+
+        return new PendingNotificationDeliveriesResponse(items);
     }
 
     private Set<Long> findActiveTripIds(List<Notification> notifications) {

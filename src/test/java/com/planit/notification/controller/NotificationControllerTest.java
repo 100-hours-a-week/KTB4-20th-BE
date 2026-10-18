@@ -1,14 +1,18 @@
 package com.planit.notification.controller;
 
 import com.planit.global.error.GlobalExceptionHandler;
+import com.planit.global.error.BusinessException;
+import com.planit.global.error.ErrorCode;
 import com.planit.notification.domain.NotificationTargetStatus;
 import com.planit.notification.domain.NotificationTargetType;
 import com.planit.notification.domain.NotificationType;
 import com.planit.notification.dto.AllNotificationsReadResponse;
 import com.planit.notification.dto.NotificationListResponse;
 import com.planit.notification.dto.NotificationReadResponse;
+import com.planit.notification.dto.PendingNotificationDeliveriesResponse;
 import com.planit.notification.dto.UnreadNotificationCountResponse;
 import com.planit.notification.service.NotificationListService;
+import com.planit.notification.service.NotificationDeliveryService;
 import com.planit.notification.service.NotificationReadService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -21,6 +25,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -35,14 +40,20 @@ class NotificationControllerTest {
 
     private NotificationListService service;
     private NotificationReadService readService;
+    private NotificationDeliveryService deliveryService;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         service = mock(NotificationListService.class);
         readService = mock(NotificationReadService.class);
+        deliveryService = mock(NotificationDeliveryService.class);
         mockMvc = MockMvcBuilders.standaloneSetup(
-                        new NotificationController(service, readService)
+                        new NotificationController(
+                                service,
+                                readService,
+                                deliveryService
+                        )
                 )
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -119,6 +130,43 @@ class NotificationControllerTest {
         verify(service).getUnreadCount(USER_PUBLIC_ID);
     }
 
+    @DisplayName("현재 사용자의 당일 미전달 알림을 조회한다")
+    @Test
+    void getsPendingDeliveries() throws Exception {
+        when(service.getPendingDeliveries(USER_PUBLIC_ID))
+                .thenReturn(new PendingNotificationDeliveriesResponse(
+                        List.of(new PendingNotificationDeliveriesResponse.Item(
+                                "16001",
+                                NotificationType.TRIP_WEATHER_ALERT,
+                                "여행지에 많은 비가 예상돼요",
+                                "여행 기간에 폭우가 예상됩니다.",
+                                OffsetDateTime.parse(
+                                        "2026-10-17T10:00:00.123456+09:00"
+                                )
+                        ))
+                ));
+
+        mockMvc.perform(get("/api/notifications/pending-deliveries")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(
+                        "PENDING_NOTIFICATION_DELIVERIES_RETRIEVED"
+                ))
+                .andExpect(jsonPath("$.message")
+                        .value("미전달 알림을 조회했습니다."))
+                .andExpect(jsonPath("$.data.items[0].notificationId")
+                        .value("16001"))
+                .andExpect(jsonPath("$.data.items[0].type")
+                        .value("TRIP_WEATHER_ALERT"))
+                .andExpect(jsonPath("$.data.items[0].createdAt")
+                        .value("2026-10-17T10:00:00.123456+09:00"));
+
+        verify(service).getPendingDeliveries(USER_PUBLIC_ID);
+    }
+
     @DisplayName("현재 사용자의 모든 알림을 읽음 처리한다")
     @Test
     void marksAllNotificationsAsRead() throws Exception {
@@ -180,5 +228,42 @@ class NotificationControllerTest {
                 .andExpect(jsonPath("$.data.navigable").value(false));
 
         verify(readService).markAsRead(USER_PUBLIC_ID, 16001L);
+    }
+
+    @DisplayName("현재 사용자의 알림 수신을 확인한다")
+    @Test
+    void acknowledgesNotificationDelivery() throws Exception {
+        mockMvc.perform(put("/api/notifications/16001/delivery-ack")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code")
+                        .value("NOTIFICATION_DELIVERY_ACKNOWLEDGED"))
+                .andExpect(jsonPath("$.message")
+                        .value("알림 수신을 확인했습니다."))
+                .andExpect(jsonPath("$.data").isEmpty());
+
+        verify(deliveryService).acknowledge(USER_PUBLIC_ID, 16001L);
+    }
+
+    @DisplayName("소유하지 않았거나 삭제된 알림의 수신 확인은 404를 반환한다")
+    @Test
+    void rejectsUnavailableNotificationDelivery() throws Exception {
+        doThrow(new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND))
+                .when(deliveryService)
+                .acknowledge(USER_PUBLIC_ID, 16001L);
+
+        mockMvc.perform(put("/api/notifications/16001/delivery-ack")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        )))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code")
+                        .value("NOTIFICATION_NOT_FOUND"))
+                .andExpect(jsonPath("$.message")
+                        .value("알림을 찾을 수 없습니다."));
     }
 }

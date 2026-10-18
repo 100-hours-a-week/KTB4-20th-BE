@@ -205,6 +205,90 @@ class NotificationRepositoryTest {
                 .isEqualTo(recipient.getPublicId());
     }
 
+    @DisplayName("현재 사용자의 당일 미전달·미삭제 여행 알림만 조회한다")
+    @Test
+    void findsPendingDeliveriesForRecipient() {
+        User recipient = userRepository.save(new User(
+                null,
+                UUID.randomUUID(),
+                "복구조회수신자"
+        ));
+        User otherUser = userRepository.save(new User(
+                null,
+                UUID.randomUUID(),
+                "다른복구조회수신자"
+        ));
+        LocalDate targetDate = LocalDate.of(2026, 10, 18);
+        LocalDateTime dayStart = LocalDateTime.of(2026, 10, 17, 0, 0);
+        Long eligibleId = notificationStore.saveIdempotently(notification(
+                recipient,
+                2101L,
+                targetDate,
+                NotificationType.TRIP_D1,
+                dayStart.plusHours(10)
+        ));
+        Long deliveredId = notificationStore.saveIdempotently(notification(
+                recipient,
+                2102L,
+                targetDate,
+                NotificationType.TRIP_WEATHER_ALERT,
+                dayStart.plusHours(10)
+        ));
+        Long deletedId = notificationStore.saveIdempotently(notification(
+                recipient,
+                2103L,
+                targetDate,
+                NotificationType.TRIP_D1,
+                dayStart.plusHours(10)
+        ));
+        notificationStore.saveIdempotently(notification(
+                otherUser,
+                2104L,
+                targetDate,
+                NotificationType.TRIP_D1,
+                dayStart.plusHours(10)
+        ));
+        notificationStore.saveIdempotently(notification(
+                recipient,
+                2105L,
+                targetDate,
+                NotificationType.TRIP_D1,
+                dayStart.minusSeconds(1)
+        ));
+        notificationStore.saveIdempotently(notification(
+                recipient,
+                2106L,
+                targetDate,
+                NotificationType.TRIP_D1,
+                dayStart.plusDays(1)
+        ));
+        jdbcTemplate.update(
+                "UPDATE notifications SET delivered_at = ? WHERE id = ?",
+                dayStart.plusHours(10).plusMinutes(1),
+                deliveredId
+        );
+        jdbcTemplate.update(
+                "UPDATE notifications SET deleted_at = ? WHERE id = ?",
+                dayStart.plusHours(10).plusMinutes(1),
+                deletedId
+        );
+
+        List<Notification> notifications = notificationRepository
+                .findPendingDeliveriesForRecipient(
+                        recipient.getPublicId(),
+                        dayStart,
+                        dayStart.plusDays(1),
+                        List.of(
+                                NotificationType.TRIP_D1,
+                                NotificationType.TRIP_WEATHER_ALERT
+                        )
+                );
+
+        assertThat(notifications)
+                .extracting(Notification::getId)
+                .containsExactly(eligibleId);
+    }
+
     @DisplayName("사용자별 알림을 생성 시각과 ID 역순의 커서 경계로 조회한다")
     @Test
     void findsRecipientNotificationPageAfterCursor() {
