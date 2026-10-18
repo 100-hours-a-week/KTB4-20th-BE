@@ -16,6 +16,7 @@ public enum ErrorCode {
     UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "지원하지 않는 미디어 타입입니다."),
     RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "요청 횟수 제한을 초과했습니다."),
     INVALID_CURSOR(HttpStatus.BAD_REQUEST, "유효하지 않은 cursor입니다."),
+    NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "알림을 찾을 수 없습니다."),
     INVALID_AFTER_MESSAGE_ID(HttpStatus.BAD_REQUEST, "유효하지 않은 이후 메시지 기준값입니다."),
     INVALID_MESSAGE_HISTORY_QUERY(HttpStatus.BAD_REQUEST, "메시지 이력 조회 조건을 확인해 주세요."),
     INVALID_CHAT_MESSAGE_PAYLOAD(HttpStatus.BAD_REQUEST, "채팅 메시지 요청 값을 확인해 주세요."),

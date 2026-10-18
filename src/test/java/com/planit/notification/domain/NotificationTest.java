@@ -13,6 +13,26 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class NotificationTest {
 
+    @DisplayName("순차적인 반복 읽음 처리는 기존 시각을 유지한다")
+    @Test
+    void preservesFirstReadAt() {
+        Notification notification = Notification.createTripNotification(
+                new User(null, UUID.randomUUID(), "읽음테스트"),
+                1001L,
+                LocalDate.of(2026, 10, 18),
+                NotificationType.TRIP_D1,
+                "알림 제목",
+                "알림 본문",
+                LocalDateTime.of(2026, 10, 17, 10, 0)
+        );
+        LocalDateTime firstReadAt = LocalDateTime.of(2026, 10, 17, 11, 0);
+
+        notification.markAsRead(firstReadAt);
+        notification.markAsRead(firstReadAt.plusMinutes(1));
+
+        assertThat(notification.getReadAt()).isEqualTo(firstReadAt);
+    }
+
     @DisplayName("여행 알림은 승인된 순서의 평문 중복 방지 키로 생성한다")
     @Test
     void createsTripNotificationWithPlaintextDedupeKey() {
