@@ -106,9 +106,9 @@ public class ScheduleGenerationServiceImpl
             List<RecommendedRoute> routes = recommendedPlaceMapper.mapRoutes(
                     response
             );
-            schedulePersistenceService.save(
+            schedulePersistenceService.saveCandidates(
                     tripId,
-                    routes.getFirst().days(),
+                    routes,
                     mode
             );
         } catch (RouteCalculationException exception) {
