@@ -11,7 +11,6 @@ import com.planit.repository.TripInvitationRepository;
 import com.planit.repository.TripMemberRepository;
 import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
-import com.planit.schedule.service.SchedulePersistenceService;
 import com.planit.trip.dto.TripCreateRequest;
 import com.planit.trip.dto.TripCreateResponse;
 import com.planit.trip.dto.TripConflictResponse;
@@ -56,7 +55,7 @@ public class TripServiceImpl implements TripService {
     private final TokenHasher tokenHasher;
     private final TripListCursorCodec tripListCursorCodec;
     private final ImageStorage imageStorage;
-    private final SchedulePersistenceService schedulePersistenceService;
+    private final TripRoomDeleter tripRoomDeleter;
 
     private static final int MAX_TRIP_LIST_SIZE = 10;
     private static final int DEFAULT_TRIP_CAPACITY = 4;
@@ -361,9 +360,7 @@ public class TripServiceImpl implements TripService {
 
         if (allowAutoDelete && remainingMembers.size() <= 1) {
             currentMember.leave(leftAt);
-            remainingMembers.forEach(member -> member.leave(leftAt));
-            trip.delete(leftAt);
-            schedulePersistenceService.deleteAllForTrip(trip.getId());
+            tripRoomDeleter.delete(trip, remainingMembers, leftAt);
             return new TripLeaveResponse(true, null);
         }
 

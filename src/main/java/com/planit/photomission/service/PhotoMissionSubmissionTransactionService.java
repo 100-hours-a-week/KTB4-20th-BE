@@ -70,6 +70,119 @@ public class PhotoMissionSubmissionTransactionService {
             BigDecimal latitude,
             BigDecimal longitude
     ) {
+        SubmissionContext context = loadSubmissionContext(
+                userPublicId,
+                missionId,
+                idempotencyKey
+        );
+        Mission mission = context.mission();
+        TripMember member = context.member();
+        LocalDateTime now = context.now();
+        ImageFile imageFile = saveImageFile(
+                imageKey, originalFilename, mimeType, sizeBytes, now
+        );
+        MissionPhoto photo;
+        if (mission.isPersonal()) {
+            MissionParticipation participation = participationRepository
+                    .findByMissionIdAndTripMemberId(missionId, member.getId())
+                    .filter(this::canSubmitPersonalPhoto)
+                    .orElseThrow(this::submissionNotAllowed);
+            if (participation.getStatus()
+                    == MissionCompletionStatus.COMPLETED) {
+                photo = MissionPhoto.personalCandidate(
+                        participation,
+                        imageFile,
+                        idempotencyKey,
+                        latitude,
+                        longitude,
+                        now
+                );
+            } else {
+                photoRepository.findActiveByParticipationId(
+                                participation.getId()
+                        )
+                        .ifPresent(activePhoto -> {
+                            activePhoto.replace(now);
+                            photoRepository.flush();
+                        });
+                photo = MissionPhoto.personal(
+                        participation,
+                        imageFile,
+                        idempotencyKey,
+                        latitude,
+                        longitude,
+                        now
+                );
+            }
+        } else {
+            groupStateRepository.findByMissionId(missionId)
+                    .filter(MissionGroupState::canSubmitPhoto)
+                    .orElseThrow(this::submissionNotAllowed);
+            photo = MissionPhoto.group(
+                    mission,
+                    member,
+                    imageFile,
+                    idempotencyKey,
+                    latitude,
+                    longitude,
+                    now
+            );
+        }
+        return photoRepository.save(photo).getId();
+    }
+
+    @Transactional
+    public Long saveAdditionalGroupPhoto(
+            String userPublicId,
+            Long missionId,
+            UUID idempotencyKey,
+            String imageKey,
+            String originalFilename,
+            String mimeType,
+            int sizeBytes,
+            BigDecimal latitude,
+            BigDecimal longitude
+    ) {
+        SubmissionContext context = loadSubmissionContext(
+                userPublicId,
+                missionId,
+                idempotencyKey
+        );
+        Mission mission = context.mission();
+        if (!mission.isGroup()) {
+            throw submissionNotAllowed();
+        }
+        MissionGroupState state = groupStateRepository
+                .findByMissionId(missionId)
+                .orElseThrow(this::submissionNotAllowed);
+        if (state.getStatus() != MissionCompletionStatus.COMPLETED) {
+            throw submissionNotAllowed();
+        }
+
+        ImageFile imageFile = saveImageFile(
+                imageKey,
+                originalFilename,
+                mimeType,
+                sizeBytes,
+                context.now()
+        );
+        MissionPhoto photo = MissionPhoto.group(
+                mission,
+                context.member(),
+                imageFile,
+                idempotencyKey,
+                latitude,
+                longitude,
+                context.now()
+        );
+        return photoRepository.save(photo).getId();
+    }
+
+    private SubmissionContext loadSubmissionContext(
+            String userPublicId,
+            Long missionId,
+            UUID idempotencyKey
+    ) {
         rejectReusedIdempotencyKey(idempotencyKey);
         Mission mission = missionRepository.findById(missionId)
                 .orElseThrow(() -> new BusinessException(
@@ -87,7 +200,6 @@ public class PhotoMissionSubmissionTransactionService {
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.TRIP_MEMBER_REQUIRED
                 ));
-
         LocalDateTime now = LocalDateTime.now(clock);
         if (!PhotoMissionAvailabilityPolicy.isPublished(
                 mission.getScheduleDay().getScheduleDate(),
@@ -95,46 +207,23 @@ public class PhotoMissionSubmissionTransactionService {
         ) || mission.isExpired(now)) {
             throw submissionNotAllowed();
         }
-        ImageFile imageFile = imageFileRepository.save(ImageFile.mission(
+        return new SubmissionContext(mission, member, now);
+    }
+
+    private ImageFile saveImageFile(
+            String imageKey,
+            String originalFilename,
+            String mimeType,
+            int sizeBytes,
+            LocalDateTime createdAt
+    ) {
+        return imageFileRepository.save(ImageFile.mission(
                 imageKey,
                 originalFilename,
                 mimeType,
-                sizeBytes
+                sizeBytes,
+                createdAt
         ));
-        MissionPhoto photo;
-        if (mission.isPersonal()) {
-            MissionParticipation participation = participationRepository
-                    .findByMissionIdAndTripMemberId(missionId, member.getId())
-                    .filter(this::isPendingAndRetryable)
-                    .orElseThrow(this::submissionNotAllowed);
-            photoRepository.findActiveByParticipationId(participation.getId())
-                    .ifPresent(activePhoto -> {
-                        activePhoto.replace(now);
-                        photoRepository.flush();
-                    });
-            photo = MissionPhoto.personal(
-                    participation,
-                    imageFile,
-                    idempotencyKey,
-                    latitude,
-                    longitude,
-                    now
-            );
-        } else {
-            groupStateRepository.findByMissionId(missionId)
-                    .filter(this::isPendingAndRetryable)
-                    .orElseThrow(this::submissionNotAllowed);
-            photo = MissionPhoto.group(
-                    mission,
-                    member,
-                    imageFile,
-                    idempotencyKey,
-                    latitude,
-                    longitude,
-                    now
-            );
-        }
-        return photoRepository.save(photo).getId();
     }
 
     private void rejectReusedIdempotencyKey(UUID idempotencyKey) {
@@ -145,20 +234,23 @@ public class PhotoMissionSubmissionTransactionService {
         }
     }
 
-    private boolean isPendingAndRetryable(MissionParticipation participation) {
-        return participation.getStatus() == MissionCompletionStatus.PENDING
-                && participation.getRetryCount()
-                < MissionParticipation.MAX_RETRY_COUNT;
-    }
-
-    private boolean isPendingAndRetryable(MissionGroupState state) {
-        return state.getStatus() == MissionCompletionStatus.PENDING
-                && state.getRetryCount() < MissionGroupState.MAX_RETRY_COUNT;
+    private boolean canSubmitPersonalPhoto(
+            MissionParticipation participation
+    ) {
+        return participation.getStatus() == MissionCompletionStatus.COMPLETED
+                || participation.canSubmitPhoto();
     }
 
     private BusinessException submissionNotAllowed() {
         return new BusinessException(
                 ErrorCode.PHOTO_MISSION_SUBMISSION_NOT_ALLOWED
         );
+    }
+
+    private record SubmissionContext(
+            Mission mission,
+            TripMember member,
+            LocalDateTime now
+    ) {
     }
 }

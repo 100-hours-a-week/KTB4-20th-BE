@@ -9,6 +9,7 @@ import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
 import com.planit.photomission.domain.Mission;
 import com.planit.photomission.domain.MissionGroupState;
+import com.planit.photomission.domain.MissionCompletionStatus;
 import com.planit.photomission.domain.MissionParticipation;
 import com.planit.photomission.domain.MissionPhoto;
 import com.planit.photomission.domain.MissionScope;
@@ -30,6 +31,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -51,6 +53,12 @@ class PhotoMissionSubmissionTransactionServiceTest {
             UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
     private static final LocalDate TODAY = LocalDate.of(2026, 10, 18);
     private static final ZoneId SEOUL_ZONE = ZoneId.of("Asia/Seoul");
+    private static final LocalDateTime SEOUL_NOW =
+            LocalDateTime.of(2026, 10, 18, 10, 0);
+    private static final Clock SEOUL_CLOCK = Clock.fixed(
+            Instant.parse("2026-10-18T01:00:00Z"),
+            SEOUL_ZONE
+    );
 
     private MissionRepository missionRepository;
     private MissionParticipationRepository participationRepository;
@@ -71,7 +79,7 @@ class PhotoMissionSubmissionTransactionServiceTest {
         userRepository = mock(UserRepository.class);
         tripMemberRepository = mock(TripMemberRepository.class);
         imageFileRepository = mock(ImageFileRepository.class);
-        clock = fixedClock(LocalTime.NOON);
+        clock = SEOUL_CLOCK;
         service = new PhotoMissionSubmissionTransactionService(
                 missionRepository,
                 participationRepository,
@@ -123,8 +131,78 @@ class PhotoMissionSubmissionTransactionServiceTest {
         assertThat(saved.getMission()).isSameAs(fixture.mission());
         assertThat(saved.getSubmittedBy()).isSameAs(fixture.member());
         assertThat(saved.getParticipation()).isNull();
+        assertThat(saved.getSubmittedAt()).isEqualTo(SEOUL_NOW);
+        assertThat(saved.getImageFile().getCreatedAt()).isEqualTo(SEOUL_NOW);
         assertThat(saved.getImageFile().getImagePurpose())
                 .isEqualTo(ImagePurpose.MISSION);
+    }
+
+    @DisplayName("완료한 단체 미션에는 대표 사진을 바꾸지 않고 사진을 추가한다")
+    @Test
+    void savesAdditionalGroupMissionPhoto() {
+        Fixture fixture = fixture(MissionScope.GROUP);
+        MissionGroupState state = MissionGroupState.create(
+                fixture.mission(), LocalDateTime.now()
+        );
+        state.completeByAi(LocalDateTime.now());
+        stubCommon(fixture);
+        when(groupStateRepository.findByMissionId(31L))
+                .thenReturn(Optional.of(state));
+        when(imageFileRepository.save(any(ImageFile.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(photoRepository.save(any(MissionPhoto.class)))
+                .thenAnswer(invocation -> {
+                    MissionPhoto photo = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(photo, "id", 43L);
+                    return photo;
+                });
+
+        Long photoId = service.saveAdditionalGroupPhoto(
+                USER_PUBLIC_ID.toString(),
+                31L,
+                UUID.randomUUID(),
+                "missions/31/additional.jpg",
+                "additional.jpg",
+                "image/jpeg",
+                1024,
+                null,
+                null
+        );
+
+        assertThat(photoId).isEqualTo(43L);
+        ArgumentCaptor<MissionPhoto> captor =
+                ArgumentCaptor.forClass(MissionPhoto.class);
+        verify(photoRepository).save(captor.capture());
+        assertThat(captor.getValue().getRepresentativeSlot()).isNull();
+    }
+
+    @DisplayName("진행 중인 단체 미션에는 추가 사진 경로로 제출할 수 없다")
+    @Test
+    void rejectsAdditionalPhotoForPendingGroupMission() {
+        Fixture fixture = fixture(MissionScope.GROUP);
+        MissionGroupState state = MissionGroupState.create(
+                fixture.mission(), LocalDateTime.now()
+        );
+        stubCommon(fixture);
+        when(groupStateRepository.findByMissionId(31L))
+                .thenReturn(Optional.of(state));
+
+        assertThatThrownBy(() -> service.saveAdditionalGroupPhoto(
+                USER_PUBLIC_ID.toString(),
+                31L,
+                UUID.randomUUID(),
+                "missions/31/additional.jpg",
+                "additional.jpg",
+                "image/jpeg",
+                1024,
+                null,
+                null
+        ))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception ->
+                        ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.PHOTO_MISSION_SUBMISSION_NOT_ALLOWED);
+        verify(imageFileRepository, never()).save(any());
     }
 
     @DisplayName("개인 미션 재촬영은 기존 활성 사진을 교체하고 새 사진을 저장한다")
@@ -172,6 +250,57 @@ class PhotoMissionSubmissionTransactionServiceTest {
         assertThat(photoId).isEqualTo(42L);
         assertThat(previous.getReplacedAt()).isNotNull();
         verify(photoRepository).flush();
+    }
+
+    @DisplayName("완료한 개인 미션의 재촬영 사진은 기존 사진을 유지한 채 판정 대기 상태로 저장한다")
+    @Test
+    void savesCompletedPersonalMissionPhotoAsCandidate() {
+        Fixture fixture = fixture(MissionScope.PERSONAL);
+        MissionParticipation participation = MissionParticipation.create(
+                fixture.mission(), fixture.member(), LocalDateTime.now()
+        );
+        ReflectionTestUtils.setField(participation, "id", 61L);
+        participation.completeByAi(LocalDateTime.now());
+        MissionPhoto previous = MissionPhoto.personal(
+                participation,
+                ImageFile.mission("old.jpg", "old.jpg", "image/jpeg", 10),
+                UUID.randomUUID(),
+                null,
+                null,
+                LocalDateTime.now().minusMinutes(1)
+        );
+        stubCommon(fixture);
+        when(participationRepository.findByMissionIdAndTripMemberId(31L, 21L))
+                .thenReturn(Optional.of(participation));
+        when(imageFileRepository.save(any(ImageFile.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(photoRepository.save(any(MissionPhoto.class)))
+                .thenAnswer(invocation -> {
+                    MissionPhoto photo = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(photo, "id", 42L);
+                    return photo;
+                });
+
+        service.save(
+                USER_PUBLIC_ID.toString(),
+                31L,
+                UUID.randomUUID(),
+                "missions/31/new.jpg",
+                "new.jpg",
+                "image/jpeg",
+                1024,
+                null,
+                null
+        );
+
+        ArgumentCaptor<MissionPhoto> captor =
+                ArgumentCaptor.forClass(MissionPhoto.class);
+        verify(photoRepository).save(captor.capture());
+        assertThat(captor.getValue().getActiveSlot()).isNull();
+        assertThat(previous.getReplacedAt()).isNull();
+        assertThat(participation.getStatus())
+                .isEqualTo(MissionCompletionStatus.COMPLETED);
+        verify(photoRepository, never()).flush();
     }
 
     @DisplayName("이미 사용한 멱등성 키로 사진을 다시 제출할 수 없다")

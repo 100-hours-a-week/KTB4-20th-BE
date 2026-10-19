@@ -40,6 +40,11 @@ public final class ShortestRouteCalculator {
         return toPlan(searchResult.bestRoute);
     }
 
+    public RoutePlan calculateInGivenOrder(List<RoutePlace> places) {
+        validate(places);
+        return toPlan(List.copyOf(places));
+    }
+
     private void search(
             List<RoutePlace> places,
             int targetCount,

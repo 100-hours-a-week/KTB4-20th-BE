@@ -4,6 +4,9 @@ import com.planit.auth.id.UuidV7Generator;
 import com.planit.auth.token.JwtTokenProvider;
 import com.planit.domain.User;
 import com.planit.notification.domain.NotificationType;
+import com.planit.notification.domain.NotificationTargetType;
+import com.planit.notification.domain.WeatherCondition;
+import com.planit.notification.dto.NotificationTargetResponse;
 import com.planit.repository.UserRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -105,8 +108,13 @@ class NotificationWebSocketIntegrationTest {
                 user.getPublicId(),
                 16001L,
                 NotificationType.TRIP_WEATHER_ALERT,
+                WeatherCondition.HEAVY_RAIN,
                 "여행지에 특이 기상이 예상돼요",
                 "여행 기간의 날씨를 확인해 주세요.",
+                new NotificationTargetResponse(
+                        NotificationTargetType.TRIP,
+                        "1001"
+                ),
                 OffsetDateTime.parse("2026-10-16T10:00:00+09:00")
         );
 

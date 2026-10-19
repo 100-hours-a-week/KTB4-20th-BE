@@ -3,6 +3,9 @@ package com.planit.notification.delivery;
 import com.planit.domain.User;
 import com.planit.notification.domain.Notification;
 import com.planit.notification.domain.NotificationType;
+import com.planit.notification.domain.NotificationTargetType;
+import com.planit.notification.domain.WeatherCondition;
+import com.planit.notification.dto.NotificationTargetResponse;
 import com.planit.notification.repository.NotificationRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -43,6 +46,11 @@ class NotificationPublishTargetServiceTest {
         when(notification.getTitle()).thenReturn("여행지에 특이 기상이 예상돼요");
         when(notification.getBody()).thenReturn("여행 기간의 날씨를 확인해 주세요.");
         when(notification.getCreatedAt()).thenReturn(createdAt);
+        when(notification.getWeatherCondition())
+                .thenReturn(WeatherCondition.HEAVY_RAIN);
+        when(notification.getTargetType())
+                .thenReturn(NotificationTargetType.TRIP);
+        when(notification.getTargetId()).thenReturn(1001L);
         when(repository.findUndeliveredCreatedBetween(
                 LocalDateTime.of(2026, 10, 16, 0, 0),
                 LocalDateTime.of(2026, 10, 17, 0, 0),
@@ -57,8 +65,13 @@ class NotificationPublishTargetServiceTest {
                         recipientPublicId,
                         16001L,
                         NotificationType.TRIP_WEATHER_ALERT,
+                        WeatherCondition.HEAVY_RAIN,
                         "여행지에 특이 기상이 예상돼요",
                         "여행 기간의 날씨를 확인해 주세요.",
+                        new NotificationTargetResponse(
+                                NotificationTargetType.TRIP,
+                                "1001"
+                        ),
                         createdAt.atOffset(java.time.ZoneOffset.ofHours(9))
                 )
         );
