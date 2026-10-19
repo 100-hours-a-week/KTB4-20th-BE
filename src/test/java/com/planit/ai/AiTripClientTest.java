@@ -130,7 +130,43 @@ class AiTripClientTest {
                                 "selected_for": ["user_id_2"],
                                 "matched_preferences": ["HISTORY_CULTURE"]
                               }
-                            ]]
+                            ]],
+                            "routes": [
+                              {
+                                "strategy": "PREFERENCE",
+                                "preference_score": 92,
+                                "days": [[
+                                  {
+                                    "id": "preference-place",
+                                    "displayName": {"text": "취향 장소", "languageCode": "ko"},
+                                    "location": {"latitude": 37.57, "longitude": 126.97},
+                                    "types": ["museum"],
+                                    "rating": 4.5,
+                                    "userRatingCount": 100,
+                                    "editorialSummary": null,
+                                    "selected_for": ["user_id_1"],
+                                    "matched_preferences": ["HISTORY_CULTURE"]
+                                  }
+                                ]]
+                              },
+                              {
+                                "strategy": "BALANCED",
+                                "preference_score": 68,
+                                "days": [[
+                                  {
+                                    "id": "balanced-place",
+                                    "displayName": {"text": "균형 장소", "languageCode": "ko"},
+                                    "location": {"latitude": 37.58, "longitude": 126.98},
+                                    "types": ["park"],
+                                    "rating": 4.3,
+                                    "userRatingCount": 80,
+                                    "editorialSummary": null,
+                                    "selected_for": ["user_id_2"],
+                                    "matched_preferences": ["NATURE_HEALING"]
+                                  }
+                                ]]
+                              }
+                            ]
                           }
                         }
                         """, MediaType.APPLICATION_JSON));
@@ -156,6 +192,15 @@ class AiTripClientTest {
         assertThat(response.data().places().getFirst().get(1)
                 .editorialSummary().text())
                 .isEqualTo("전통 한옥이 밀집된 서울의 대표적인 역사 마을.");
+        assertThat(response.data().routes()).hasSize(2);
+        assertThat(response.data().routes().getFirst().strategy())
+                .isEqualTo(AiPlaceSelectionResponse.Strategy.PREFERENCE);
+        assertThat(response.data().routes().getFirst().preferenceScore())
+                .isEqualTo(92);
+        assertThat(response.data().routes().get(1).strategy())
+                .isEqualTo(AiPlaceSelectionResponse.Strategy.BALANCED);
+        assertThat(response.data().routes().get(1).days().getFirst()
+                .getFirst().id()).isEqualTo("balanced-place");
         server.verify();
     }
 }
