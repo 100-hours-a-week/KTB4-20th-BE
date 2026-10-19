@@ -27,6 +27,17 @@ public interface TripRepository
             @Param("startDate") LocalDate startDate
     );
 
+    @Query("""
+            SELECT trip.id
+            FROM Trip trip
+            WHERE trip.startDate = :startDate
+              AND trip.deletedAt IS NULL
+            ORDER BY trip.id
+            """)
+    List<Long> findActiveTripIdsStartingOn(
+            @Param("startDate") LocalDate startDate
+    );
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT trip FROM Trip trip WHERE trip.id = :id")
     Optional<Trip> findByIdForUpdate(@Param("id") Long id);

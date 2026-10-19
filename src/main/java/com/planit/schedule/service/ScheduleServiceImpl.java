@@ -30,6 +30,7 @@ import com.planit.schedule.repository.ScheduleRepository;
 import com.planit.schedule.repository.ScheduleVisitRepository;
 import com.planit.trip.service.TripMemberAccessService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,6 +42,7 @@ import java.util.UUID;
 
 import static com.planit.schedule.route.HaversineDistanceCalculator.distanceMeters;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -105,6 +107,10 @@ public class ScheduleServiceImpl implements ScheduleService {
                     .ifPresent(Schedule::supersede);
             scheduleRepository.flush();
             selected.confirm(host, LocalDateTime.now(SEOUL_ZONE));
+            // 고르지 않은 후보는 더 이상 조회·확정되지 않도록 함께 대체 처리한다.
+            scheduleRepository.findByTripIdAndStatus(tripId, "DRAFT").stream()
+                    .filter(candidate -> !candidate.getId().equals(selected.getId()))
+                    .forEach(Schedule::supersede);
         }
 
         return toConfirmResponse(trip, selected);
@@ -147,10 +153,19 @@ public class ScheduleServiceImpl implements ScheduleService {
                 tripId,
                 "DRAFT"
         );
-        if (schedules.size() != ScheduleStrategy.values().length) {
+        if (schedules.isEmpty()) {
             throw new BusinessException(
                     ErrorCode.SCHEDULE_CANDIDATES_NOT_FOUND
             );
+        }
+        if (schedules.size() != ScheduleStrategy.values().length) {
+            // 후보는 항상 전략 수만큼 한 번에 저장되므로, 개수가 다르면 데이터가 어긋난 상태다.
+            log.error(
+                    "일정 후보 개수가 올바르지 않습니다. tripId={}, count={}",
+                    tripId,
+                    schedules.size()
+            );
+            throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
         }
         List<ScheduleCandidateListResponse.Candidate> candidates = schedules
                 .stream()

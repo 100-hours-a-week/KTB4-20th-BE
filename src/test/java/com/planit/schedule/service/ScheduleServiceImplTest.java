@@ -166,6 +166,30 @@ class ScheduleServiceImplTest {
         verify(scheduleRepository).flush();
     }
 
+    @DisplayName("후보를 확정하면 고르지 않은 나머지 후보를 대체 처리한다")
+    @Test
+    void supersedesUnselectedCandidatesOnConfirm() {
+        Schedule shortest = candidate(11L, ScheduleStrategy.SHORTEST, null);
+        Schedule selected = candidate(12L, ScheduleStrategy.PREFERENCE, 92);
+        Schedule balanced = candidate(13L, ScheduleStrategy.BALANCED, 68);
+        when(scheduleRepository.findByIdAndTripId(12L, 1L))
+                .thenReturn(Optional.of(selected));
+        when(scheduleRepository.findFirstByTripIdOrderByCreatedAtDesc(1L))
+                .thenReturn(Optional.of(selected));
+        when(scheduleRepository.findByTripIdAndStatus(1L, "DRAFT"))
+                .thenReturn(List.of(shortest, balanced));
+
+        service.confirmSchedule(
+                USER_PUBLIC_ID.toString(),
+                1L,
+                new ScheduleConfirmRequest(12L)
+        );
+
+        assertThat(selected.getStatus()).isEqualTo("ACTIVE");
+        assertThat(shortest.getStatus()).isEqualTo("SUPERSEDED");
+        assertThat(balanced.getStatus()).isEqualTo("SUPERSEDED");
+    }
+
     @DisplayName("같은 후보를 다시 확정해도 확정 정보가 변경되지 않는다")
     @Test
     void confirmsSameScheduleIdempotently() {
@@ -356,7 +380,23 @@ class ScheduleServiceImplTest {
         );
     }
 
-    @DisplayName("후보가 세 개 모두 존재하지 않으면 목록을 공개하지 않는다")
+    @DisplayName("후보가 없으면 후보 없음으로 응답한다")
+    @Test
+    void rejectsEmptyCandidateList() {
+        when(scheduleRepository.findByTripIdAndStatus(1L, "DRAFT"))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.getScheduleCandidates(
+                USER_PUBLIC_ID.toString(),
+                1L
+        )).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(ErrorCode.SCHEDULE_CANDIDATES_NOT_FOUND)
+        );
+    }
+
+    @DisplayName("후보 개수가 전략 수와 다르면 데이터 오류로 보고 목록을 공개하지 않는다")
     @Test
     void rejectsIncompleteCandidateList() {
         when(scheduleRepository.findByTripIdAndStatus(1L, "DRAFT"))
@@ -372,7 +412,7 @@ class ScheduleServiceImplTest {
         )).isInstanceOfSatisfying(
                 BusinessException.class,
                 exception -> assertThat(exception.getErrorCode())
-                        .isEqualTo(ErrorCode.SCHEDULE_CANDIDATES_NOT_FOUND)
+                        .isEqualTo(ErrorCode.INTERNAL_SERVER_ERROR)
         );
     }
 

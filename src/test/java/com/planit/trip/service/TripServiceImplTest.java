@@ -103,7 +103,7 @@ class TripServiceImplTest {
                 tokenHasher,
                 tripListCursorCodec,
                 imageStorage,
-                schedulePersistenceService
+                new TripRoomDeleter(schedulePersistenceService)
         );
 
         user = mock(User.class);

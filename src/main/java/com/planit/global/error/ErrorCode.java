@@ -46,6 +46,7 @@ public enum ErrorCode {
     SCHEDULE_CANDIDATES_NOT_FOUND(HttpStatus.NOT_FOUND, "조회할 일정 후보가 없습니다."),
     SCHEDULE_CANDIDATE_NOT_FOUND(HttpStatus.NOT_FOUND, "일정 후보를 찾을 수 없습니다."),
     SCHEDULE_CANDIDATES_SUPERSEDED(HttpStatus.GONE, "최신 일정 후보가 아닙니다."),
+    SCHEDULE_CANDIDATES_PENDING(HttpStatus.CONFLICT, "확정하지 않은 일정 후보가 있습니다. 후보 중 하나를 먼저 확정해 주세요."),
     TRIP_HOST_REQUIRED(HttpStatus.FORBIDDEN, "여행방 방장 권한이 필요합니다."),
     SCHEDULE_DAY_NOT_FOUND(HttpStatus.NOT_FOUND, "일정 일차를 찾을 수 없습니다."),
     SCHEDULE_STOP_NOT_FOUND(HttpStatus.NOT_FOUND, "일정 장소를 찾을 수 없습니다."),
