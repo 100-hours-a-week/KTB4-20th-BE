@@ -70,6 +70,9 @@ public class PhotoEvaluation {
     @Column(name = "evaluated_at")
     private LocalDateTime evaluatedAt;
 
+    @Column(name = "retry_after_at")
+    private LocalDateTime retryAfterAt;
+
     protected PhotoEvaluation() {
     }
 
@@ -132,6 +135,37 @@ public class PhotoEvaluation {
         executionStatus = PhotoEvaluationExecutionStatus.FAILED;
         this.errorCode = errorCode;
         evaluatedAt = failedAt;
+    }
+
+    public void waitForRetry(
+            String errorCode,
+            LocalDateTime retryAfterAt
+    ) {
+        requireRunning();
+        if (errorCode == null || errorCode.isBlank()) {
+            throw new IllegalArgumentException("AI 실행 오류 코드는 필수입니다");
+        }
+        if (retryAfterAt == null) {
+            throw new IllegalArgumentException("AI 재시도 예정 시각은 필수입니다");
+        }
+
+        executionStatus = PhotoEvaluationExecutionStatus.RETRY_PENDING;
+        this.errorCode = errorCode;
+        this.retryAfterAt = retryAfterAt;
+    }
+
+    public void markRetryStarted(LocalDateTime retriedAt) {
+        if (executionStatus != PhotoEvaluationExecutionStatus.RETRY_PENDING) {
+            throw new IllegalStateException(
+                    "재시도 대기 중인 AI 판정만 재실행할 수 있습니다"
+            );
+        }
+        if (retriedAt == null) {
+            throw new IllegalArgumentException("AI 재시도 시각은 필수입니다");
+        }
+        executionStatus = PhotoEvaluationExecutionStatus.FAILED;
+        evaluatedAt = retriedAt;
+        retryAfterAt = null;
     }
 
     private void validateResult(PhotoEvaluationResult result) {
@@ -252,5 +286,9 @@ public class PhotoEvaluation {
 
     public LocalDateTime getEvaluatedAt() {
         return evaluatedAt;
+    }
+
+    public LocalDateTime getRetryAfterAt() {
+        return retryAfterAt;
     }
 }
