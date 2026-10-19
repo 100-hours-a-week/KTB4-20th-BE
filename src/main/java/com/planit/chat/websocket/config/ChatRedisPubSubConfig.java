@@ -13,8 +13,6 @@ public class ChatRedisPubSubConfig {
 
     private static final String CHAT_MESSAGE_CHANNEL =
             "planit:chat:messages";
-    private static final long CHAT_SUBSCRIPTION_RECOVERY_INTERVAL_MILLIS =
-            1_000L;
 
     @Bean
     public ChannelTopic chatMessageTopic() {
@@ -30,9 +28,6 @@ public class ChatRedisPubSubConfig {
         RedisMessageListenerContainer container =
                 new RedisMessageListenerContainer();
         container.setConnectionFactory(connectionFactory);
-        container.setRecoveryInterval(
-                CHAT_SUBSCRIPTION_RECOVERY_INTERVAL_MILLIS
-        );
         container.addMessageListener(subscriber, chatMessageTopic);
         return container;
     }

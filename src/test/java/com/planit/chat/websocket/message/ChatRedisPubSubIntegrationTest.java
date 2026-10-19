@@ -54,8 +54,7 @@ class ChatRedisPubSubIntegrationTest {
             DockerImageName.parse("redis:8.10.2-alpine")
     )
             .withNetwork(network)
-            .withNetworkAliases("redis")
-            .withExposedPorts(REDIS_PORT);
+            .withNetworkAliases("redis");
 
     @Container
     private final ToxiproxyContainer toxiproxy = new ToxiproxyContainer(
@@ -67,7 +66,6 @@ class ChatRedisPubSubIntegrationTest {
     private final List<LettuceConnectionFactory> connectionFactories =
             new ArrayList<>();
 
-    private LettuceConnectionFactory publisherConnectionFactory;
     private ChatMessageRedisPublisher publisher;
     private ChannelTopic topic;
     private Proxy redisProxy;
@@ -84,7 +82,8 @@ class ChatRedisPubSubIntegrationTest {
         );
         ChatRedisPubSubConfig config = new ChatRedisPubSubConfig();
         topic = config.chatMessageTopic();
-        publisherConnectionFactory = connectionFactory();
+        LettuceConnectionFactory publisherConnectionFactory =
+                connectionFactory();
         publisher = new ChatMessageRedisPublisher(
                 new StringRedisTemplate(publisherConnectionFactory),
                 JsonMapper.builder().build(),
@@ -99,7 +98,7 @@ class ChatRedisPubSubIntegrationTest {
         network.close();
     }
 
-    @DisplayName("한 서버에서 발행한 채팅 이벤트를 두 서버의 구독자가 각각 한 번 수신한다")
+    @DisplayName("발행한 채팅 이벤트를 두 애플리케이션 Listener가 각각 한 번 수신한다")
     @Test
     void deliversPublishedEventOnceToEachApplicationInstance() throws Exception {
         BlockingQueue<Message<?>> firstInstanceMessages = startSubscriber();
@@ -120,9 +119,9 @@ class ChatRedisPubSubIntegrationTest {
         publisher.publish(beforeOutage);
         assertReceivedOnce(messages, beforeOutage);
 
-        stopRedis();
+        disconnectRedisProxy();
         awaitPublishFailure(event("10002"));
-        startRedis();
+        reconnectRedisProxy();
         awaitSubscriptionRecovery(messages);
 
         ChatMessageCreatedEvent afterRecovery = event("10003");
@@ -171,11 +170,11 @@ class ChatRedisPubSubIntegrationTest {
         return connectionFactory;
     }
 
-    private void stopRedis() throws IOException {
+    private void disconnectRedisProxy() throws IOException {
         redisProxy.disable();
     }
 
-    private void startRedis() throws IOException {
+    private void reconnectRedisProxy() throws IOException {
         redisProxy.enable();
     }
 
