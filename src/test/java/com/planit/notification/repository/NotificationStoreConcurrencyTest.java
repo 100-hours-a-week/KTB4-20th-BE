@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -32,6 +34,9 @@ class NotificationStoreConcurrencyTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     @DisplayName("같은 중복 방지 키를 동시에 저장해도 알림은 하나만 생성된다")
     @Test
@@ -131,6 +136,73 @@ class NotificationStoreConcurrencyTest {
                     notificationId
             );
             userRepository.deleteById(recipient.getId());
+        }
+    }
+
+    @DisplayName("먼저 다른 조회를 한 트랜잭션에서 동시에 수신 확인해도 늦은 요청이 최초 전달 시각을 받는다")
+    @Test
+    void concurrentlyAcknowledgesDeliveryAfterSnapshotRead() throws Exception {
+        User recipient = userRepository.save(new User(
+                null,
+                UUID.randomUUID(),
+                "알림ACK스냅샷테스트"
+        ));
+        Notification notification = notification(recipient, "스냅샷 수신 확인 알림");
+        Long notificationId = notificationStore.saveIdempotently(notification);
+        LocalDateTime firstAttempt = LocalDateTime.of(2026, 10, 17, 11, 0);
+        CountDownLatch firstUpdated = new CountDownLatch(1);
+        CountDownLatch secondReadSnapshot = new CountDownLatch(1);
+        TransactionTemplate transaction = new TransactionTemplate(transactionManager);
+
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            // 먼저 ACK한 요청: 갱신한 뒤 늦은 요청이 스냅샷을 만들 때까지 커밋을 미룬다.
+            Future<Optional<LocalDateTime>> first = executor.submit(() ->
+                    transaction.execute(status -> {
+                        Optional<LocalDateTime> result = notificationStore.acknowledgeDelivery(
+                                notificationId,
+                                recipient.getId(),
+                                firstAttempt
+                        );
+                        firstUpdated.countDown();
+                        await(secondReadSnapshot);
+                        return result;
+                    })
+            );
+            // 늦은 요청: 서비스처럼 사용자를 먼저 조회해 스냅샷을 만든 뒤 ACK한다.
+            Future<Optional<LocalDateTime>> second = executor.submit(() ->
+                    transaction.execute(status -> {
+                        await(firstUpdated);
+                        jdbcTemplate.queryForObject(
+                                "SELECT id FROM users WHERE id = ?",
+                                Long.class,
+                                recipient.getId()
+                        );
+                        secondReadSnapshot.countDown();
+                        return notificationStore.acknowledgeDelivery(
+                                notificationId,
+                                recipient.getId(),
+                                firstAttempt.plusSeconds(1)
+                        );
+                    })
+            );
+
+            assertThat(first.get()).contains(firstAttempt);
+            assertThat(second.get()).contains(firstAttempt);
+        } finally {
+            jdbcTemplate.update(
+                    "DELETE FROM notifications WHERE id = ?",
+                    notificationId
+            );
+            userRepository.deleteById(recipient.getId());
+        }
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            latch.await();
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(exception);
         }
     }
 
