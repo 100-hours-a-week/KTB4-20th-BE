@@ -43,6 +43,8 @@ public enum ErrorCode {
     SCHEDULE_REGENERATION_LIMIT_EXCEEDED(HttpStatus.CONFLICT, "일정 재생성 가능 횟수를 모두 사용했습니다."),
     WEATHER_REPLAN_NOT_AVAILABLE(HttpStatus.CONFLICT, "날씨로 인한 일정 변경 대상이 아닙니다."),
     ACTIVE_SCHEDULE_NOT_FOUND(HttpStatus.NOT_FOUND, "아직 확정된 일정이 없습니다."),
+    SCHEDULE_CANDIDATES_NOT_FOUND(HttpStatus.NOT_FOUND, "조회할 일정 후보가 없습니다."),
+    SCHEDULE_CANDIDATE_NOT_FOUND(HttpStatus.NOT_FOUND, "일정 후보를 찾을 수 없습니다."),
     TRIP_HOST_REQUIRED(HttpStatus.FORBIDDEN, "여행방 방장 권한이 필요합니다."),
     SCHEDULE_DAY_NOT_FOUND(HttpStatus.NOT_FOUND, "일정 일차를 찾을 수 없습니다."),
     SCHEDULE_STOP_NOT_FOUND(HttpStatus.NOT_FOUND, "일정 장소를 찾을 수 없습니다."),

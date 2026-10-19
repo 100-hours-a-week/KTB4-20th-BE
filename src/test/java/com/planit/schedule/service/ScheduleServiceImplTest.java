@@ -14,7 +14,10 @@ import com.planit.schedule.domain.PlaceDetails;
 import com.planit.schedule.domain.Schedule;
 import com.planit.schedule.domain.ScheduleDay;
 import com.planit.schedule.domain.ScheduleLeg;
+import com.planit.schedule.domain.ScheduleStrategy;
 import com.planit.schedule.domain.ScheduleVisit;
+import com.planit.schedule.dto.ScheduleCandidateDetailResponse;
+import com.planit.schedule.dto.ScheduleCandidateListResponse;
 import com.planit.schedule.dto.ScheduleStopDeleteResponse;
 import com.planit.schedule.dto.ScheduleStopAddRequest;
 import com.planit.schedule.repository.ScheduleDayRepository;
@@ -91,6 +94,8 @@ class ScheduleServiceImplTest {
         user = mock(User.class);
         trip = mock(Trip.class);
         when(trip.getStartDate()).thenReturn(LocalDate.now().plusDays(10));
+        when(trip.getId()).thenReturn(1L);
+        when(tripRepository.findById(1L)).thenReturn(Optional.of(trip));
         when(tripRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(trip));
         when(userRepository.findByPublicIdAndDeletedAtIsNull(USER_PUBLIC_ID))
                 .thenReturn(Optional.of(user));
@@ -131,6 +136,130 @@ class ScheduleServiceImplTest {
                     ReflectionTestUtils.setField(leg, "id", 999L);
                     return leg;
                 });
+    }
+
+    @DisplayName("활성 그룹원에게 세 후보를 전략 순서대로 반환한다")
+    @Test
+    void getsScheduleCandidatesForActiveMember() {
+        TripMember member = mock(TripMember.class);
+        when(member.getActiveSlot()).thenReturn((byte) 1);
+        when(member.isCurrentHost()).thenReturn(false);
+        when(tripMemberRepository.findByTripAndUserAndLeftAtIsNull(trip, user))
+                .thenReturn(Optional.of(member));
+
+        Schedule shortest = candidate(11L, ScheduleStrategy.SHORTEST, null);
+        Schedule preference = candidate(12L, ScheduleStrategy.PREFERENCE, 92);
+        Schedule balanced = candidate(13L, ScheduleStrategy.BALANCED, 68);
+        when(scheduleRepository.findByTripIdAndStatus(1L, "DRAFT"))
+                .thenReturn(List.of(balanced, shortest, preference));
+        givenCandidateDay(shortest, 21L, 120);
+        givenCandidateDay(preference, 22L, 240);
+        givenCandidateDay(balanced, 23L, 180);
+
+        ScheduleCandidateListResponse response =
+                service.getScheduleCandidates(
+                        USER_PUBLIC_ID.toString(),
+                        1L
+                );
+
+        assertThat(response.candidates())
+                .extracting(
+                        ScheduleCandidateListResponse.Candidate::strategy,
+                        ScheduleCandidateListResponse.Candidate::preferenceScore,
+                        ScheduleCandidateListResponse.Candidate::totalDistanceMeters
+                )
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("SHORTEST", null, 120),
+                        org.assertj.core.groups.Tuple.tuple("PREFERENCE", 92, 240),
+                        org.assertj.core.groups.Tuple.tuple("BALANCED", 68, 180)
+                );
+    }
+
+    @DisplayName("후보 상세에 날짜별 방문 순서와 이동 구간을 반환한다")
+    @Test
+    void getsScheduleCandidateDetail() {
+        Schedule preference = candidate(12L, ScheduleStrategy.PREFERENCE, 92);
+        ScheduleDay candidateDay = givenCandidateDay(preference, 22L, 240);
+        when(scheduleRepository.findByIdAndTripIdAndStatus(12L, 1L, "DRAFT"))
+                .thenReturn(Optional.of(preference));
+        when(visitRepository.findByDayIdAndStatusOrderByVisitOrderAsc(
+                22L,
+                "ACTIVE"
+        )).thenReturn(visits);
+
+        ScheduleCandidateDetailResponse response =
+                service.getScheduleCandidate(
+                        USER_PUBLIC_ID.toString(),
+                        1L,
+                        12L
+                );
+
+        assertThat(response.scheduleId()).isEqualTo("12");
+        assertThat(response.strategy()).isEqualTo("PREFERENCE");
+        assertThat(response.preferenceScore()).isEqualTo(92);
+        assertThat(response.editable()).isFalse();
+        assertThat(response.totalDistanceMeters()).isEqualTo(240);
+        assertThat(response.days()).singleElement()
+                .satisfies(result -> {
+                    assertThat(result.dayId())
+                            .isEqualTo(candidateDay.getId().toString());
+                    assertThat(result.stops()).hasSize(4);
+                    assertThat(result.legs()).hasSize(1);
+                });
+    }
+
+    @DisplayName("다른 여행방의 후보 상세 조회를 거부한다")
+    @Test
+    void rejectsCandidateFromAnotherTrip() {
+        when(scheduleRepository.findByIdAndTripIdAndStatus(12L, 1L, "DRAFT"))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getScheduleCandidate(
+                USER_PUBLIC_ID.toString(),
+                1L,
+                12L
+        )).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(ErrorCode.SCHEDULE_CANDIDATE_NOT_FOUND)
+        );
+    }
+
+    @DisplayName("후보가 세 개 모두 존재하지 않으면 목록을 공개하지 않는다")
+    @Test
+    void rejectsIncompleteCandidateList() {
+        when(scheduleRepository.findByTripIdAndStatus(1L, "DRAFT"))
+                .thenReturn(List.of(candidate(
+                        11L,
+                        ScheduleStrategy.SHORTEST,
+                        null
+                )));
+
+        assertThatThrownBy(() -> service.getScheduleCandidates(
+                USER_PUBLIC_ID.toString(),
+                1L
+        )).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(ErrorCode.SCHEDULE_CANDIDATES_NOT_FOUND)
+        );
+    }
+
+    @DisplayName("활성 그룹원이 아니면 후보 목록을 조회할 수 없다")
+    @Test
+    void rejectsCandidateListFromNonMember() {
+        when(tripMemberRepository.findByTripAndUserAndLeftAtIsNull(trip, user))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getScheduleCandidates(
+                USER_PUBLIC_ID.toString(),
+                1L
+        )).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(ErrorCode.TRIP_MEMBER_REQUIRED)
+        );
+        verify(scheduleRepository, never()).findByTripIdAndStatus(any(), any());
     }
 
     @DisplayName("가운데 장소를 삭제하고 양옆 장소를 새 구간으로 연결한다")
@@ -498,6 +627,51 @@ class ScheduleServiceImplTest {
         );
         ReflectionTestUtils.setField(visit, "id", visitId);
         return visit;
+    }
+
+    private Schedule candidate(
+            long id,
+            ScheduleStrategy strategy,
+            Integer preferenceScore
+    ) {
+        Schedule candidate = new Schedule(
+                trip,
+                strategy,
+                preferenceScore,
+                LocalDateTime.now()
+        );
+        ReflectionTestUtils.setField(candidate, "id", id);
+        return candidate;
+    }
+
+    private ScheduleDay givenCandidateDay(
+            Schedule candidate,
+            long dayId,
+            int distanceMeters
+    ) {
+        ScheduleDay candidateDay = new ScheduleDay(
+                candidate,
+                (byte) 1,
+                LocalDate.now().plusDays(10)
+        );
+        ReflectionTestUtils.setField(candidateDay, "id", dayId);
+        when(dayRepository.findByScheduleIdOrderByDayNumberAsc(candidate.getId()))
+                .thenReturn(List.of(candidateDay));
+        ScheduleLeg candidateLeg = new ScheduleLeg(
+                candidateDay,
+                visits.getFirst(),
+                visits.get(1),
+                1,
+                distanceMeters
+        );
+        ReflectionTestUtils.setField(candidateLeg, "id", dayId + 100);
+        when(legRepository.findByDayIdOrderByLegOrderAsc(dayId))
+                .thenReturn(List.of(candidateLeg));
+        when(visitRepository.findByDayIdAndStatusOrderByVisitOrderAsc(
+                dayId,
+                "ACTIVE"
+        )).thenReturn(List.of());
+        return candidateDay;
     }
 
     private ScheduleLeg leg(

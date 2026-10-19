@@ -4,6 +4,8 @@ import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
 import com.planit.global.error.GlobalExceptionHandler;
 import com.planit.schedule.dto.ScheduleDetailResponse;
+import com.planit.schedule.dto.ScheduleCandidateDetailResponse;
+import com.planit.schedule.dto.ScheduleCandidateListResponse;
 import com.planit.schedule.dto.ScheduleStopDeleteResponse;
 import com.planit.schedule.dto.ScheduleStopAddRequest;
 import com.planit.schedule.dto.ScheduleStopAddResponse;
@@ -22,6 +24,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -43,6 +46,72 @@ class ScheduleControllerTest {
                 )
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    @DisplayName("여행방의 일정 후보 목록을 조회한다")
+    @Test
+    void getsScheduleCandidates() throws Exception {
+        when(service.getScheduleCandidates(USER_PUBLIC_ID, 1L))
+                .thenReturn(new ScheduleCandidateListResponse(
+                        "1",
+                        List.of(new ScheduleCandidateListResponse.Candidate(
+                                "10",
+                                "SHORTEST",
+                                "이동거리를 줄인 일정",
+                                null,
+                                7200
+                        ))
+                ));
+
+        mockMvc.perform(get("/api/trips/1/schedule-candidates")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code")
+                        .value("SCHEDULE_CANDIDATES_RETRIEVED"))
+                .andExpect(jsonPath("$.data.tripId").value("1"))
+                .andExpect(jsonPath("$.data.candidates[0].strategy")
+                        .value("SHORTEST"))
+                .andExpect(jsonPath("$.data.candidates[0].totalDistanceMeters")
+                        .value(7200));
+    }
+
+    @DisplayName("일정 후보의 날짜별 상세 동선을 조회한다")
+    @Test
+    void getsScheduleCandidateDetail() throws Exception {
+        when(service.getScheduleCandidate(USER_PUBLIC_ID, 1L, 10L))
+                .thenReturn(new ScheduleCandidateDetailResponse(
+                        "1",
+                        "10",
+                        "PREFERENCE",
+                        "그룹 취향을 우선한 일정",
+                        92,
+                        100,
+                        false,
+                        List.of(new ScheduleDetailResponse.Day(
+                                "20",
+                                1,
+                                LocalDate.of(2026, 10, 20),
+                                100,
+                                List.of(),
+                                List.of()
+                        ))
+                ));
+
+        mockMvc.perform(get("/api/trips/1/schedule-candidates/10")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code")
+                        .value("SCHEDULE_CANDIDATE_RETRIEVED"))
+                .andExpect(jsonPath("$.data.scheduleId").value("10"))
+                .andExpect(jsonPath("$.data.preferenceScore").value(92))
+                .andExpect(jsonPath("$.data.editable").value(false))
+                .andExpect(jsonPath("$.data.days[0].dayNumber").value(1));
     }
 
     @DisplayName("확정 일정의 장소를 삭제한다")

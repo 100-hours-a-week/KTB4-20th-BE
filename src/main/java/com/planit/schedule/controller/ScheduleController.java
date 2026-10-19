@@ -1,6 +1,8 @@
 package com.planit.schedule.controller;
 
 import com.planit.global.response.ApiResponse;
+import com.planit.schedule.dto.ScheduleCandidateDetailResponse;
+import com.planit.schedule.dto.ScheduleCandidateListResponse;
 import com.planit.schedule.dto.ScheduleDetailResponse;
 import com.planit.schedule.dto.ScheduleStopDeleteResponse;
 import com.planit.schedule.dto.ScheduleStopAddRequest;
@@ -28,6 +30,38 @@ public class ScheduleController {
     private static final String SUCCESS_MESSAGE = "확정 일정을 조회했습니다.";
 
     private final ScheduleService scheduleService;
+
+    @GetMapping("/{tripId}/schedule-candidates")
+    public ApiResponse<ScheduleCandidateListResponse> getScheduleCandidates(
+            Authentication authentication,
+            @PathVariable Long tripId
+    ) {
+        return ApiResponse.success(
+                "SCHEDULE_CANDIDATES_RETRIEVED",
+                "후보 일정을 조회했습니다.",
+                scheduleService.getScheduleCandidates(
+                        authentication.getName(),
+                        tripId
+                )
+        );
+    }
+
+    @GetMapping("/{tripId}/schedule-candidates/{scheduleId}")
+    public ApiResponse<ScheduleCandidateDetailResponse> getScheduleCandidate(
+            Authentication authentication,
+            @PathVariable Long tripId,
+            @PathVariable Long scheduleId
+    ) {
+        return ApiResponse.success(
+                "SCHEDULE_CANDIDATE_RETRIEVED",
+                "후보 일정 상세를 조회했습니다.",
+                scheduleService.getScheduleCandidate(
+                        authentication.getName(),
+                        tripId,
+                        scheduleId
+                )
+        );
+    }
 
     @GetMapping("/{tripId}/schedule")
     public ApiResponse<ScheduleDetailResponse> getSchedule(

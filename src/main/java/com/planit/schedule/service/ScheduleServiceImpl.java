@@ -13,7 +13,10 @@ import com.planit.schedule.domain.Place;
 import com.planit.schedule.domain.PlaceDetails;
 import com.planit.schedule.domain.ScheduleDay;
 import com.planit.schedule.domain.ScheduleLeg;
+import com.planit.schedule.domain.ScheduleStrategy;
 import com.planit.schedule.domain.ScheduleVisit;
+import com.planit.schedule.dto.ScheduleCandidateDetailResponse;
+import com.planit.schedule.dto.ScheduleCandidateListResponse;
 import com.planit.schedule.dto.ScheduleDetailResponse;
 import com.planit.schedule.dto.ScheduleStopAddRequest;
 import com.planit.schedule.dto.ScheduleStopAddResponse;
@@ -28,9 +31,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.ZoneId;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -54,6 +58,96 @@ public class ScheduleServiceImpl implements ScheduleService {
     private final ScheduleDayRepository scheduleDayRepository;
     private final ScheduleVisitRepository scheduleVisitRepository;
     private final ScheduleLegRepository scheduleLegRepository;
+
+    @Override
+    public ScheduleCandidateListResponse getScheduleCandidates(
+            String userPublicId,
+            Long tripId
+    ) {
+        User user = findActiveUser(userPublicId);
+        Trip trip = findActiveTrip(tripId);
+        findActiveMember(trip, user);
+
+        List<Schedule> schedules = scheduleRepository.findByTripIdAndStatus(
+                tripId,
+                "DRAFT"
+        );
+        if (schedules.size() != ScheduleStrategy.values().length) {
+            throw new BusinessException(
+                    ErrorCode.SCHEDULE_CANDIDATES_NOT_FOUND
+            );
+        }
+        List<ScheduleCandidateListResponse.Candidate> candidates = schedules
+                .stream()
+                .sorted(Comparator.comparingInt(schedule ->
+                        ScheduleStrategy.valueOf(
+                                schedule.getStrategy()
+                        ).ordinal()
+                ))
+                .map(this::toCandidateResponse)
+                .toList();
+
+        return new ScheduleCandidateListResponse(
+                trip.getId().toString(),
+                candidates
+        );
+    }
+
+    @Override
+    public ScheduleCandidateDetailResponse getScheduleCandidate(
+            String userPublicId,
+            Long tripId,
+            Long scheduleId
+    ) {
+        User user = findActiveUser(userPublicId);
+        Trip trip = findActiveTrip(tripId);
+        findActiveMember(trip, user);
+
+        Schedule schedule = scheduleRepository
+                .findByIdAndTripIdAndStatus(scheduleId, tripId, "DRAFT")
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.SCHEDULE_CANDIDATE_NOT_FOUND
+                ));
+        List<ScheduleDetailResponse.Day> days = scheduleDayRepository
+                .findByScheduleIdOrderByDayNumberAsc(scheduleId)
+                .stream()
+                .map(this::toDayResponse)
+                .toList();
+
+        return new ScheduleCandidateDetailResponse(
+                trip.getId().toString(),
+                schedule.getId().toString(),
+                schedule.getStrategy(),
+                schedule.getSummary(),
+                schedule.getPreferenceScore(),
+                totalDistanceMeters(days),
+                false,
+                days
+        );
+    }
+
+    private ScheduleCandidateListResponse.Candidate toCandidateResponse(
+            Schedule schedule
+    ) {
+        List<ScheduleDetailResponse.Day> days = scheduleDayRepository
+                .findByScheduleIdOrderByDayNumberAsc(schedule.getId())
+                .stream()
+                .map(this::toDayResponse)
+                .toList();
+        return new ScheduleCandidateListResponse.Candidate(
+                schedule.getId().toString(),
+                schedule.getStrategy(),
+                schedule.getSummary(),
+                schedule.getPreferenceScore(),
+                totalDistanceMeters(days)
+        );
+    }
+
+    private int totalDistanceMeters(List<ScheduleDetailResponse.Day> days) {
+        return days.stream()
+                .mapToInt(ScheduleDetailResponse.Day::totalDistanceMeters)
+                .sum();
+    }
 
     @Override
     public ScheduleDetailResponse getSchedule(
