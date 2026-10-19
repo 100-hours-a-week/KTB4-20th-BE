@@ -131,8 +131,6 @@ class ScheduleServiceImplTest {
                 leg(302L, visits.get(1), visits.get(2), 2),
                 leg(303L, visits.get(2), visits.get(3), 3)
         );
-        when(visitRepository.countByDay_Schedule_IdAndStatus(10L, "ACTIVE"))
-                .thenReturn(4L);
         when(legRepository.findByDayIdOrderByLegOrderAsc(20L))
                 .thenReturn(legs, List.of());
         when(legRepository.save(any(ScheduleLeg.class)))
@@ -665,13 +663,15 @@ class ScheduleServiceImplTest {
                 .isSameAs(savedPlace);
     }
 
-    @DisplayName("전체 일정 장소가 열 개이면 추가할 수 없다")
+    @DisplayName("그날 장소가 열 개이면 추가할 수 없다")
     @Test
     void rejectsAdditionOverMaximumStopCount() {
         when(dayRepository.findByIdAndSchedule_Id(20L, 10L))
                 .thenReturn(Optional.of(day));
-        when(visitRepository.countByDay_Schedule_IdAndStatus(10L, "ACTIVE"))
-                .thenReturn(10L);
+        when(visitRepository.findByDayIdAndStatusOrderByVisitOrderAsc(
+                20L,
+                "ACTIVE"
+        )).thenReturn(dayVisits(10));
 
         assertThatThrownBy(() -> service.addStop(
                 USER_PUBLIC_ID.toString(),
@@ -741,16 +741,30 @@ class ScheduleServiceImplTest {
         assertError(ErrorCode.SCHEDULE_CHANGE_NOT_ALLOWED);
     }
 
-    @DisplayName("전체 일정 장소가 세 개이면 더 삭제할 수 없다")
+    @DisplayName("그날 장소가 세 개이면 더 삭제할 수 없다")
     @Test
     void preservesMinimumStopCount() {
         when(visitRepository.findWithDayAndScheduleById(102L))
                 .thenReturn(Optional.of(visits.get(1)));
-        when(visitRepository.countByDay_Schedule_IdAndStatus(10L, "ACTIVE"))
-                .thenReturn(3L);
+        when(visitRepository.findByDayIdAndStatusOrderByVisitOrderAsc(
+                20L,
+                "ACTIVE"
+        )).thenReturn(visits.subList(0, 3));
 
         assertError(ErrorCode.SCHEDULE_MINIMUM_STOPS_REQUIRED);
         verify(legRepository, never()).deleteAll(any());
+    }
+
+    private List<ScheduleVisit> dayVisits(int count) {
+        return java.util.stream.IntStream.rangeClosed(1, count)
+                .mapToObj(order -> visit(
+                        500L + order,
+                        600L + order,
+                        order,
+                        35.0 + order * 0.01,
+                        129.0
+                ))
+                .toList();
     }
 
     private void assertError(ErrorCode errorCode) {

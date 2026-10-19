@@ -20,7 +20,6 @@ public interface ScheduleVisitRepository extends JpaRepository<ScheduleVisit, Lo
             String status
     );
 
-    long countByDay_Schedule_IdAndStatus(Long scheduleId, String status);
 
     boolean existsByDay_Schedule_IdAndPlace_IdAndStatus(
             Long scheduleId,
