@@ -38,12 +38,16 @@ public class NotificationStore {
               AND delivered_at IS NULL
             """;
 
+    // 잠금 읽기(FOR SHARE)로 최신 커밋 값을 읽는다. 같은 알림의 ACK가 동시에 오면 늦은 요청의 UPDATE는
+    // 먼저 커밋된 요청을 기다린 뒤 0건이 되는데, 이때 일반 SELECT는 트랜잭션 시작 시점 스냅샷을 읽어
+    // delivered_at을 NULL로 보게 된다. (REPEATABLE READ에서 앞서 사용자 조회 등으로 스냅샷이 생긴 경우)
     private static final String FIND_DELIVERED_AT_SQL = """
             SELECT delivered_at
             FROM notifications
             WHERE id = ?
               AND user_id = ?
               AND deleted_at IS NULL
+            FOR SHARE
             """;
 
     private final JdbcTemplate jdbcTemplate;
