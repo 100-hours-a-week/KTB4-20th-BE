@@ -4,11 +4,13 @@ import com.planit.domain.Trip;
 import com.planit.global.error.BusinessException;
 import com.planit.repository.TripRepository;
 import com.planit.schedule.ai.RecommendedPlace;
+import com.planit.schedule.ai.RecommendedRoute;
 import com.planit.schedule.domain.Place;
 import com.planit.schedule.domain.PlaceDetails;
 import com.planit.schedule.domain.Schedule;
 import com.planit.schedule.domain.ScheduleDay;
 import com.planit.schedule.domain.ScheduleLeg;
+import com.planit.schedule.domain.ScheduleStrategy;
 import com.planit.schedule.domain.ScheduleVisit;
 import com.planit.schedule.repository.PlaceRepository;
 import com.planit.schedule.repository.ScheduleDayRepository;
@@ -27,9 +29,12 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static com.planit.global.error.ErrorCode.INVALID_AI_PLACE_RESULT;
 import static com.planit.global.error.ErrorCode.SCHEDULE_ALREADY_EXISTS;
@@ -70,6 +75,121 @@ public class SchedulePersistenceService {
             List<List<RecommendedPlace>> dailyRecommendations
     ) {
         return save(tripId, dailyRecommendations, ScheduleGenerationMode.INITIAL);
+    }
+
+    @Transactional
+    public List<GeneratedScheduleResult> saveCandidates(
+            long tripId,
+            List<RecommendedRoute> routes,
+            ScheduleGenerationMode mode
+    ) {
+        Trip trip = tripRepository.findByIdForUpdate(tripId)
+                .filter(value -> value.getDeletedAt() == null)
+                .orElseThrow(() -> new BusinessException(TRIP_NOT_FOUND));
+        validateCandidateValues(trip, routes);
+        if (scheduleRepository.existsByTripIdAndActiveConfirmedSlot(
+                tripId,
+                (byte) 1
+        )) {
+            replaceExistingSchedule(trip, mode);
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        try {
+            List<GeneratedScheduleResult> results = new ArrayList<>(3);
+            for (RecommendedRoute route : routes) {
+                results.add(saveCandidate(trip, route, now));
+            }
+            return List.copyOf(results);
+        } catch (RouteCalculationException exception) {
+            if (exception.getReason()
+                    == RouteCalculationException.Reason.ROUTE_NOT_FOUND) {
+                throw new BusinessException(SCHEDULE_ROUTE_NOT_FOUND, exception);
+            }
+            throw new BusinessException(INVALID_AI_PLACE_RESULT, exception);
+        } catch (NullPointerException exception) {
+            throw new BusinessException(INVALID_AI_PLACE_RESULT, exception);
+        }
+    }
+
+    private void validateCandidateValues(
+            Trip trip,
+            List<RecommendedRoute> routes
+    ) {
+        if (routes == null || routes.size() != 3) {
+            throw new BusinessException(INVALID_AI_PLACE_RESULT);
+        }
+
+        long tripDayCount = ChronoUnit.DAYS.between(
+                trip.getStartDate(),
+                trip.getEndDate()
+        ) + 1;
+        Set<ScheduleStrategy> strategies = new HashSet<>();
+        for (RecommendedRoute route : routes) {
+            validateCandidateValue(route, tripDayCount, strategies);
+        }
+        if (!strategies.equals(EnumSet.allOf(ScheduleStrategy.class))) {
+            throw new BusinessException(INVALID_AI_PLACE_RESULT);
+        }
+    }
+
+    private void validateCandidateValue(
+            RecommendedRoute route,
+            long tripDayCount,
+            Set<ScheduleStrategy> strategies
+    ) {
+        if (route == null
+                || route.strategy() == null
+                || !strategies.add(route.strategy())
+                || hasInvalidPreferenceScore(route)
+                || route.days() == null
+                || route.days().size() != tripDayCount) {
+            throw new BusinessException(INVALID_AI_PLACE_RESULT);
+        }
+    }
+
+    private boolean hasInvalidPreferenceScore(RecommendedRoute route) {
+        return route.strategy() == ScheduleStrategy.SHORTEST
+                ? route.preferenceScore() != null
+                : route.preferenceScore() == null;
+    }
+
+    private GeneratedScheduleResult saveCandidate(
+            Trip trip,
+            RecommendedRoute route,
+            LocalDateTime now
+    ) {
+        Schedule schedule = scheduleRepository.save(new Schedule(
+                trip,
+                route.strategy(),
+                route.preferenceScore(),
+                now
+        ));
+        List<String> dayIds = new ArrayList<>();
+        long totalDistanceMeters = 0;
+        int placeCount = 0;
+        int legCount = 0;
+        for (int dayIndex = 0; dayIndex < route.days().size(); dayIndex++) {
+            SavedDayResult dayResult = saveDay(
+                    trip,
+                    schedule,
+                    (byte) (dayIndex + 1),
+                    route.days().get(dayIndex),
+                    now,
+                    route.strategy() != ScheduleStrategy.SHORTEST
+            );
+            dayIds.add(dayResult.dayId());
+            totalDistanceMeters += dayResult.totalDistanceMeters();
+            placeCount += dayResult.placeCount();
+            legCount += dayResult.legCount();
+        }
+        return new GeneratedScheduleResult(
+                schedule.getId().toString(),
+                dayIds,
+                totalDistanceMeters,
+                placeCount,
+                legCount
+        );
     }
 
     /**
@@ -117,7 +237,8 @@ public class SchedulePersistenceService {
                         schedule,
                         (byte) (dayIndex + 1),
                         dailyRecommendations.get(dayIndex),
-                        now
+                        now,
+                        false
                 );
                 dayIds.add(dayResult.dayId());
                 totalDistanceMeters += dayResult.totalDistanceMeters();
@@ -148,7 +269,8 @@ public class SchedulePersistenceService {
             Schedule schedule,
             byte dayNumber,
             List<RecommendedPlace> recommendations,
-            LocalDateTime now
+            LocalDateTime now,
+            boolean preserveOrder
     ) {
         Map<Long, RecommendedPlace> recommendationByPlaceId = new HashMap<>();
         List<RoutePlace> routePlaces = new ArrayList<>();
@@ -163,7 +285,9 @@ public class SchedulePersistenceService {
             ));
         }
 
-        RoutePlan plan = calculator.calculate(routePlaces);
+        RoutePlan plan = preserveOrder
+                ? calculator.calculateInGivenOrder(routePlaces)
+                : calculator.calculate(routePlaces);
         ScheduleDay day = dayRepository.save(new ScheduleDay(
                 schedule,
                 dayNumber,
