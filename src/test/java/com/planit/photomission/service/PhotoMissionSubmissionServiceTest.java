@@ -93,6 +93,26 @@ class PhotoMissionSubmissionServiceTest {
         verify(verificationService).verify(41L);
     }
 
+    @DisplayName("완료한 단체 미션의 추가 사진은 AI 판정 없이 저장한다")
+    @Test
+    void addsGroupPhotoWithoutVerification() {
+        when(transactionService.saveAdditionalGroupPhoto(
+                any(), any(), any(), any(), any(), any(), anyInt(), any(), any()
+        )).thenReturn(43L);
+
+        Long photoId = service.addGroupPhoto(
+                "550e8400-e29b-41d4-a716-446655440000",
+                31L,
+                UUID.randomUUID(),
+                jpegFile(),
+                null,
+                null
+        );
+
+        assertThat(photoId).isEqualTo(43L);
+        verify(verificationService, never()).verify(any());
+    }
+
     @DisplayName("S3 저장 후 DB 저장이 실패하면 업로드한 객체를 삭제한다")
     @Test
     void deletesStoredImageWhenDatabaseSaveFails() {
