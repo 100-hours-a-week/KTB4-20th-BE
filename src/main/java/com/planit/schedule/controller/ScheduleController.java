@@ -3,6 +3,8 @@ package com.planit.schedule.controller;
 import com.planit.global.response.ApiResponse;
 import com.planit.schedule.dto.ScheduleCandidateDetailResponse;
 import com.planit.schedule.dto.ScheduleCandidateListResponse;
+import com.planit.schedule.dto.ScheduleConfirmRequest;
+import com.planit.schedule.dto.ScheduleConfirmResponse;
 import com.planit.schedule.dto.ScheduleDetailResponse;
 import com.planit.schedule.dto.ScheduleStopDeleteResponse;
 import com.planit.schedule.dto.ScheduleStopAddRequest;
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -30,6 +33,23 @@ public class ScheduleController {
     private static final String SUCCESS_MESSAGE = "확정 일정을 조회했습니다.";
 
     private final ScheduleService scheduleService;
+
+    @PutMapping("/{tripId}/schedule")
+    public ApiResponse<ScheduleConfirmResponse> confirmSchedule(
+            Authentication authentication,
+            @PathVariable Long tripId,
+            @Valid @RequestBody ScheduleConfirmRequest request
+    ) {
+        return ApiResponse.success(
+                "SCHEDULE_CONFIRMED",
+                "일정을 확정했습니다.",
+                scheduleService.confirmSchedule(
+                        authentication.getName(),
+                        tripId,
+                        request
+                )
+        );
+    }
 
     @GetMapping("/{tripId}/schedule-candidates")
     public ApiResponse<ScheduleCandidateListResponse> getScheduleCandidates(

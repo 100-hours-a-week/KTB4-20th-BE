@@ -18,6 +18,9 @@ import com.planit.schedule.domain.ScheduleStrategy;
 import com.planit.schedule.domain.ScheduleVisit;
 import com.planit.schedule.dto.ScheduleCandidateDetailResponse;
 import com.planit.schedule.dto.ScheduleCandidateListResponse;
+import com.planit.schedule.dto.ScheduleConfirmRequest;
+import com.planit.schedule.dto.ScheduleConfirmResponse;
+import com.planit.schedule.dto.ScheduleDetailResponse;
 import com.planit.schedule.dto.ScheduleStopDeleteResponse;
 import com.planit.schedule.dto.ScheduleStopAddRequest;
 import com.planit.schedule.repository.ScheduleDayRepository;
@@ -64,6 +67,7 @@ class ScheduleServiceImplTest {
     private ScheduleServiceImpl service;
     private User user;
     private Trip trip;
+    private TripMember host;
     private Schedule schedule;
     private ScheduleDay day;
     private List<ScheduleVisit> visits;
@@ -100,7 +104,8 @@ class ScheduleServiceImplTest {
         when(userRepository.findByPublicIdAndDeletedAtIsNull(USER_PUBLIC_ID))
                 .thenReturn(Optional.of(user));
 
-        TripMember host = mock(TripMember.class);
+        host = mock(TripMember.class);
+        when(host.getId()).thenReturn(5L);
         when(host.getActiveSlot()).thenReturn((byte) 1);
         when(host.getHostSlot()).thenReturn((byte) 1);
         when(host.isActive()).thenReturn(true);
@@ -136,6 +141,132 @@ class ScheduleServiceImplTest {
                     ReflectionTestUtils.setField(leg, "id", 999L);
                     return leg;
                 });
+    }
+
+    @DisplayName("여행 행을 잠그고 최신 후보를 확정한다")
+    @Test
+    void confirmsLatestScheduleCandidate() {
+        Schedule selected = candidate(12L, ScheduleStrategy.PREFERENCE, 92);
+        when(scheduleRepository.findByIdAndTripId(12L, 1L))
+                .thenReturn(Optional.of(selected));
+        when(scheduleRepository.findFirstByTripIdOrderByCreatedAtDesc(1L))
+                .thenReturn(Optional.of(selected));
+
+        ScheduleConfirmResponse response = service.confirmSchedule(
+                USER_PUBLIC_ID.toString(),
+                1L,
+                new ScheduleConfirmRequest(12L)
+        );
+
+        assertThat(response.status()).isEqualTo("ACTIVE");
+        assertThat(selected.getActiveConfirmedSlot()).isEqualTo((byte) 1);
+        assertThat(selected.getConfirmedByMember()).isSameAs(host);
+        assertThat(selected.getConfirmedAt()).isNotNull();
+        verify(tripRepository).findByIdForUpdate(1L);
+        verify(scheduleRepository).flush();
+    }
+
+    @DisplayName("같은 후보를 다시 확정해도 확정 정보가 변경되지 않는다")
+    @Test
+    void confirmsSameScheduleIdempotently() {
+        Schedule selected = candidate(12L, ScheduleStrategy.PREFERENCE, 92);
+        LocalDateTime firstConfirmedAt = LocalDateTime.now().minusMinutes(1);
+        selected.confirm(host, firstConfirmedAt);
+        when(scheduleRepository.findByIdAndTripId(12L, 1L))
+                .thenReturn(Optional.of(selected));
+        when(scheduleRepository.findFirstByTripIdOrderByCreatedAtDesc(1L))
+                .thenReturn(Optional.of(selected));
+
+        service.confirmSchedule(
+                USER_PUBLIC_ID.toString(),
+                1L,
+                new ScheduleConfirmRequest(12L)
+        );
+
+        assertThat(selected.getConfirmedAt()).isEqualTo(firstConfirmedAt);
+        assertThat(selected.getConfirmedByMember()).isSameAs(host);
+        verify(scheduleRepository, never()).flush();
+    }
+
+    @DisplayName("다른 후보를 확정하면 기존 확정 일정을 대체한다")
+    @Test
+    void supersedesActiveScheduleWhenConfirmingAnotherCandidate() {
+        Schedule selected = candidate(12L, ScheduleStrategy.PREFERENCE, 92);
+        when(scheduleRepository.findByIdAndTripId(12L, 1L))
+                .thenReturn(Optional.of(selected));
+        when(scheduleRepository.findFirstByTripIdOrderByCreatedAtDesc(1L))
+                .thenReturn(Optional.of(selected));
+        when(scheduleRepository.findByTripIdAndActiveConfirmedSlot(1L, (byte) 1))
+                .thenReturn(Optional.of(schedule));
+
+        service.confirmSchedule(
+                USER_PUBLIC_ID.toString(),
+                1L,
+                new ScheduleConfirmRequest(12L)
+        );
+
+        assertThat(schedule.getStatus()).isEqualTo("SUPERSEDED");
+        assertThat(schedule.getActiveConfirmedSlot()).isNull();
+        assertThat(selected.getStatus()).isEqualTo("ACTIVE");
+    }
+
+    @DisplayName("최신 후보가 아니면 확정을 거부한다")
+    @Test
+    void rejectsOutdatedScheduleCandidate() {
+        Schedule selected = candidate(12L, ScheduleStrategy.PREFERENCE, 92);
+        Schedule latest = candidate(13L, ScheduleStrategy.BALANCED, 68);
+        ReflectionTestUtils.setField(
+                selected,
+                "createdAt",
+                LocalDateTime.now().minusMinutes(1)
+        );
+        when(scheduleRepository.findByIdAndTripId(12L, 1L))
+                .thenReturn(Optional.of(selected));
+        when(scheduleRepository.findFirstByTripIdOrderByCreatedAtDesc(1L))
+                .thenReturn(Optional.of(latest));
+
+        assertConfirmError(ErrorCode.SCHEDULE_CANDIDATES_SUPERSEDED);
+        verify(scheduleRepository, never()).flush();
+    }
+
+    @DisplayName("방장이 아니면 후보를 확정할 수 없다")
+    @Test
+    void rejectsConfirmationByNonHost() {
+        when(host.isCurrentHost()).thenReturn(false);
+
+        assertConfirmError(ErrorCode.TRIP_HOST_REQUIRED);
+        verify(scheduleRepository, never()).findByIdAndTripId(any(), any());
+    }
+
+    @DisplayName("여행 시작 전날 23시 50분 이후에는 후보 확정을 거부한다")
+    @Test
+    void rejectsConfirmationAfterDeadline() {
+        when(trip.getStartDate()).thenReturn(LocalDate.now());
+
+        assertConfirmError(ErrorCode.SCHEDULE_CHANGE_NOT_ALLOWED);
+        verify(scheduleRepository, never()).findByIdAndTripId(any(), any());
+    }
+
+    @DisplayName("변경 기한 전 방장에게 확정 일정을 수정 가능 상태로 반환한다")
+    @Test
+    void returnsConfirmedScheduleEditableForHostBeforeDeadline() {
+        when(dayRepository.findByScheduleIdOrderByDayNumberAsc(10L))
+                .thenReturn(List.of(day));
+        when(visitRepository.findByDayIdAndStatusOrderByVisitOrderAsc(
+                20L,
+                "ACTIVE"
+        )).thenReturn(visits);
+
+        ScheduleDetailResponse response = service.getSchedule(
+                USER_PUBLIC_ID.toString(),
+                1L
+        );
+
+        assertThat(response.editable()).isTrue();
+        assertThat(response.confirmedAt())
+                .isEqualTo(schedule.getConfirmedAt()
+                        .atZone(java.time.ZoneId.of("Asia/Seoul"))
+                        .toOffsetDateTime());
     }
 
     @DisplayName("활성 그룹원에게 세 후보를 전략 순서대로 반환한다")
@@ -587,6 +718,18 @@ class ScheduleServiceImplTest {
                 USER_PUBLIC_ID.toString(),
                 1L,
                 102L
+        )).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(errorCode)
+        );
+    }
+
+    private void assertConfirmError(ErrorCode errorCode) {
+        assertThatThrownBy(() -> service.confirmSchedule(
+                USER_PUBLIC_ID.toString(),
+                1L,
+                new ScheduleConfirmRequest(12L)
         )).isInstanceOfSatisfying(
                 BusinessException.class,
                 exception -> assertThat(exception.getErrorCode())

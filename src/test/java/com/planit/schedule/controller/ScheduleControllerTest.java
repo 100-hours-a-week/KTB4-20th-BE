@@ -6,6 +6,8 @@ import com.planit.global.error.GlobalExceptionHandler;
 import com.planit.schedule.dto.ScheduleDetailResponse;
 import com.planit.schedule.dto.ScheduleCandidateDetailResponse;
 import com.planit.schedule.dto.ScheduleCandidateListResponse;
+import com.planit.schedule.dto.ScheduleConfirmRequest;
+import com.planit.schedule.dto.ScheduleConfirmResponse;
 import com.planit.schedule.dto.ScheduleStopDeleteResponse;
 import com.planit.schedule.dto.ScheduleStopAddRequest;
 import com.planit.schedule.dto.ScheduleStopAddResponse;
@@ -18,6 +20,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.List;
 
 import static org.mockito.Mockito.mock;
@@ -26,6 +29,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -46,6 +50,68 @@ class ScheduleControllerTest {
                 )
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    @DisplayName("방장이 선택한 일정 후보를 확정한다")
+    @Test
+    void confirmsScheduleCandidate() throws Exception {
+        when(service.confirmSchedule(
+                USER_PUBLIC_ID,
+                1L,
+                new ScheduleConfirmRequest(10L)
+        )).thenReturn(new ScheduleConfirmResponse(
+                "1",
+                "10",
+                "PREFERENCE",
+                "ACTIVE",
+                OffsetDateTime.parse("2026-10-18T19:00:00+09:00")
+        ));
+
+        mockMvc.perform(put("/api/trips/1/schedule")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        ))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {"scheduleId": 10}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SCHEDULE_CONFIRMED"))
+                .andExpect(jsonPath("$.data.scheduleId").value("10"))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.data.confirmedAt")
+                        .value("2026-10-18T19:00:00+09:00"));
+    }
+
+    @DisplayName("확정할 일정 ID가 없으면 요청을 거부한다")
+    @Test
+    void rejectsConfirmationWithoutScheduleId() throws Exception {
+        mockMvc.perform(put("/api/trips/1/schedule")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        ))
+                        .contentType(APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+    }
+
+    @DisplayName("확정할 일정 ID가 양수가 아니면 요청을 거부한다")
+    @Test
+    void rejectsConfirmationWithInvalidScheduleId() throws Exception {
+        mockMvc.perform(put("/api/trips/1/schedule")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        ))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {"scheduleId": 0}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
     }
 
     @DisplayName("여행방의 일정 후보 목록을 조회한다")

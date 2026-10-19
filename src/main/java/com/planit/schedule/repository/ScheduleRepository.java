@@ -16,4 +16,6 @@ public interface ScheduleRepository extends JpaRepository<Schedule, Long> {
             Long tripId,
             String status
     );
+    Optional<Schedule> findByIdAndTripId(Long id, Long tripId);
+    Optional<Schedule> findFirstByTripIdOrderByCreatedAtDesc(Long tripId);
 }

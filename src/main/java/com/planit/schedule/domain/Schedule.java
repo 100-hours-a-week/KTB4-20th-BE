@@ -1,6 +1,7 @@
 package com.planit.schedule.domain;
 
 import com.planit.domain.Trip;
+import com.planit.domain.TripMember;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
@@ -10,6 +11,9 @@ public class Schedule {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "trip_id", nullable = false) private Trip trip;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "confirmed_by_member_id")
+    private TripMember confirmedByMember;
     @Column(nullable = false, length = 30) private String strategy;
     @Column(nullable = false, length = 20) private String status;
     @Column(name = "active_confirmed_slot") private Byte activeConfirmedSlot;
@@ -49,5 +53,25 @@ public class Schedule {
     public Integer getPreferenceScore() { return preferenceScore; }
     public String getSummary() { return summary; }
     public LocalDateTime getConfirmedAt() { return confirmedAt; }
+    public TripMember getConfirmedByMember() { return confirmedByMember; }
     public LocalDateTime getCreatedAt() { return createdAt; }
+
+    public boolean isActive() {
+        return "ACTIVE".equals(status) && activeConfirmedSlot != null;
+    }
+
+    public void confirm(TripMember member, LocalDateTime now) {
+        if (isActive()) {
+            return;
+        }
+        this.status = "ACTIVE";
+        this.activeConfirmedSlot = (byte) 1;
+        this.confirmedByMember = member;
+        this.confirmedAt = now;
+    }
+
+    public void supersede() {
+        this.status = "SUPERSEDED";
+        this.activeConfirmedSlot = null;
+    }
 }
