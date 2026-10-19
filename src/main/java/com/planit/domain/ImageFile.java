@@ -46,13 +46,14 @@ public class ImageFile {
             String imageKey,
             ImagePurpose imagePurpose,
             String mimeType,
-            Integer sizeBytes
+            Integer sizeBytes,
+            LocalDateTime createdAt
     ) {
         this.imageKey = imageKey;
         this.imagePurpose = imagePurpose;
         this.mimeType = mimeType;
         this.sizeBytes = sizeBytes;
-        this.createdAt = LocalDateTime.now();
+        this.createdAt = createdAt;
     }
 
     public static ImageFile profile(
@@ -64,7 +65,8 @@ public class ImageFile {
                 imageKey,
                 ImagePurpose.PROFILE,
                 mimeType,
-                sizeBytes
+                sizeBytes,
+                LocalDateTime.now()
         );
     }
 
@@ -74,11 +76,28 @@ public class ImageFile {
             String mimeType,
             int sizeBytes
     ) {
+        return mission(
+                imageKey,
+                originalFilename,
+                mimeType,
+                sizeBytes,
+                LocalDateTime.now()
+        );
+    }
+
+    public static ImageFile mission(
+            String imageKey,
+            String originalFilename,
+            String mimeType,
+            int sizeBytes,
+            LocalDateTime createdAt
+    ) {
         ImageFile imageFile = new ImageFile(
                 imageKey,
                 ImagePurpose.MISSION,
                 mimeType,
-                sizeBytes
+                sizeBytes,
+                createdAt
         );
         imageFile.originalFilename = originalFilename;
         return imageFile;
