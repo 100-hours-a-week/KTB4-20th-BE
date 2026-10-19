@@ -9,6 +9,7 @@ import org.springframework.data.redis.listener.ChannelTopic;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import org.springframework.data.redis.listener.Topic;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.util.backoff.FixedBackOff;
 
 import java.util.Map;
 import java.util.Set;
@@ -49,6 +50,9 @@ class ChatRedisPubSubConfigTest {
                 .isSameAs(connectionFactory);
         assertThat(listenerTopics(container).get(subscriber))
                 .containsExactly(topic);
+        FixedBackOff recoveryBackOff = (FixedBackOff) ReflectionTestUtils
+                .getField(container, "backOff");
+        assertThat(recoveryBackOff.getInterval()).isEqualTo(1_000L);
     }
 
     @SuppressWarnings("unchecked")
