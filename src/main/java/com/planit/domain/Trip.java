@@ -46,6 +46,9 @@ public class Trip {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "schedule_regeneration_count", nullable = false)
+    private byte scheduleRegenerationCount;
+
     protected Trip() {
     }
 
@@ -104,5 +107,13 @@ public class Trip {
 
     public LocalDateTime getCreatedAt() {
         return createdAt;
+    }
+
+    public int getScheduleRegenerationCount() {
+        return scheduleRegenerationCount;
+    }
+
+    public void increaseScheduleRegenerationCount() {
+        scheduleRegenerationCount++;
     }
 }

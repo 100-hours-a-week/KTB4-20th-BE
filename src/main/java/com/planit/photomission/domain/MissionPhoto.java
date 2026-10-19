@@ -109,6 +109,33 @@ public class MissionPhoto {
         return photo;
     }
 
+    public static MissionPhoto personalCandidate(
+            MissionParticipation participation,
+            ImageFile imageFile,
+            UUID idempotencyKey,
+            BigDecimal latitude,
+            BigDecimal longitude,
+            LocalDateTime submittedAt
+    ) {
+        if (participation.getStatus()
+                != MissionCompletionStatus.COMPLETED) {
+            throw new IllegalStateException(
+                    "완료한 개인 미션만 재촬영 후보를 가질 수 있습니다"
+            );
+        }
+        MissionPhoto photo = base(
+                participation.getMission(),
+                participation.getTripMember(),
+                imageFile,
+                idempotencyKey,
+                latitude,
+                longitude,
+                submittedAt
+        );
+        photo.participation = participation;
+        return photo;
+    }
+
     public static MissionPhoto group(
             Mission mission,
             TripMember submittedBy,
@@ -162,6 +189,15 @@ public class MissionPhoto {
             );
         }
         representativeSlot = (byte) 1;
+    }
+
+    public void activate() {
+        if (participation == null || deletedAt != null || replacedAt != null) {
+            throw new IllegalStateException(
+                    "유효한 개인 미션 사진만 활성화할 수 있습니다"
+            );
+        }
+        activeSlot = (byte) 1;
     }
 
     public void replace(LocalDateTime replacedAt) {

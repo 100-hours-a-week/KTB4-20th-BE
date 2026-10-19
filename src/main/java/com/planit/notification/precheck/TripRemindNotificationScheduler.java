@@ -16,13 +16,16 @@ public class TripRemindNotificationScheduler {
     static final String SEOUL_ZONE = "Asia/Seoul";
 
     private final TripRemindNotificationWorkflow workflow;
+    private final TripRemindNotificationObservability observability;
     private final Clock clock;
 
     public TripRemindNotificationScheduler(
             TripRemindNotificationWorkflow workflow,
+            TripRemindNotificationObservability observability,
             @Qualifier("tripRemindClock") Clock clock
     ) {
         this.workflow = workflow;
+        this.observability = observability;
         this.clock = clock;
     }
 
@@ -33,7 +36,7 @@ public class TripRemindNotificationScheduler {
             lockAtLeastFor = "PT1M"
     )
     public void runPrimary() {
-        executeWorkflow();
+        executeWorkflow("primary", false);
     }
 
     @Scheduled(cron = "0 30 10 * * *", zone = SEOUL_ZONE)
@@ -43,11 +46,33 @@ public class TripRemindNotificationScheduler {
             lockAtLeastFor = "PT1M"
     )
     public void runRecovery() {
-        executeWorkflow();
+        executeWorkflow("recovery", true);
     }
 
-    private void executeWorkflow() {
+    private void executeWorkflow(String trigger, boolean finalRecovery) {
         LockAssert.assertLocked();
-        workflow.execute(LocalDate.now(clock).plusDays(1));
+        LocalDate targetDate = LocalDate.now(clock).plusDays(1);
+        long startedAt = System.nanoTime();
+        String outcome = "success";
+        try {
+            workflow.execute(targetDate);
+        } catch (RuntimeException exception) {
+            outcome = "failure";
+            if (finalRecovery) {
+                observability.recordFinalRecoveryFailure(
+                        targetDate,
+                        exception
+                );
+            }
+            throw exception;
+        } finally {
+            observability.recordExecution(
+                    trigger,
+                    outcome,
+                    java.time.Duration.ofNanos(
+                            System.nanoTime() - startedAt
+                    )
+            );
+        }
     }
 }

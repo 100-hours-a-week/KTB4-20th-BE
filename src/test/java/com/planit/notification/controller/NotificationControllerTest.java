@@ -6,8 +6,10 @@ import com.planit.global.error.ErrorCode;
 import com.planit.notification.domain.NotificationTargetStatus;
 import com.planit.notification.domain.NotificationTargetType;
 import com.planit.notification.domain.NotificationType;
+import com.planit.notification.domain.WeatherCondition;
 import com.planit.notification.dto.AllNotificationsReadResponse;
 import com.planit.notification.dto.NotificationListResponse;
+import com.planit.notification.dto.NotificationTargetResponse;
 import com.planit.notification.dto.NotificationReadResponse;
 import com.planit.notification.dto.PendingNotificationDeliveriesResponse;
 import com.planit.notification.dto.UnreadNotificationCountResponse;
@@ -67,8 +69,9 @@ class NotificationControllerTest {
                         List.of(new NotificationListResponse.Item(
                                 "16001",
                                 NotificationType.TRIP_WEATHER_ALERT,
-                                "여행지에 많은 비가 예상돼요",
-                                "방장이 일정 변경 여부를 확인하고 있어요.",
+                                WeatherCondition.HEAVY_RAIN,
+                                "내일 폭우가 예상돼요",
+                                "Daniel님이 일정 변경 여부를 결정하고 있어요.",
                                 new NotificationListResponse.Target(
                                         NotificationTargetType.TRIP,
                                         "1001",
@@ -99,6 +102,8 @@ class NotificationControllerTest {
                         .value("16001"))
                 .andExpect(jsonPath("$.data.items[0].target.status")
                         .value("ACTIVE"))
+                .andExpect(jsonPath("$.data.items[0].weatherCondition")
+                        .value("HEAVY_RAIN"))
                 .andExpect(jsonPath("$.data.items[0].read").value(false))
                 .andExpect(jsonPath("$.data.items[0].readAt").isEmpty())
                 .andExpect(jsonPath("$.data.page.nextCursor")
@@ -138,8 +143,13 @@ class NotificationControllerTest {
                         List.of(new PendingNotificationDeliveriesResponse.Item(
                                 "16001",
                                 NotificationType.TRIP_WEATHER_ALERT,
-                                "여행지에 많은 비가 예상돼요",
-                                "여행 기간에 폭우가 예상됩니다.",
+                                WeatherCondition.HEAVY_RAIN,
+                                "내일 폭우가 예상돼요",
+                                "D-1, 경주 지역에 폭우가 예보되었어요. 일정을 변경할까요?",
+                                new NotificationTargetResponse(
+                                        NotificationTargetType.TRIP,
+                                        "1001"
+                                ),
                                 OffsetDateTime.parse(
                                         "2026-10-17T10:00:00.123456+09:00"
                                 )
@@ -161,6 +171,12 @@ class NotificationControllerTest {
                         .value("16001"))
                 .andExpect(jsonPath("$.data.items[0].type")
                         .value("TRIP_WEATHER_ALERT"))
+                .andExpect(jsonPath("$.data.items[0].weatherCondition")
+                        .value("HEAVY_RAIN"))
+                .andExpect(jsonPath("$.data.items[0].target.type")
+                        .value("TRIP"))
+                .andExpect(jsonPath("$.data.items[0].target.id")
+                        .value("1001"))
                 .andExpect(jsonPath("$.data.items[0].createdAt")
                         .value("2026-10-17T10:00:00.123456+09:00"));
 

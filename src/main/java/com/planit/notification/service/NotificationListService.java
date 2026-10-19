@@ -5,6 +5,7 @@ import com.planit.notification.domain.Notification;
 import com.planit.notification.domain.NotificationTargetStatus;
 import com.planit.notification.domain.NotificationType;
 import com.planit.notification.dto.NotificationListResponse;
+import com.planit.notification.dto.NotificationTargetResponse;
 import com.planit.notification.dto.PendingNotificationDeliveriesResponse;
 import com.planit.notification.dto.UnreadNotificationCountResponse;
 import com.planit.notification.pagination.NotificationListCursorCodec;
@@ -120,8 +121,12 @@ public class NotificationListService {
                                 new PendingNotificationDeliveriesResponse.Item(
                                         notification.getId().toString(),
                                         notification.getType(),
+                                        notification.getWeatherCondition(),
                                         notification.getTitle(),
                                         notification.getBody(),
+                                        NotificationTargetResponse.from(
+                                                notification
+                                        ),
                                         toOffset(notification.getCreatedAt())
                                 ))
                         .toList();
@@ -154,6 +159,7 @@ public class NotificationListService {
         return new NotificationListResponse.Item(
                 notification.getId().toString(),
                 notification.getType(),
+                notification.getWeatherCondition(),
                 notification.getTitle(),
                 notification.getBody(),
                 notification.getTargetType() == null

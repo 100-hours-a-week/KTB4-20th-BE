@@ -16,8 +16,10 @@ import com.planit.repository.SurveyRepository;
 import com.planit.repository.TripMemberRepository;
 import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
+import com.planit.schedule.domain.ScheduleGenerationReason;
 import com.planit.schedule.dto.SchedulePlaceSelectionResponse;
 import com.planit.schedule.ai.AiRecommendedPlaceMapper;
+import com.planit.schedule.ai.RecommendedRoute;
 import com.planit.schedule.route.RouteCalculationException;
 import com.planit.trip.service.TripMemberAccessService;
 import lombok.RequiredArgsConstructor;
@@ -28,7 +30,9 @@ import org.springframework.web.client.RestClientException;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -49,12 +53,14 @@ public class ScheduleGenerationServiceImpl
     private final AiTripClient aiTripClient;
     private final AiRecommendedPlaceMapper recommendedPlaceMapper;
     private final SchedulePersistenceService schedulePersistenceService;
+    private final ScheduleRegenerationPolicy regenerationPolicy;
 
     @Override
     @Transactional
     public SchedulePlaceSelectionResponse generate(
             String userPublicId,
-            Long tripId
+            Long tripId,
+            ScheduleGenerationReason reason
     ) {
         User user = findActiveUser(userPublicId);
         Trip trip = findActiveTrip(tripId);
@@ -69,6 +75,7 @@ public class ScheduleGenerationServiceImpl
         List<Survey> submittedSurveys = surveyRepository
                 .findByTripMemberInAndSubmittedAtIsNotNull(activeMembers);
         validateSurveyState(trip, host, activeMembers, submittedSurveys);
+        ScheduleGenerationMode mode = regenerationPolicy.resolve(trip, reason);
 
         AiPlaceSelectionRequest request = new AiPlaceSelectionRequest(
                 resolveAiRegion(trip.getRegion()),
@@ -96,9 +103,13 @@ public class ScheduleGenerationServiceImpl
         }
 
         try {
-            schedulePersistenceService.save(
+            List<RecommendedRoute> routes = recommendedPlaceMapper.mapRoutes(
+                    response
+            );
+            schedulePersistenceService.saveCandidates(
                     tripId,
-                    recommendedPlaceMapper.mapDailyPlaces(response)
+                    routes,
+                    mode
             );
         } catch (RouteCalculationException exception) {
             throw new BusinessException(
@@ -164,15 +175,49 @@ public class ScheduleGenerationServiceImpl
         ) + 1;
         return response.data().places().size() == tripDayCount
                 && response.data().places().stream()
-                .allMatch(this::isValidDailyPlaces);
+                .allMatch(this::isValidDailyPlaces)
+                && isValidRoutes(response.data().routes(), tripDayCount);
+    }
+
+    private boolean isValidRoutes(
+            List<AiPlaceSelectionResponse.Route> routes,
+            long tripDayCount
+    ) {
+        if (routes == null || routes.size() != 2) {
+            return false;
+        }
+
+        Set<AiPlaceSelectionResponse.Strategy> strategies = new HashSet<>();
+        for (AiPlaceSelectionResponse.Route route : routes) {
+            if (route == null
+                    || route.strategy() == null
+                    || !strategies.add(route.strategy())
+                    || route.preferenceScore() == null
+                    || route.days() == null
+                    || route.days().size() != tripDayCount
+                    || !route.days().stream()
+                    .allMatch(this::isValidDailyPlaces)) {
+                return false;
+            }
+        }
+
+        return strategies.equals(Set.of(
+                AiPlaceSelectionResponse.Strategy.PREFERENCE,
+                AiPlaceSelectionResponse.Strategy.BALANCED
+        ));
     }
 
     private boolean isValidDailyPlaces(
             List<AiPlaceSelectionResponse.Place> places
     ) {
-        return places != null
-                && places.size() >= REQUIRED_PLACE_MIN_COUNT
-                && places.stream().allMatch(this::isValidPlace);
+        if (places == null || places.size() < REQUIRED_PLACE_MIN_COUNT) {
+            return false;
+        }
+
+        Set<String> placeIds = new HashSet<>();
+        return places.stream().allMatch(place ->
+                isValidPlace(place) && placeIds.add(place.id())
+        );
     }
 
     private boolean isValidPlace(AiPlaceSelectionResponse.Place place) {
@@ -183,6 +228,12 @@ public class ScheduleGenerationServiceImpl
                 && place.displayName().text() != null
                 && !place.displayName().text().isBlank()
                 && place.location() != null
+                && Double.isFinite(place.location().latitude())
+                && place.location().latitude() >= -90
+                && place.location().latitude() <= 90
+                && Double.isFinite(place.location().longitude())
+                && place.location().longitude() >= -180
+                && place.location().longitude() <= 180
                 && place.types() != null
                 && place.selectedFor() != null
                 && place.matchedPreferences() != null;

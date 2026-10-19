@@ -77,7 +77,7 @@ management:
       discovery:
         enabled: false
       exposure:
-        include: health
+        include: health,metrics
   endpoint:
     health:
       show-details: never
