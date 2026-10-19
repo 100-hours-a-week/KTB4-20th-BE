@@ -52,6 +52,62 @@ public class PhotoMissionSubmissionService {
             BigDecimal latitude,
             BigDecimal longitude
     ) {
+        StoredImage image = storeImage(missionId, file, latitude, longitude);
+
+        Long photoId;
+        try {
+            photoId = transactionService.save(
+                    userPublicId,
+                    missionId,
+                    idempotencyKey,
+                    image.imageKey(),
+                    image.originalFilename(),
+                    image.mimeType(),
+                    image.sizeBytes(),
+                    image.latitude(),
+                    image.longitude()
+            );
+        } catch (RuntimeException exception) {
+            compensateDelete(image.imageKey());
+            throw exception;
+        }
+
+        return verificationService.verify(photoId);
+    }
+
+    public Long addGroupPhoto(
+            String userPublicId,
+            Long missionId,
+            UUID idempotencyKey,
+            MultipartFile file,
+            BigDecimal latitude,
+            BigDecimal longitude
+    ) {
+        StoredImage image = storeImage(missionId, file, latitude, longitude);
+        try {
+            return transactionService.saveAdditionalGroupPhoto(
+                    userPublicId,
+                    missionId,
+                    idempotencyKey,
+                    image.imageKey(),
+                    image.originalFilename(),
+                    image.mimeType(),
+                    image.sizeBytes(),
+                    image.latitude(),
+                    image.longitude()
+            );
+        } catch (RuntimeException exception) {
+            compensateDelete(image.imageKey());
+            throw exception;
+        }
+    }
+
+    private StoredImage storeImage(
+            Long missionId,
+            MultipartFile file,
+            BigDecimal latitude,
+            BigDecimal longitude
+    ) {
         validateCoordinates(latitude, longitude);
         byte[] content = readContent(file);
         String mimeType = imageValidator.validate(
@@ -61,32 +117,15 @@ public class PhotoMissionSubmissionService {
         );
         String imageKey = createImageKey(missionId, mimeType);
         imageStorage.put(imageKey, content, mimeType);
-
-        Long photoId;
-        try {
-            BigDecimal storedLatitude = completeCoordinates(latitude, longitude)
-                    ? latitude
-                    : null;
-            BigDecimal storedLongitude = completeCoordinates(latitude, longitude)
-                    ? longitude
-                    : null;
-            photoId = transactionService.save(
-                    userPublicId,
-                    missionId,
-                    idempotencyKey,
-                    imageKey,
-                    file.getOriginalFilename(),
-                    mimeType,
-                    content.length,
-                    storedLatitude,
-                    storedLongitude
-            );
-        } catch (RuntimeException exception) {
-            compensateDelete(imageKey);
-            throw exception;
-        }
-
-        return verificationService.verify(photoId);
+        boolean hasCoordinates = completeCoordinates(latitude, longitude);
+        return new StoredImage(
+                imageKey,
+                file.getOriginalFilename(),
+                mimeType,
+                content.length,
+                hasCoordinates ? latitude : null,
+                hasCoordinates ? longitude : null
+        );
     }
 
     private byte[] readContent(MultipartFile file) {
@@ -144,5 +183,15 @@ public class PhotoMissionSubmissionService {
             log.error("포토미션 이미지 보상 삭제에 실패했습니다.", exception);
             Sentry.captureException(exception);
         }
+    }
+
+    private record StoredImage(
+            String imageKey,
+            String originalFilename,
+            String mimeType,
+            int sizeBytes,
+            BigDecimal latitude,
+            BigDecimal longitude
+    ) {
     }
 }

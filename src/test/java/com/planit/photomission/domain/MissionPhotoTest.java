@@ -46,6 +46,49 @@ class MissionPhotoTest {
         assertThat(photo.getActiveSlot()).isEqualTo((byte) 1);
     }
 
+    @DisplayName("완료한 개인 미션의 재촬영 사진은 비활성 후보로 생성한다")
+    @Test
+    void createsCompletedPersonalMissionCandidate() {
+        MissionParticipation participation = MissionParticipation.create(
+                personalMission(),
+                mock(TripMember.class),
+                now()
+        );
+        participation.completeByAi(now());
+
+        MissionPhoto photo = MissionPhoto.personalCandidate(
+                participation,
+                mock(ImageFile.class),
+                UUID.randomUUID(),
+                null,
+                null,
+                now().plusMinutes(1)
+        );
+
+        assertThat(photo.getActiveSlot()).isNull();
+    }
+
+    @DisplayName("진행 중인 개인 미션에는 재촬영 후보 사진을 만들 수 없다")
+    @Test
+    void rejectsCandidateForPendingPersonalMission() {
+        MissionParticipation participation = MissionParticipation.create(
+                personalMission(),
+                mock(TripMember.class),
+                now()
+        );
+
+        assertThatThrownBy(() -> MissionPhoto.personalCandidate(
+                participation,
+                mock(ImageFile.class),
+                UUID.randomUUID(),
+                null,
+                null,
+                now()
+        ))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("완료한 개인 미션만 재촬영 후보를 가질 수 있습니다");
+    }
+
     @DisplayName("단체 미션 사진은 개인 참여 상태 없이 제출자를 기록한다")
     @Test
     void createsGroupPhoto() {
