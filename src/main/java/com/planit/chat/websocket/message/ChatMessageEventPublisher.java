@@ -16,9 +16,6 @@ import java.time.Instant;
 @RequiredArgsConstructor
 public class ChatMessageEventPublisher {
 
-    private static final String ROOM_DESTINATION_PREFIX =
-            "/topic/regional-chat-rooms/";
-    private static final String ROOM_DESTINATION_SUFFIX = "/messages";
     private static final String USER_EVENT_DESTINATION = "/queue/chat-events";
 
     private final SimpMessagingTemplate messagingTemplate;
@@ -32,7 +29,7 @@ public class ChatMessageEventPublisher {
         String roomIdValue = roomId.toString();
         if (result.created()) {
             messagingTemplate.convertAndSend(
-                    roomDestination(roomId),
+                    ChatMessageDestinations.roomMessages(roomId),
                     ChatMessageCreatedEvent.from(roomIdValue, result.message())
             );
         }
@@ -84,8 +81,4 @@ public class ChatMessageEventPublisher {
                 accessor.getMessageHeaders()
         );
     }
-
-    private String roomDestination(Long roomId) {
-        return ROOM_DESTINATION_PREFIX + roomId + ROOM_DESTINATION_SUFFIX;
-    }   //해당 경로로 메세지가 매핑
 }
