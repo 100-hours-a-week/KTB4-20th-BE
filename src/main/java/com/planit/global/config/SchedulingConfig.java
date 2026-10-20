@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
 @Configuration(proxyBeanMethods = false)
 @EnableScheduling
@@ -14,6 +15,14 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class SchedulingConfig {
 
     private static final String LOCK_ENVIRONMENT = "planit";
+
+    @Bean(name = "taskScheduler")
+    public ThreadPoolTaskScheduler taskScheduler() {
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(4);
+        scheduler.setThreadNamePrefix("scheduled-task-");
+        return scheduler;
+    }
 
     @Bean
     public LockProvider lockProvider(
