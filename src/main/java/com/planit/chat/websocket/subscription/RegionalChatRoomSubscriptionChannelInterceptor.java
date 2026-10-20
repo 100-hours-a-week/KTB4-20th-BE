@@ -4,6 +4,7 @@ import com.planit.chat.presence.RegionalChatRoomPresenceRegistry;
 import com.planit.global.error.ErrorCode;
 import com.planit.repository.RegionalChatRoomMemberRepository;
 import com.planit.repository.RegionalChatRoomRepository;
+import com.planit.websocket.subscription.StompSubscriptionReceiptEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.messaging.Message;
@@ -80,7 +81,7 @@ public class RegionalChatRoomSubscriptionChannelInterceptor implements ChannelIn
                 accessor.getSubscriptionId()
         );
         if (accessor.getReceipt() != null) {
-            eventPublisher.publishEvent(new ChatSubscriptionReceiptEvent(
+            eventPublisher.publishEvent(new StompSubscriptionReceiptEvent(
                     accessor.getSessionId(),
                     accessor.getReceipt()
             ));

@@ -5,15 +5,15 @@ import com.planit.auth.token.TokenHasher;
 import com.planit.domain.*;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
-import com.planit.image.config.ImageProperties;
+import com.planit.image.storage.ImageStorage;
 import com.planit.repository.RegionRepository;
 import com.planit.repository.TripInvitationRepository;
 import com.planit.repository.TripMemberRepository;
 import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
-import com.planit.schedule.service.SchedulePersistenceService;
 import com.planit.trip.dto.TripCreateRequest;
 import com.planit.trip.dto.TripCreateResponse;
+import com.planit.trip.dto.TripConflictResponse;
 import com.planit.trip.dto.TripDetailResponse;
 import com.planit.trip.dto.TripJoinRequest;
 import com.planit.trip.dto.TripJoinResponse;
@@ -22,6 +22,7 @@ import com.planit.trip.dto.TripLeaveResponse;
 import com.planit.trip.dto.TripListResponse;
 import com.planit.trip.pagination.TripListCursorCodec;
 import com.planit.trip.pagination.TripListCursorCodec.Cursor;
+import com.planit.trip.exception.TripDateConflictException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -48,15 +49,17 @@ public class TripServiceImpl implements TripService {
     private final RegionRepository regionRepository;
     private final TripRepository tripRepository;
     private final TripMemberRepository tripMemberRepository;
+    private final TripMemberAccessService tripMemberAccessService;
     private final TripInvitationRepository tripInvitationRepository;
 
     private final TokenHasher tokenHasher;
     private final TripListCursorCodec tripListCursorCodec;
-    private final ImageProperties imageProperties;
-    private final SchedulePersistenceService schedulePersistenceService;
+    private final ImageStorage imageStorage;
+    private final TripRoomDeleter tripRoomDeleter;
 
     private static final int MAX_TRIP_LIST_SIZE = 10;
     private static final int DEFAULT_TRIP_CAPACITY = 4;
+    private static final int MAX_TRIP_DURATION_DAYS = 9;
     private static final String WITHDRAWN_USER_NAME = "탈퇴한 사용자";
 
     @Override
@@ -70,14 +73,24 @@ public class TripServiceImpl implements TripService {
 
         LocalDate today = LocalDate.now(SEOUL_ZONE);
 
-        validateStartDate(request.startDate(), today);
-        validateNoDateConflict(user, request.startDate());
+        validateTripPeriod(
+                request.startDate(),
+                request.endDate(),
+                today
+        );
+        validateNoDateConflict(
+                user,
+                request.startDate(),
+                request.endDate(),
+                today
+        );
 
         LocalDateTime surveyDeadlineAt = resolveSurveyDeadline(
                 request.startDate(),
                 request.surveyDeadlineDate(),
                 today
         );
+
         String tripName = request.name().trim();
         int capacity = request.capacity() == null
                 ? DEFAULT_TRIP_CAPACITY
@@ -87,6 +100,7 @@ public class TripServiceImpl implements TripService {
                 region,
                 tripName,
                 request.startDate(),
+                request.endDate(),
                 (byte) capacity,
                 surveyDeadlineAt
         );
@@ -188,13 +202,12 @@ public class TripServiceImpl implements TripService {
                         .map(member ->
                                 new TripInvitationPreviewResponse.Member(
                                         member.getUser().getUsername(),
-                                        imageProperties.defaultProfileUrl()
-                                                .toString()
+                                        profileImageUrl(member.getUser())
                                 ))
                         .toList();
         boolean alreadyJoined = tripMemberRepository
                 .existsByTripAndUserAndLeftAtIsNull(trip, user);
-        TripInvitationPreviewResponse.ConflictingTrip conflictingTrip =
+        TripConflictResponse conflictingTrip =
                 tripMemberRepository.findActiveTripsOverlappingExcept(
                                 user,
                                 trip.getStartDate(),
@@ -202,10 +215,14 @@ public class TripServiceImpl implements TripService {
                                 trip.getId()
                         ).stream()
                         .findFirst()
-                        .map(member -> new TripInvitationPreviewResponse
-                                .ConflictingTrip(
+                        .map(member -> new TripConflictResponse(
                                         member.getTrip().getId().toString(),
-                                        member.getTrip().getName()
+                                        member.getTrip().getName(),
+                                        member.getTrip().getStartDate(),
+                                        member.getTrip().getEndDate(),
+                                        today.isBefore(
+                                                member.getTrip().getStartDate()
+                                        )
                                 ))
                         .orElse(null);
 
@@ -225,7 +242,7 @@ public class TripServiceImpl implements TripService {
                 new TripInvitationPreviewResponse.Inviter(
                         host.getUser().getPublicId(),
                         host.getUser().getUsername(),
-                        imageProperties.defaultProfileUrl().toString()
+                        profileImageUrl(host.getUser())
                 ),
                 memberResponses,
                 alreadyJoined,
@@ -343,9 +360,7 @@ public class TripServiceImpl implements TripService {
 
         if (allowAutoDelete && remainingMembers.size() <= 1) {
             currentMember.leave(leftAt);
-            remainingMembers.forEach(member -> member.leave(leftAt));
-            trip.delete(leftAt);
-            schedulePersistenceService.deleteAllForTrip(trip.getId());
+            tripRoomDeleter.delete(trip, remainingMembers, leftAt);
             return new TripLeaveResponse(true, null);
         }
 
@@ -383,11 +398,11 @@ public class TripServiceImpl implements TripService {
     ) {
         User user = findActiveUser(userPublicId);
         Trip trip = findActiveTripForUpdate(tripId);
-        TripMember currentMember = findActiveMember(trip, user);
-
-        if (currentMember.getRole() != TripMemberRole.HOST) {
-            throw new BusinessException(ErrorCode.ACCESS_DENIED);
-        }
+        tripMemberAccessService.findActiveHost(
+                trip,
+                user,
+                ErrorCode.ACCESS_DENIED
+        );
 
         String invitationToken = generateInvitationToken(trip.getId());
         String invitationTokenHash = tokenHasher.sha256(invitationToken);
@@ -501,8 +516,9 @@ public class TripServiceImpl implements TripService {
         return tripMemberRepository.findActiveTripMembershipsAfter(
                 user,
                 referenceDate,
-                cursor.startDate().isBefore(referenceDate) ? 1 : 0,
-                cursor.startDate(),
+                cursor.sectionOrder(),
+                cursor.sortDate(),
+                cursor.tripId(),
                 pageRequest
         );
     }
@@ -516,7 +532,7 @@ public class TripServiceImpl implements TripService {
         List<TripListResponse.MemberSummary> memberResponses = members.stream()
                 .map(member -> new TripListResponse.MemberSummary(
                         member.getUser().getUsername(),
-                        imageProperties.defaultProfileUrl().toString()
+                        profileImageUrl(member.getUser())
                 ))
                 .toList();
 
@@ -524,8 +540,10 @@ public class TripServiceImpl implements TripService {
                 trip.getId().toString(),
                 trip.getName(),
                 trip.getStartDate(),
+                trip.getEndDate(),
                 TripProgressStatus.resolve(
                         trip.getStartDate(),
+                        trip.getEndDate(),
                         hasConfirmedSchedule,
                         referenceDate
                 ),
@@ -539,10 +557,23 @@ public class TripServiceImpl implements TripService {
             LocalDate referenceDate
     ) {
         Trip trip = lastMembership.getTrip();
+        int sectionOrder = tripSectionOrder(trip, referenceDate);
         return tripListCursorCodec.encode(new Cursor(
                 referenceDate,
-                trip.getStartDate()
+                sectionOrder,
+                sectionOrder == 2
+                        ? trip.getEndDate()
+                        : trip.getStartDate(),
+                trip.getId()
         ));
+    }
+
+    private int tripSectionOrder(Trip trip, LocalDate referenceDate) {
+        if (!referenceDate.isBefore(trip.getStartDate())
+                && !referenceDate.isAfter(trip.getEndDate())) {
+            return 0;
+        }
+        return referenceDate.isBefore(trip.getStartDate()) ? 1 : 2;
     }
 
     private void validateTripListSize(int size) {
@@ -557,9 +588,16 @@ public class TripServiceImpl implements TripService {
                 member.getId().toString(),
                 withdrawn ? null : member.getUser().getPublicId(),
                 withdrawn ? WITHDRAWN_USER_NAME : member.getUser().getUsername(),
-                imageProperties.defaultProfileUrl().toString(),
+                withdrawn ? null : profileImageUrl(member.getUser()),
                 member.getRole()
         );
+    }
+
+    private String profileImageUrl(User user) {
+        ImageFile imageFile = user.getImageFile();
+        return imageFile == null
+                ? null
+                : imageStorage.createReadUrl(imageFile.getImageKey());
     }
 
     private Trip findActiveTrip(Long tripId) {
@@ -666,8 +704,9 @@ public class TripServiceImpl implements TripService {
                 );
     }
 
-    private void validateStartDate(
+    private void validateTripPeriod(
             LocalDate startDate,
+            LocalDate endDate,
             LocalDate today
     ) {
         // 당일 여행은 생성 즉시 진행 중으로 판단돼 설문·일정 생성·나가기가 막히므로 내일부터만 허용한다.
@@ -676,24 +715,46 @@ public class TripServiceImpl implements TripService {
                     ErrorCode.INVALID_REQUEST
             );
         }
+
+        if (endDate.isBefore(startDate)) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST
+            );
+        }
+
+        LocalDate latestEndDate =
+                startDate.plusDays(MAX_TRIP_DURATION_DAYS - 1);
+        if (endDate.isAfter(latestEndDate)) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST
+            );
+        }
     }
 
     private void validateNoDateConflict(
             User user,
-            LocalDate startDate
+            LocalDate startDate,
+            LocalDate endDate,
+            LocalDate today
     ) {
-        long overlappingTripCount = tripMemberRepository
-                .countActiveTripsOverlapping(
+        tripMemberRepository.findActiveTripsOverlapping(
                         user,
                         startDate,
-                        startDate
-                );
-
-        if (overlappingTripCount > 0) {
-            throw new BusinessException(
-                    ErrorCode.TRIP_DATE_CONFLICT
-            );
-        }
+                        endDate
+                ).stream()
+                .findFirst()
+                .ifPresent(member -> {
+                    Trip trip = member.getTrip();
+                    throw new TripDateConflictException(
+                            new TripConflictResponse(
+                                    trip.getId().toString(),
+                                    trip.getName(),
+                                    trip.getStartDate(),
+                                    trip.getEndDate(),
+                                    today.isBefore(trip.getStartDate())
+                            )
+                    );
+                });
     }
 
     private LocalDateTime resolveSurveyDeadline(

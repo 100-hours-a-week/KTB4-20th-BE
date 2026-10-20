@@ -4,6 +4,7 @@ import com.planit.global.error.GlobalExceptionHandler;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
 import com.planit.trip.dto.TripInvitationPreviewResponse;
+import com.planit.trip.dto.TripConflictResponse;
 import com.planit.trip.service.TripService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
@@ -71,7 +72,13 @@ class TripInvitationControllerTest {
                         "https://example.com/default-profile.png"
                 )),
                 true,
-                null
+                new TripConflictResponse(
+                        "1002",
+                        "제주 여행",
+                        LocalDate.of(2026, 9, 20),
+                        LocalDate.of(2026, 9, 22),
+                        true
+                )
         ));
 
         mockMvc.perform(get(
@@ -89,6 +96,12 @@ class TripInvitationControllerTest {
                         .value("초대 정보를 조회했습니다."))
                 .andExpect(jsonPath("$.data.trip.tripId")
                         .value("1001"))
+                .andExpect(jsonPath("$.data.trip.name")
+                        .value("부산 맛집 여행"))
+                .andExpect(jsonPath("$.data.trip.startDate")
+                        .value("2026-09-12"))
+                .andExpect(jsonPath("$.data.trip.endDate")
+                        .value("2026-09-14"))
                 .andExpect(jsonPath("$.data.trip.region.regionId")
                         .value("3"))
                 .andExpect(jsonPath("$.data.trip.region.regionName")
@@ -98,6 +111,12 @@ class TripInvitationControllerTest {
                 .andExpect(jsonPath("$.data.members[0].userName")
                         .value("플랜잇방장"))
                 .andExpect(jsonPath("$.data.alreadyJoined")
+                        .value(true))
+                .andExpect(jsonPath("$.data.conflictingTrip.startDate")
+                        .value("2026-09-20"))
+                .andExpect(jsonPath("$.data.conflictingTrip.endDate")
+                        .value("2026-09-22"))
+                .andExpect(jsonPath("$.data.conflictingTrip.canLeave")
                         .value(true));
 
         verify(tripService).getInvitationPreview(

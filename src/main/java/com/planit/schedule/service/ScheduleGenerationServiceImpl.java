@@ -7,7 +7,6 @@ import com.planit.domain.Region;
 import com.planit.domain.Survey;
 import com.planit.domain.Trip;
 import com.planit.domain.TripMember;
-import com.planit.domain.TripMemberRole;
 import com.planit.domain.User;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
@@ -17,9 +16,12 @@ import com.planit.repository.SurveyRepository;
 import com.planit.repository.TripMemberRepository;
 import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
+import com.planit.schedule.domain.ScheduleGenerationReason;
 import com.planit.schedule.dto.SchedulePlaceSelectionResponse;
 import com.planit.schedule.ai.AiRecommendedPlaceMapper;
+import com.planit.schedule.ai.RecommendedRoute;
 import com.planit.schedule.route.RouteCalculationException;
+import com.planit.trip.service.TripMemberAccessService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,7 +29,10 @@ import org.springframework.web.client.RestClientException;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -41,33 +46,41 @@ public class ScheduleGenerationServiceImpl
     private final UserRepository userRepository;
     private final TripRepository tripRepository;
     private final TripMemberRepository tripMemberRepository;
+    private final TripMemberAccessService tripMemberAccessService;
     private final SurveyRepository surveyRepository;
     private final SurveyAnswerRepository surveyAnswerRepository;
     private final SurveyExcludedCategoryRepository excludedCategoryRepository;
     private final AiTripClient aiTripClient;
     private final AiRecommendedPlaceMapper recommendedPlaceMapper;
     private final SchedulePersistenceService schedulePersistenceService;
+    private final ScheduleRegenerationPolicy regenerationPolicy;
 
     @Override
     @Transactional
     public SchedulePlaceSelectionResponse generate(
             String userPublicId,
-            Long tripId
+            Long tripId,
+            ScheduleGenerationReason reason
     ) {
         User user = findActiveUser(userPublicId);
         Trip trip = findActiveTrip(tripId);
-        TripMember host = findActiveHost(trip, user);
+        TripMember host = tripMemberAccessService.findActiveHost(
+                trip,
+                user,
+                ErrorCode.TRIP_HOST_REQUIRED
+        );
 
         List<TripMember> activeMembers =
                 tripMemberRepository.findActiveMembersByTrip(trip);
         List<Survey> submittedSurveys = surveyRepository
                 .findByTripMemberInAndSubmittedAtIsNotNull(activeMembers);
         validateSurveyState(trip, host, activeMembers, submittedSurveys);
+        ScheduleGenerationMode mode = regenerationPolicy.resolve(trip, reason);
 
         AiPlaceSelectionRequest request = new AiPlaceSelectionRequest(
                 resolveAiRegion(trip.getRegion()),
                 trip.getStartDate(),
-                trip.getStartDate(),
+                trip.getEndDate(),
                 submittedSurveys.stream()
                         .map(this::toMemberSurvey)
                         .toList()
@@ -83,16 +96,20 @@ public class ScheduleGenerationServiceImpl
             );
         }
 
-        if (!isValidResponse(response)) {
+        if (!isValidResponse(response, trip)) {
             throw new BusinessException(
                     ErrorCode.AI_SCHEDULE_GENERATION_FAILED
             );
         }
 
         try {
-            schedulePersistenceService.save(
+            List<RecommendedRoute> routes = recommendedPlaceMapper.mapRoutes(
+                    response
+            );
+            schedulePersistenceService.saveCandidates(
                     tripId,
-                    recommendedPlaceMapper.map(response)
+                    routes,
+                    mode
             );
         } catch (RouteCalculationException exception) {
             throw new BusinessException(
@@ -141,22 +158,82 @@ public class ScheduleGenerationServiceImpl
         );
     }
 
-    private boolean isValidResponse(AiPlaceSelectionResponse response) {
-        return response.statusCode() == 200
-                && response.data() != null
-                && response.data().places() != null
-                && response.data().places().size() >= REQUIRED_PLACE_MIN_COUNT
+    private boolean isValidResponse(
+            AiPlaceSelectionResponse response,
+            Trip trip
+    ) {
+        if (response == null
+                || response.statusCode() != 200
+                || response.data() == null
+                || response.data().places() == null) {
+            return false;
+        }
+
+        long tripDayCount = ChronoUnit.DAYS.between(
+                trip.getStartDate(),
+                trip.getEndDate()
+        ) + 1;
+        return response.data().places().size() == tripDayCount
                 && response.data().places().stream()
-                .allMatch(this::isValidPlace);
+                .allMatch(this::isValidDailyPlaces)
+                && isValidRoutes(response.data().routes(), tripDayCount);
+    }
+
+    private boolean isValidRoutes(
+            List<AiPlaceSelectionResponse.Route> routes,
+            long tripDayCount
+    ) {
+        if (routes == null || routes.size() != 2) {
+            return false;
+        }
+
+        Set<AiPlaceSelectionResponse.Strategy> strategies = new HashSet<>();
+        for (AiPlaceSelectionResponse.Route route : routes) {
+            if (route == null
+                    || route.strategy() == null
+                    || !strategies.add(route.strategy())
+                    || route.preferenceScore() == null
+                    || route.days() == null
+                    || route.days().size() != tripDayCount
+                    || !route.days().stream()
+                    .allMatch(this::isValidDailyPlaces)) {
+                return false;
+            }
+        }
+
+        return strategies.equals(Set.of(
+                AiPlaceSelectionResponse.Strategy.PREFERENCE,
+                AiPlaceSelectionResponse.Strategy.BALANCED
+        ));
+    }
+
+    private boolean isValidDailyPlaces(
+            List<AiPlaceSelectionResponse.Place> places
+    ) {
+        if (places == null || places.size() < REQUIRED_PLACE_MIN_COUNT) {
+            return false;
+        }
+
+        Set<String> placeIds = new HashSet<>();
+        return places.stream().allMatch(place ->
+                isValidPlace(place) && placeIds.add(place.id())
+        );
     }
 
     private boolean isValidPlace(AiPlaceSelectionResponse.Place place) {
-        return place.id() != null
+        return place != null
+                && place.id() != null
                 && !place.id().isBlank()
                 && place.displayName() != null
                 && place.displayName().text() != null
                 && !place.displayName().text().isBlank()
                 && place.location() != null
+                && Double.isFinite(place.location().latitude())
+                && place.location().latitude() >= -90
+                && place.location().latitude() <= 90
+                && Double.isFinite(place.location().longitude())
+                && place.location().longitude() >= -180
+                && place.location().longitude() <= 180
                 && place.types() != null
                 && place.selectedFor() != null
                 && place.matchedPreferences() != null;
@@ -199,20 +276,6 @@ public class ScheduleGenerationServiceImpl
                     ErrorCode.UNSUPPORTED_TRIP_REGION
             );
         };
-    }
-
-    private TripMember findActiveHost(Trip trip, User user) {
-        TripMember member = tripMemberRepository
-                .findByTripAndUserAndLeftAtIsNull(trip, user)
-                .filter(found -> found.getActiveSlot() != null
-                        && found.getActiveSlot() == 1)
-                .orElseThrow(() -> new BusinessException(
-                        ErrorCode.TRIP_MEMBER_REQUIRED
-                ));
-        if (member.getRole() != TripMemberRole.HOST) {
-            throw new BusinessException(ErrorCode.ACCESS_DENIED);
-        }
-        return member;
     }
 
     private Trip findActiveTrip(Long tripId) {
