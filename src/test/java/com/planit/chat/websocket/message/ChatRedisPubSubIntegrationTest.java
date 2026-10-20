@@ -20,6 +20,7 @@ import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.toxiproxy.ToxiproxyContainer;
@@ -54,7 +55,11 @@ class ChatRedisPubSubIntegrationTest {
             DockerImageName.parse("redis:8.10.2-alpine")
     )
             .withNetwork(network)
-            .withNetworkAliases("redis");
+            .withNetworkAliases("redis")
+            .waitingFor(Wait.forLogMessage(
+                    ".*Ready to accept connections.*\\n",
+                    1
+            ));
 
     @Container
     private final ToxiproxyContainer toxiproxy = new ToxiproxyContainer(
