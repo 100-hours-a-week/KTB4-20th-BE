@@ -17,6 +17,7 @@ import com.planit.photomission.dto.PhotoMissionAlbumResponse;
 import com.planit.photomission.dto.PhotoMissionCompletionResponse;
 import com.planit.photomission.dto.PhotoMissionDetailResponse;
 import com.planit.photomission.dto.PhotoMissionListResponse;
+import com.planit.photomission.dto.PhotoMissionPhotoDetailResponse;
 import com.planit.photomission.repository.MissionGroupStateRepository;
 import com.planit.photomission.repository.MissionParticipationRepository;
 import com.planit.photomission.repository.MissionPhotoRepository;
@@ -25,13 +26,13 @@ import com.planit.photomission.repository.PhotoEvaluationRepository;
 import com.planit.repository.TripMemberRepository;
 import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
+import com.planit.schedule.domain.Place;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -51,8 +52,6 @@ import java.util.stream.Collectors;
 public class PhotoMissionQueryService {
 
     static final ZoneId SEOUL_ZONE = ZoneId.of("Asia/Seoul");
-    private static final LocalTime DAILY_PUBLISH_TIME = LocalTime.of(0, 30);
-
     private final UserRepository userRepository;
     private final TripRepository tripRepository;
     private final TripMemberRepository tripMemberRepository;
@@ -216,6 +215,55 @@ public class PhotoMissionQueryService {
                 completedAt,
                 members,
                 photos
+        );
+    }
+
+    public PhotoMissionPhotoDetailResponse getPhotoDetail(
+            String userPublicId,
+            Long missionId,
+            Long photoId
+    ) {
+        LocalDateTime now = LocalDateTime.now(SEOUL_ZONE);
+        User user = requireUser(userPublicId);
+        Mission mission = missionRepository.findById(missionId)
+                .orElseThrow(this::resourceNotFound);
+        Trip trip = mission.getTrip();
+        requireActiveTrip(trip);
+        TripMember viewer = requireActiveMember(
+                tripMemberRepository.findActiveMembersByTrip(trip),
+                user
+        );
+        if (!isPublished(mission.getScheduleDay().getScheduleDate(), now)) {
+            throw resourceNotFound();
+        }
+        MissionPhoto photo = photoRepository
+                .findVisibleDetailByMissionIdAndPhotoId(missionId, photoId)
+                .orElseThrow(this::resourceNotFound);
+        if (!isCompletedPhotoVisibleTo(photo, viewer)) {
+            throw resourceNotFound();
+        }
+
+        User submitter = photo.getSubmittedBy().getUser();
+        Place place = mission.getScheduleVisit().getPlace();
+        return new PhotoMissionPhotoDetailResponse(
+                photo.getId(),
+                imageUrl(photo),
+                photo.getSubmittedAt(),
+                isRepresentative(photo),
+                new PhotoMissionPhotoDetailResponse.MissionSummary(
+                        mission.getId(),
+                        mission.getScope().name(),
+                        mission.getDescription(),
+                        mission.getPrimaryCategory()
+                ),
+                new PhotoMissionPhotoDetailResponse.PlaceSummary(
+                        place.getGooglePlaceId(),
+                        place.getName()
+                ),
+                new PhotoMissionPhotoDetailResponse.SubmittedBy(
+                        submitter.getPublicId(),
+                        submitter.getUsername()
+                )
         );
     }
 
@@ -410,6 +458,7 @@ public class PhotoMissionQueryService {
                     mission,
                     viewer,
                     photosByMission.getOrDefault(mission.getId(), List.of()),
+                    groupState,
                     successfulPhotoIds
             ));
         }
@@ -520,6 +569,7 @@ public class PhotoMissionQueryService {
                 mission,
                 viewer,
                 photos,
+                groupState,
                 successfulPhotoIds
         );
     }
@@ -541,19 +591,66 @@ public class PhotoMissionQueryService {
                 == MissionCompletionStatus.COMPLETED;
     }
 
+    private boolean isCompletedPhotoVisibleTo(
+            MissionPhoto photo,
+            TripMember viewer
+    ) {
+        Mission mission = photo.getMission();
+        if (mission.isPersonal()) {
+            return belongsTo(photo, viewer)
+                    && photo.getParticipation().getStatus()
+                    == MissionCompletionStatus.COMPLETED;
+        }
+        MissionGroupState state = groupStateRepository
+                .findByMissionId(mission.getId())
+                .orElse(null);
+        if (state == null
+                || state.getStatus() != MissionCompletionStatus.COMPLETED) {
+            return false;
+        }
+        Set<Long> successfulPhotoIds = Set.copyOf(
+                evaluationRepository.findSuccessfulMissionPhotoIds(
+                        List.of(photo.getId())
+                )
+        );
+        return isVisibleGroupCompletionPhoto(
+                photo,
+                state,
+                successfulPhotoIds
+        );
+    }
+
     private List<MissionPhoto> visiblePhotosForViewer(
             Mission mission,
             TripMember viewer,
             List<MissionPhoto> photos,
+            MissionGroupState groupState,
             Set<Long> successfulPhotoIds
     ) {
         return photos.stream()
                 .filter(photo -> mission.isGroup() || belongsTo(photo, viewer))
                 .filter(photo -> mission.isPersonal()
-                        || isRepresentative(photo)
-                        || successfulPhotoIds.contains(photo.getId()))
+                        || isVisibleGroupCompletionPhoto(
+                                photo,
+                                groupState,
+                                successfulPhotoIds
+                        ))
                 .sorted(completionPhotoOrder())
                 .toList();
+    }
+
+    private boolean isVisibleGroupCompletionPhoto(
+            MissionPhoto photo,
+            MissionGroupState groupState,
+            Set<Long> successfulPhotoIds
+    ) {
+        return isRepresentative(photo)
+                || successfulPhotoIds.contains(photo.getId())
+                || groupState != null
+                && groupState.getCompletedAt() != null
+                && !photo.getSubmittedAt().isBefore(
+                        groupState.getCompletedAt()
+                );
     }
 
     private Set<Long> successfulPhotoIds(
@@ -881,7 +978,7 @@ public class PhotoMissionQueryService {
     }
 
     private boolean isPublished(LocalDate date, LocalDateTime now) {
-        return !now.isBefore(date.atTime(DAILY_PUBLISH_TIME));
+        return PhotoMissionAvailabilityPolicy.isPublished(date, now);
     }
 
     private MissionParticipation requireParticipation(
@@ -946,6 +1043,10 @@ public class PhotoMissionQueryService {
 
     private BusinessException inconsistentState() {
         return new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
+    }
+
+    private BusinessException resourceNotFound() {
+        return new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
     }
 
 }

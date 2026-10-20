@@ -201,7 +201,10 @@ public class PhotoMissionSubmissionTransactionService {
                         ErrorCode.TRIP_MEMBER_REQUIRED
                 ));
         LocalDateTime now = LocalDateTime.now(clock);
-        if (mission.isExpired(now)) {
+        if (!PhotoMissionAvailabilityPolicy.isPublished(
+                mission.getScheduleDay().getScheduleDate(),
+                now
+        ) || mission.isExpired(now)) {
             throw submissionNotAllowed();
         }
         return new SubmissionContext(mission, member, now);

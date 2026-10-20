@@ -215,6 +215,10 @@ class PhotoMissionRepositoryTest {
                 personalMission.getId(),
                 groupMission.getId()
         ))).containsExactlyInAnyOrder(personalPhoto, groupPhoto);
+        assertThat(photoRepository.findVisibleDetailByMissionIdAndPhotoId(
+                personalMission.getId(),
+                personalPhoto.getId()
+        )).contains(personalPhoto);
     }
 
     @DisplayName("사진의 가장 최근 AI 실행 시도를 조회한다")
