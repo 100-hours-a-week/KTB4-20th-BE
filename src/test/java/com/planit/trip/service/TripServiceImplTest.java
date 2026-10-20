@@ -1499,15 +1499,15 @@ class TripServiceImplTest {
         verify(tripRepository, never()).save(any());
     }
 
-    @DisplayName("10일을 초과하는 여행 생성을 거부한다")
+    @DisplayName("9일을 초과하는 여행 생성을 거부한다")
     @Test
-    void rejectsTripLongerThanTenDays() {
+    void rejectsTripLongerThanNineDays() {
         LocalDate startDate = LocalDate.now(SEOUL_ZONE).plusDays(5);
 
         assertError(
                 () -> tripService.createTrip(
                         USER_PUBLIC_ID.toString(),
-                        request(startDate, startDate.plusDays(10), null)
+                        request(startDate, startDate.plusDays(9), null)
                 ),
                 ErrorCode.INVALID_REQUEST
         );
@@ -1515,11 +1515,11 @@ class TripServiceImplTest {
         verify(tripRepository, never()).save(any());
     }
 
-    @DisplayName("10일 여행 생성을 허용한다")
+    @DisplayName("9일 여행 생성을 허용한다")
     @Test
-    void allowsTenDayTrip() {
+    void allowsNineDayTrip() {
         LocalDate startDate = LocalDate.now(SEOUL_ZONE).plusDays(5);
-        LocalDate endDate = startDate.plusDays(9);
+        LocalDate endDate = startDate.plusDays(8);
 
         tripService.createTrip(
                 USER_PUBLIC_ID.toString(),
