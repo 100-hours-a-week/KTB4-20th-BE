@@ -9,7 +9,7 @@ public record TripInvitationPreviewResponse(
         Inviter inviter,
         List<Member> members,
         boolean alreadyJoined,
-        TripConflictResponse conflictingTrip
+        ConflictingTrip conflictingTrip
 ) {
 
     public TripInvitationPreviewResponse {
@@ -43,6 +43,12 @@ public record TripInvitationPreviewResponse(
     public record Member(
             String userName,
             String profileImageUrl
+    ) {
+    }
+
+    public record ConflictingTrip(
+            String tripId,
+            String name
     ) {
     }
 }

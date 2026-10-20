@@ -20,40 +20,6 @@ class ShortestRouteCalculatorTest {
     private final ShortestRouteCalculator calculator =
             new ShortestRouteCalculator();
 
-    @DisplayName("AI가 정한 방문 순서를 유지하며 인접 구간 거리를 계산한다")
-    @Test
-    void calculatesRouteInGivenOrder() {
-        List<RoutePlace> places = List.of(
-                place(3, 37.50, 127.00, PlaceCategoryGroup.RESTAURANT),
-                place(1, 37.51, 127.01, PlaceCategoryGroup.RESTAURANT),
-                place(5, 37.52, 127.02, PlaceCategoryGroup.RESTAURANT),
-                place(2, 37.53, 127.03, PlaceCategoryGroup.RESTAURANT),
-                place(4, 37.54, 127.04, PlaceCategoryGroup.RESTAURANT)
-        );
-
-        RoutePlan plan = calculator.calculateInGivenOrder(places);
-
-        assertThat(plan.places())
-                .extracting(RoutePlace::placeId)
-                .containsExactly(3L, 1L, 5L, 2L, 4L);
-        assertThat(plan.legs())
-                .extracting(RouteLeg::order)
-                .containsExactly(1, 2, 3, 4);
-        assertThat(plan.legs())
-                .extracting(RouteLeg::fromPlaceId, RouteLeg::toPlaceId)
-                .containsExactly(
-                        org.assertj.core.groups.Tuple.tuple(3L, 1L),
-                        org.assertj.core.groups.Tuple.tuple(1L, 5L),
-                        org.assertj.core.groups.Tuple.tuple(5L, 2L),
-                        org.assertj.core.groups.Tuple.tuple(2L, 4L)
-                );
-        assertThat(plan.totalDistanceMeters()).isEqualTo(
-                plan.legs().stream()
-                        .mapToLong(RouteLeg::distanceMeters)
-                        .sum()
-        );
-    }
-
     @DisplayName("정확한 최단 개방 경로를 찾고 다섯 개 이동 구간을 생성한다")
     @Test
     void findsExactShortestOpenRouteAndBuildsFiveLegs() {

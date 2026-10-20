@@ -4,9 +4,7 @@ import com.planit.chat.dto.ChatMessageCreatedEvent;
 import com.planit.chat.dto.ChatMessageResultEvent;
 import com.planit.chat.service.ChatMessageSendResult;
 import com.planit.global.error.ErrorCode;
-import io.sentry.Sentry;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessageType;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -15,14 +13,15 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 
 @Component
-@Slf4j
 @RequiredArgsConstructor
 public class ChatMessageEventPublisher {
 
+    private static final String ROOM_DESTINATION_PREFIX =
+            "/topic/regional-chat-rooms/";
+    private static final String ROOM_DESTINATION_SUFFIX = "/messages";
     private static final String USER_EVENT_DESTINATION = "/queue/chat-events";
 
     private final SimpMessagingTemplate messagingTemplate;
-    private final ChatMessageRedisPublisher redisPublisher;
 
     public void publishAccepted(
             String userPublicId,
@@ -32,7 +31,8 @@ public class ChatMessageEventPublisher {
     ) {
         String roomIdValue = roomId.toString();
         if (result.created()) {
-            publishToRedis(
+            messagingTemplate.convertAndSend(
+                    roomDestination(roomId),
                     ChatMessageCreatedEvent.from(roomIdValue, result.message())
             );
         }
@@ -67,15 +67,6 @@ public class ChatMessageEventPublisher {
         );
     }
 
-    private void publishToRedis(ChatMessageCreatedEvent event) {
-        try {
-            redisPublisher.publish(event);
-        } catch (RuntimeException exception) {
-            log.error("채팅 메시지 Redis 발행에 실패했습니다.", exception);
-            Sentry.captureException(exception);
-        }
-    }
-
     private void sendToSession(
             String userPublicId,
             String sessionId,
@@ -93,4 +84,8 @@ public class ChatMessageEventPublisher {
                 accessor.getMessageHeaders()
         );
     }
+
+    private String roomDestination(Long roomId) {
+        return ROOM_DESTINATION_PREFIX + roomId + ROOM_DESTINATION_SUFFIX;
+    }   //해당 경로로 메세지가 매핑
 }

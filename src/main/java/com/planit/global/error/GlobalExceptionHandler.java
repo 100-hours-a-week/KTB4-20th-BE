@@ -3,8 +3,6 @@ package com.planit.global.error;
 import com.planit.global.response.ApiFieldError;
 import com.planit.global.response.ApiResponse;
 import com.planit.global.response.ValidationErrorReason;
-import com.planit.trip.dto.TripConflictResponse;
-import com.planit.trip.exception.TripDateConflictException;
 import io.sentry.Sentry;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
@@ -27,21 +25,6 @@ import java.util.List;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
-
-    @ExceptionHandler(TripDateConflictException.class)
-    public ResponseEntity<ApiResponse<TripConflictResponse>>
-    handleTripDateConflictException(
-            TripDateConflictException exception
-    ) {
-        ErrorCode errorCode = exception.getErrorCode();
-        return ResponseEntity.status(errorCode.getHttpStatus())
-                .body(new ApiResponse<>(
-                        errorCode.getCode(),
-                        errorCode.getMessage(),
-                        exception.getConflict(),
-                        null
-                ));
-    }
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException exception) {

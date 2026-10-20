@@ -14,7 +14,6 @@ public record TripListResponse(
             String tripId,
             String name,
             LocalDate startDate,
-            LocalDate endDate,
             TripProgressStatus status,
             int memberCount,
             List<MemberSummary> members

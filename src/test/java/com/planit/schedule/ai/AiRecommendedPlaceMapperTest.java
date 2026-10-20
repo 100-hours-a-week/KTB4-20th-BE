@@ -1,7 +1,5 @@
 package com.planit.schedule.ai;
 
-import com.planit.ai.AiPlaceSelectionResponse;
-import com.planit.schedule.domain.ScheduleStrategy;
 import com.planit.schedule.route.PlaceCategoryGroup;
 import com.planit.schedule.route.RouteCalculationException;
 import org.junit.jupiter.api.DisplayName;
@@ -20,97 +18,6 @@ class AiRecommendedPlaceMapperTest {
     private final AiRecommendedPlaceMapper mapper =
             new AiRecommendedPlaceMapper();
 
-    @DisplayName("AI의 날짜별 장소 배열 구조를 유지해 추천 장소로 변환한다")
-    @Test
-    void mapsPlacesByDay() {
-        List<AiPlaceSelectionResponse.Place> firstDay = selectionPlaces(
-                "day-1"
-        );
-        List<AiPlaceSelectionResponse.Place> secondDay = selectionPlaces(
-                "day-2"
-        );
-        AiPlaceSelectionResponse response = new AiPlaceSelectionResponse(
-                200,
-                new AiPlaceSelectionResponse.Data(List.of(
-                        firstDay,
-                        secondDay
-                ))
-        );
-
-        List<List<RecommendedPlace>> result = mapper.mapDailyPlaces(response);
-
-        assertThat(result).hasSize(2);
-        assertThat(result.getFirst()).hasSize(5);
-        assertThat(result.get(1)).hasSize(5);
-        assertThat(result.getFirst().getFirst().googlePlaceId())
-                .isEqualTo("day-1-place-1");
-        assertThat(result.get(1).getFirst().googlePlaceId())
-                .isEqualTo("day-2-place-1");
-    }
-
-    @DisplayName("최단거리·취향 우선·균형 코스를 전략별 추천 경로로 변환한다")
-    @Test
-    void mapsThreeRecommendedRoutes() {
-        List<List<AiPlaceSelectionResponse.Place>> shortest = List.of(
-                selectionPlaces("shortest")
-        );
-        List<List<AiPlaceSelectionResponse.Place>> preference = List.of(
-                selectionPlaces("preference")
-        );
-        List<List<AiPlaceSelectionResponse.Place>> balanced = List.of(
-                selectionPlaces("balanced")
-        );
-        AiPlaceSelectionResponse response = new AiPlaceSelectionResponse(
-                200,
-                new AiPlaceSelectionResponse.Data(
-                        shortest,
-                        List.of(
-                                new AiPlaceSelectionResponse.Route(
-                                        AiPlaceSelectionResponse.Strategy.BALANCED,
-                                        68,
-                                        balanced
-                                ),
-                                new AiPlaceSelectionResponse.Route(
-                                        AiPlaceSelectionResponse.Strategy.PREFERENCE,
-                                        92,
-                                        preference
-                                )
-                        )
-                )
-        );
-
-        List<RecommendedRoute> result = mapper.mapRoutes(response);
-
-        assertThat(result)
-                .extracting(RecommendedRoute::strategy)
-                .containsExactly(
-                        ScheduleStrategy.SHORTEST,
-                        ScheduleStrategy.PREFERENCE,
-                        ScheduleStrategy.BALANCED
-                );
-        assertThat(result)
-                .extracting(RecommendedRoute::preferenceScore)
-                .containsExactly(null, 92, 68);
-        assertThat(result.get(1).days().getFirst())
-                .extracting(RecommendedPlace::googlePlaceId)
-                .containsExactly(
-                        "preference-place-1",
-                        "preference-place-2",
-                        "preference-place-3",
-                        "preference-place-4",
-                        "preference-place-5"
-                );
-        assertThat(result.get(2).days().getFirst())
-                .extracting(RecommendedPlace::googlePlaceId)
-                .containsExactly(
-                        "balanced-place-1",
-                        "balanced-place-2",
-                        "balanced-place-3",
-                        "balanced-place-4",
-                        "balanced-place-5"
-                );
-    }
-
     @DisplayName("AI 응답의 사용자별 추천 대상과 선호 항목을 올바르게 읽는다")
     @Test
     void deserializesProvidedSnakeCaseFields() throws Exception {
@@ -118,7 +25,7 @@ class AiRecommendedPlaceMapperTest {
                 {
                   "status_code": 200,
                   "data": {
-                    "places": [[{
+                    "places": [{
                       "id": "google-place-id",
                       "displayName": {"text": "경복궁", "languageCode": "ko"},
                       "location": {"latitude": 37.5796, "longitude": 126.9770},
@@ -128,27 +35,26 @@ class AiRecommendedPlaceMapperTest {
                       "editorialSummary": null,
                       "selected_for": ["user_id_1"],
                       "matched_preferences": ["HISTORY_CULTURE"]
-                    }]]
+                    }]
                   }
                 }
                 """;
 
-        AiPlaceSelectionResponse response = JsonMapper.builder()
+        AiPlaceRecommendationResponse response = JsonMapper.builder()
                 .build()
-                .readValue(json, AiPlaceSelectionResponse.class);
+                .readValue(json, AiPlaceRecommendationResponse.class);
 
         assertThat(response.statusCode()).isEqualTo(200);
-        assertThat(response.data().places().getFirst().getFirst().selectedFor())
+        assertThat(response.data().places().getFirst().selectedFor())
                 .containsExactly("user_id_1");
-        assertThat(response.data().places().getFirst().getFirst()
-                .matchedPreferences())
+        assertThat(response.data().places().getFirst().matchedPreferences())
                 .containsExactly("HISTORY_CULTURE");
     }
 
     @DisplayName("여섯 장소를 변환하고 경로 계산용 카테고리를 정규화한다")
     @Test
     void mapsSixPlacesAndNormalizesCategoryForRouteCalculation() {
-        List<AiPlaceSelectionResponse.Place> places = IntStream
+        List<AiPlaceRecommendationResponse.Place> places = IntStream
                 .rangeClosed(1, 6)
                 .mapToObj(index -> place(
                         "place-" + index,
@@ -162,7 +68,7 @@ class AiRecommendedPlaceMapperTest {
                 ))
                 .toList();
 
-        List<RecommendedPlace> result = mapSingleDay(places);
+        List<RecommendedPlace> result = mapper.map(response(places));
 
         assertThat(result).hasSize(6);
         assertThat(result.getFirst().googlePlaceId()).isEqualTo("place-1");
@@ -177,9 +83,9 @@ class AiRecommendedPlaceMapperTest {
     @DisplayName("실패 응답이나 다섯 개 미만의 장소를 거부한다")
     @Test
     void rejectsNonSuccessResponseAndFewerThanFivePlaces() {
-        assertInvalid(new AiPlaceSelectionResponse(
+        assertInvalid(new AiPlaceRecommendationResponse(
                 500,
-                new AiPlaceSelectionResponse.Data(List.of())
+                new AiPlaceRecommendationResponse.Data(List.of())
         ));
         assertInvalid(response(List.of(place(
                 "place-1",
@@ -192,7 +98,7 @@ class AiRecommendedPlaceMapperTest {
     @DisplayName("AI가 장소를 다섯 개만 반환해도 정상 변환한다")
     @Test
     void mapsFivePlacesWhenAiFallsShortOfSix() {
-        List<AiPlaceSelectionResponse.Place> places = IntStream
+        List<AiPlaceRecommendationResponse.Place> places = IntStream
                 .rangeClosed(1, 5)
                 .mapToObj(index -> place(
                         "place-" + index,
@@ -202,7 +108,7 @@ class AiRecommendedPlaceMapperTest {
                 ))
                 .toList();
 
-        List<RecommendedPlace> result = mapSingleDay(places);
+        List<RecommendedPlace> result = mapper.map(response(places));
 
         assertThat(result).hasSize(5);
     }
@@ -210,20 +116,20 @@ class AiRecommendedPlaceMapperTest {
     @DisplayName("자연·힐링 선호로 추천된 장소를 휴식 카테고리로 분류한다")
     @Test
     void classifiesCompoundMatchedPreferenceAsRest() {
-        AiPlaceSelectionResponse.Place place = place(
+        AiPlaceRecommendationResponse.Place place = place(
                 "place-1",
                 "경주타워",
                 List.of("point_of_interest"),
                 List.of("NATURE_HEALING")
         );
 
-        List<RecommendedPlace> result = mapSingleDay(List.of(
+        List<RecommendedPlace> result = mapper.map(response(List.of(
                 place,
                 place("place-2", "장소2", List.of("historical_landmark"), List.of("HISTORY_CULTURE")),
                 place("place-3", "장소3", List.of("historical_landmark"), List.of("HISTORY_CULTURE")),
                 place("place-4", "장소4", List.of("historical_landmark"), List.of("HISTORY_CULTURE")),
                 place("place-5", "장소5", List.of("historical_landmark"), List.of("HISTORY_CULTURE"))
-        ));
+        )));
 
         assertThat(result.getFirst().categoryGroup())
                 .isEqualTo(PlaceCategoryGroup.REST);
@@ -234,20 +140,20 @@ class AiRecommendedPlaceMapperTest {
     void prefersAiBucketOverTypeWhenSpaIsGroupedAsShopping() {
         // AI는 "spa" 타입을 CONVENIENCE_SHOPPING 버킷으로 분류해서 준다.
         // types만 보면 "spa"가 REST 안전망에 걸리지만, matched_preferences를 우선해야 한다.
-        AiPlaceSelectionResponse.Place place = place(
+        AiPlaceRecommendationResponse.Place place = place(
                 "place-1",
                 "경주 스파",
                 List.of("spa"),
                 List.of("CONVENIENCE_SHOPPING")
         );
 
-        List<RecommendedPlace> result = mapSingleDay(List.of(
+        List<RecommendedPlace> result = mapper.map(response(List.of(
                 place,
                 place("place-2", "장소2", List.of("historical_landmark"), List.of("HISTORY_CULTURE")),
                 place("place-3", "장소3", List.of("historical_landmark"), List.of("HISTORY_CULTURE")),
                 place("place-4", "장소4", List.of("historical_landmark"), List.of("HISTORY_CULTURE")),
                 place("place-5", "장소5", List.of("historical_landmark"), List.of("HISTORY_CULTURE"))
-        ));
+        )));
 
         assertThat(result.getFirst().categoryGroup())
                 .isEqualTo(PlaceCategoryGroup.SHOPPING);
@@ -256,26 +162,26 @@ class AiRecommendedPlaceMapperTest {
     @DisplayName("음식 선호 장소를 장소 유형에 따라 카페와 식당으로 구분한다")
     @Test
     void splitsFoodBucketIntoCafeAndRestaurantByType() {
-        AiPlaceSelectionResponse.Place cafe = place(
+        AiPlaceRecommendationResponse.Place cafe = place(
                 "place-1",
                 "황남 옥수수빵",
                 List.of("bakery"),
                 List.of("FOOD")
         );
-        AiPlaceSelectionResponse.Place restaurant = place(
+        AiPlaceRecommendationResponse.Place restaurant = place(
                 "place-2",
                 "경주역 맛집",
                 List.of("seafood_restaurant"),
                 List.of("FOOD")
         );
 
-        List<RecommendedPlace> result = mapSingleDay(List.of(
+        List<RecommendedPlace> result = mapper.map(response(List.of(
                 cafe,
                 restaurant,
                 place("place-3", "장소3", List.of("historical_landmark"), List.of("HISTORY_CULTURE")),
                 place("place-4", "장소4", List.of("historical_landmark"), List.of("HISTORY_CULTURE")),
                 place("place-5", "장소5", List.of("historical_landmark"), List.of("HISTORY_CULTURE"))
-        ));
+        )));
 
         assertThat(result.get(0).categoryGroup())
                 .isEqualTo(PlaceCategoryGroup.CAFE_DESSERT);
@@ -286,7 +192,7 @@ class AiRecommendedPlaceMapperTest {
     @DisplayName("중복된 Google 장소 ID를 거부한다")
     @Test
     void rejectsDuplicateGooglePlaceIds() {
-        AiPlaceSelectionResponse.Place duplicate = place(
+        AiPlaceRecommendationResponse.Place duplicate = place(
                 "same-id",
                 "경복궁",
                 List.of("museum"),
@@ -303,63 +209,36 @@ class AiRecommendedPlaceMapperTest {
         )));
     }
 
-    private AiPlaceSelectionResponse response(
-            List<AiPlaceSelectionResponse.Place> places
+    private AiPlaceRecommendationResponse response(
+            List<AiPlaceRecommendationResponse.Place> places
     ) {
-        return new AiPlaceSelectionResponse(
+        return new AiPlaceRecommendationResponse(
                 200,
-                new AiPlaceSelectionResponse.Data(List.of(places))
+                new AiPlaceRecommendationResponse.Data(places)
         );
     }
 
-    private List<RecommendedPlace> mapSingleDay(
-            List<AiPlaceSelectionResponse.Place> places
-    ) {
-        return mapper.mapDailyPlaces(response(places)).getFirst();
-    }
-
-    private List<AiPlaceSelectionResponse.Place> selectionPlaces(
-            String dayPrefix
-    ) {
-        return IntStream.rangeClosed(1, 5)
-                .mapToObj(index -> new AiPlaceSelectionResponse.Place(
-                        dayPrefix + "-place-" + index,
-                        new AiPlaceSelectionResponse.DisplayName(
-                                "장소 " + index,
-                                "ko"
-                        ),
-                        new AiPlaceSelectionResponse.Location(37.5, 127.0),
-                        List.of("historical_landmark"),
-                        4.5,
-                        100,
-                        null,
-                        List.of("user-1"),
-                        List.of("HISTORY_CULTURE")
-                ))
-                .toList();
-    }
-
-    private AiPlaceSelectionResponse.Place place(
+    private AiPlaceRecommendationResponse.Place place(
             String id,
             String name,
             List<String> types,
             List<String> preferences
     ) {
-        return new AiPlaceSelectionResponse.Place(
+        return new AiPlaceRecommendationResponse.Place(
                 id,
-                new AiPlaceSelectionResponse.DisplayName(name, "ko"),
-                new AiPlaceSelectionResponse.Location(37.5, 127.0),
+                new AiPlaceRecommendationResponse.DisplayName(name, "ko"),
+                new AiPlaceRecommendationResponse.Location(37.5, 127.0),
                 types,
                 4.5,
-                100,
+                100L,
                 null,
                 List.of("user-1"),
                 preferences
         );
     }
 
-    private void assertInvalid(AiPlaceSelectionResponse response) {
-        assertThatThrownBy(() -> mapper.mapDailyPlaces(response))
+    private void assertInvalid(AiPlaceRecommendationResponse response) {
+        assertThatThrownBy(() -> mapper.map(response))
                 .isInstanceOfSatisfying(
                         RouteCalculationException.class,
                         exception -> assertThat(exception.getReason())

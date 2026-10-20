@@ -138,12 +138,4 @@ public class TripMember {
     public LocalDateTime getLeftAt() {
         return leftAt;
     }
-
-    public boolean isActive() {
-        return activeSlot != null && activeSlot == 1 && leftAt == null;
-    }
-
-    public boolean isCurrentHost() {
-        return isActive() && hostSlot != null && hostSlot == 1;
-    }
 }

@@ -1,15 +1,10 @@
 package com.planit.schedule.service;
 
-import java.util.List;
-
 public record GeneratedScheduleResult(
         String scheduleId,
-        List<String> dayIds,
+        String dayId,
         long totalDistanceMeters,
         int placeCount,
         int legCount
 ) {
-    public GeneratedScheduleResult {
-        dayIds = List.copyOf(dayIds);
-    }
 }

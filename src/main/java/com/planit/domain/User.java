@@ -21,8 +21,8 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "image_file_id")
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "image_file_id", nullable = false)
     private ImageFile imageFile;
 
     @Column(name = "public_id", columnDefinition = "BINARY(16)")
@@ -64,10 +64,6 @@ public class User {
         this.publicId = publicId;
         this.username = username;
         this.createdAt = LocalDateTime.now();
-    }
-
-    public void changeProfileImage(ImageFile imageFile) {
-        this.imageFile = imageFile;
     }
 
     public void withdraw(LocalDateTime deletedAt) {

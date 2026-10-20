@@ -1,12 +1,10 @@
 package com.planit.schedule.ai;
 
 import com.planit.ai.AiPlaceSelectionResponse;
-import com.planit.schedule.domain.ScheduleStrategy;
 import com.planit.schedule.route.PlaceCategoryGroup;
 import com.planit.schedule.route.RouteCalculationException;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -19,81 +17,65 @@ public final class AiRecommendedPlaceMapper {
 
     private static final int REQUIRED_PLACE_MIN_COUNT = 5;
 
-    public List<List<RecommendedPlace>> mapDailyPlaces(
-            AiPlaceSelectionResponse response
+    public List<RecommendedPlace> map(AiPlaceSelectionResponse response) {
+        if (response == null) {
+            throw invalid("AI 추천 장소 응답은 성공 상태와 장소 5개 이상을 포함해야 합니다.");
+        }
+        AiPlaceRecommendationResponse converted =
+                new AiPlaceRecommendationResponse(
+                        response.statusCode(),
+                        response.data() == null
+                                ? null
+                                : new AiPlaceRecommendationResponse.Data(
+                                        response.data().places() == null
+                                                ? null
+                                                : response.data().places()
+                                                .stream()
+                                                .map(this::convert)
+                                                .toList()
+                                )
+                );
+        return map(converted);
+    }
+
+    public List<RecommendedPlace> map(
+            AiPlaceRecommendationResponse response
     ) {
         if (response == null
                 || response.statusCode() != 200
                 || response.data() == null
                 || response.data().places() == null
-                || response.data().places().isEmpty()) {
-            throw invalid("AI 추천 장소 응답은 날짜별 장소 목록을 포함해야 합니다.");
-        }
-
-        return response.data().places().stream()
-                .map(this::mapDay)
-                .toList();
-    }
-
-    public List<RecommendedRoute> mapRoutes(
-            AiPlaceSelectionResponse response
-    ) {
-        List<RecommendedRoute> routes = new ArrayList<>();
-        routes.add(new RecommendedRoute(
-                ScheduleStrategy.SHORTEST,
-                null,
-                mapDailyPlaces(response)
-        ));
-        routes.add(mapRoute(
-                response,
-                AiPlaceSelectionResponse.Strategy.PREFERENCE
-        ));
-        routes.add(mapRoute(
-                response,
-                AiPlaceSelectionResponse.Strategy.BALANCED
-        ));
-        return List.copyOf(routes);
-    }
-
-    private RecommendedRoute mapRoute(
-            AiPlaceSelectionResponse response,
-            AiPlaceSelectionResponse.Strategy strategy
-    ) {
-        AiPlaceSelectionResponse.Route route = response.data().routes().stream()
-                .filter(candidate -> candidate.strategy() == strategy)
-                .findFirst()
-                .orElseThrow(() -> invalid("AI 추천 경로 전략이 누락되었습니다."));
-        return new RecommendedRoute(
-                ScheduleStrategy.valueOf(strategy.name()),
-                route.preferenceScore(),
-                route.days().stream()
-                        .map(this::mapDay)
-                        .toList()
-        );
-    }
-
-    private List<RecommendedPlace> mapDay(
-            List<AiPlaceSelectionResponse.Place> places
-    ) {
-        if (places == null
-                || places.size() < REQUIRED_PLACE_MIN_COUNT) {
-            throw invalid("날짜별 AI 추천 장소는 5개 이상이어야 합니다.");
+                || response.data().places().size() < REQUIRED_PLACE_MIN_COUNT) {
+            throw invalid("AI 추천 장소 응답은 성공 상태와 장소 5개 이상을 포함해야 합니다.");
         }
 
         Set<String> googlePlaceIds = new HashSet<>();
-        return places.stream()
+        return response.data().places().stream()
                 .map(place -> mapPlace(place, googlePlaceIds))
                 .toList();
     }
 
     private RecommendedPlace mapPlace(
-            AiPlaceSelectionResponse.Place place,
+            AiPlaceRecommendationResponse.Place place,
             Set<String> googlePlaceIds
     ) {
-        validatePlace(place, googlePlaceIds);
+        if (place == null
+                || isBlank(place.id())
+                || !googlePlaceIds.add(place.id())
+                || place.displayName() == null
+                || isBlank(place.displayName().text())
+                || place.location() == null) {
+            throw invalid("AI 추천 장소의 식별값, 이름과 좌표는 필수입니다.");
+        }
 
         double latitude = place.location().latitude();
         double longitude = place.location().longitude();
+        if (!Double.isFinite(latitude) || latitude < -90 || latitude > 90
+                || !Double.isFinite(longitude)
+                || longitude < -180 || longitude > 180) {
+            throw invalid("AI 추천 장소의 좌표가 유효하지 않습니다.");
+        }
+
         List<String> types = safeList(place.types());
         List<String> matchedPreferences = safeList(
                 place.matchedPreferences()
@@ -120,26 +102,38 @@ public final class AiRecommendedPlaceMapper {
         );
     }
 
-    private void validatePlace(
-            AiPlaceSelectionResponse.Place place,
-            Set<String> googlePlaceIds
+    private AiPlaceRecommendationResponse.Place convert(
+            AiPlaceSelectionResponse.Place place
     ) {
-        if (place == null
-                || isBlank(place.id())
-                || !googlePlaceIds.add(place.id())
-                || place.displayName() == null
-                || isBlank(place.displayName().text())
-                || place.location() == null) {
-            throw invalid("AI 추천 장소의 식별값, 이름과 좌표는 필수입니다.");
+        if (place == null) {
+            return null;
         }
-
-        double latitude = place.location().latitude();
-        double longitude = place.location().longitude();
-        if (!Double.isFinite(latitude) || latitude < -90 || latitude > 90
-                || !Double.isFinite(longitude)
-                || longitude < -180 || longitude > 180) {
-            throw invalid("AI 추천 장소의 좌표가 유효하지 않습니다.");
-        }
+        return new AiPlaceRecommendationResponse.Place(
+                place.id(),
+                place.displayName() == null
+                        ? null
+                        : new AiPlaceRecommendationResponse.DisplayName(
+                                place.displayName().text(),
+                                place.displayName().languageCode()
+                        ),
+                place.location() == null
+                        ? null
+                        : new AiPlaceRecommendationResponse.Location(
+                                place.location().latitude(),
+                                place.location().longitude()
+                        ),
+                place.types(),
+                place.rating(),
+                (long) place.userRatingCount(),
+                place.editorialSummary() == null
+                        ? null
+                        : new AiPlaceRecommendationResponse.EditorialSummary(
+                                place.editorialSummary().text(),
+                                place.editorialSummary().languageCode()
+                        ),
+                place.selectedFor(),
+                place.matchedPreferences()
+        );
     }
 
     private PlaceCategoryGroup categoryGroup(

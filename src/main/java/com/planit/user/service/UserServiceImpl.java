@@ -1,13 +1,12 @@
 package com.planit.user.service;
 
 import com.planit.auth.kakao.KakaoOAuthClient;
-import com.planit.domain.ImageFile;
 import com.planit.domain.OAuthAccount;
 import com.planit.domain.OAuthProvider;
 import com.planit.domain.User;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
-import com.planit.image.storage.ImageStorage;
+import com.planit.image.config.ImageProperties;
 import com.planit.repository.OAuthAccountRepository;
 import com.planit.repository.UserRepository;
 import com.planit.user.dto.CurrentUserResponse;
@@ -28,7 +27,7 @@ public class UserServiceImpl implements UserService {
     private final KakaoOAuthClient kakaoOAuthClient;
     private final WithdrawalTransactionService
             withdrawalTransactionService;
-    private final ImageStorage imageStorage;
+    private final ImageProperties imageProperties;
 
     @Override
     @Transactional(readOnly = true)
@@ -41,17 +40,11 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.AUTHENTICATION_REQUIRED
                 ));
-        ImageFile imageFile = user.getImageFile();
-        String profileImageUrl = imageFile == null
-                ? null
-                : imageStorage.createReadUrl(
-                        imageFile.getImageKey()
-                );
 
         return new CurrentUserResponse(
                 user.getPublicId(),
                 user.getUsername(),
-                profileImageUrl
+                imageProperties.defaultProfileUrl().toString()
         );
     }
 

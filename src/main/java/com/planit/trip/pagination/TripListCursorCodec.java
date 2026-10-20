@@ -17,9 +17,7 @@ public class TripListCursorCodec {
         String value = String.join(
                 DELIMITER,
                 cursor.referenceDate().toString(),
-                Integer.toString(cursor.sectionOrder()),
-                cursor.sortDate().toString(),
-                Long.toString(cursor.tripId())
+                cursor.startDate().toString()
         );
 
         return Base64.getUrlEncoder()
@@ -35,15 +33,13 @@ public class TripListCursorCodec {
             );
             String[] parts = value.split("\\|", -1);
 
-            if (parts.length != 4) {
+            if (parts.length != 2) {
                 throw new IllegalArgumentException("잘못된 cursor 형식");
             }
 
             return new Cursor(
                     LocalDate.parse(parts[0]),
-                    Integer.parseInt(parts[1]),
-                    LocalDate.parse(parts[2]),
-                    Long.parseLong(parts[3])
+                    LocalDate.parse(parts[1])
             );
         } catch (RuntimeException exception) {
             throw new BusinessException(
@@ -55,9 +51,7 @@ public class TripListCursorCodec {
 
     public record Cursor(
             LocalDate referenceDate,
-            int sectionOrder,
-            LocalDate sortDate,
-            Long tripId
+            LocalDate startDate
     ) {
     }
 }

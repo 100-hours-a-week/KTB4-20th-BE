@@ -17,7 +17,6 @@ import java.time.Instant;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -31,20 +30,17 @@ class ChatMessageEventPublisherTest {
     @Test
     void publishesNewMessageToRoomAndResultOnlyToRequestSession() {
         SimpMessagingTemplate messagingTemplate = mock(SimpMessagingTemplate.class);
-        ChatMessageRedisPublisher redisPublisher =
-                mock(ChatMessageRedisPublisher.class);
         ChatMessageEventPublisher publisher = new ChatMessageEventPublisher(
-                messagingTemplate,
-                redisPublisher
+                messagingTemplate
         );
         ChatMessageSendResult result = new ChatMessageSendResult(message(), true);
 
         publisher.publishAccepted(USER_PUBLIC_ID, "session-1", 3001L, result);
 
-        ArgumentCaptor<ChatMessageCreatedEvent> createdEventCaptor =
-                ArgumentCaptor.forClass(ChatMessageCreatedEvent.class);
-        verify(redisPublisher).publish(createdEventCaptor.capture());
-        assertThat(createdEventCaptor.getValue().roomId()).isEqualTo("3001");
+        verify(messagingTemplate).convertAndSend(
+                eq("/topic/regional-chat-rooms/3001/messages"),
+                any(ChatMessageCreatedEvent.class)
+        );
         ArgumentCaptor<ChatMessageResultEvent> eventCaptor = ArgumentCaptor.forClass(
                 ChatMessageResultEvent.class
         );
@@ -67,42 +63,17 @@ class ChatMessageEventPublisherTest {
     @Test
     void doesNotBroadcastExistingMessageAgain() {
         SimpMessagingTemplate messagingTemplate = mock(SimpMessagingTemplate.class);
-        ChatMessageRedisPublisher redisPublisher =
-                mock(ChatMessageRedisPublisher.class);
         ChatMessageEventPublisher publisher = new ChatMessageEventPublisher(
-                messagingTemplate,
-                redisPublisher
+                messagingTemplate
         );
         ChatMessageSendResult result = new ChatMessageSendResult(message(), false);
 
         publisher.publishAccepted(USER_PUBLIC_ID, "session-1", 3001L, result);
 
-        verify(redisPublisher, never()).publish(any(ChatMessageCreatedEvent.class));
-        verify(messagingTemplate).convertAndSendToUser(
-                eq(USER_PUBLIC_ID),
-                eq("/queue/chat-events"),
-                any(ChatMessageResultEvent.class),
-                any(MessageHeaders.class)
+        verify(messagingTemplate, never()).convertAndSend(
+                eq("/topic/regional-chat-rooms/3001/messages"),
+                any(ChatMessageCreatedEvent.class)
         );
-    }
-
-    @DisplayName("Redis 발행에 실패해도 저장 완료 결과는 요청 세션에 전송한다")
-    @Test
-    void sendsAcceptedResultWhenRedisPublishFails() {
-        SimpMessagingTemplate messagingTemplate = mock(SimpMessagingTemplate.class);
-        ChatMessageRedisPublisher redisPublisher =
-                mock(ChatMessageRedisPublisher.class);
-        ChatMessageEventPublisher publisher = new ChatMessageEventPublisher(
-                messagingTemplate,
-                redisPublisher
-        );
-        ChatMessageSendResult result = new ChatMessageSendResult(message(), true);
-        doThrow(new IllegalStateException("Redis unavailable"))
-                .when(redisPublisher)
-                .publish(any(ChatMessageCreatedEvent.class));
-
-        publisher.publishAccepted(USER_PUBLIC_ID, "session-1", 3001L, result);
-
         verify(messagingTemplate).convertAndSendToUser(
                 eq(USER_PUBLIC_ID),
                 eq("/queue/chat-events"),

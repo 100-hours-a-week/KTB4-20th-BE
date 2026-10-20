@@ -185,7 +185,6 @@ class SurveySummaryServiceTest {
                 mock(Region.class),
                 "테스트 여행",
                 LocalDate.of(2099, 9, 26),
-                LocalDate.of(2099, 9, 28),
                 (byte) 4,
                 deadlineAt
         );
