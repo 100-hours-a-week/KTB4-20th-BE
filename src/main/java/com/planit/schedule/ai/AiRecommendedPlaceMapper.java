@@ -1,10 +1,12 @@
 package com.planit.schedule.ai;
 
 import com.planit.ai.AiPlaceSelectionResponse;
+import com.planit.schedule.domain.ScheduleStrategy;
 import com.planit.schedule.route.PlaceCategoryGroup;
 import com.planit.schedule.route.RouteCalculationException;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -31,6 +33,43 @@ public final class AiRecommendedPlaceMapper {
         return response.data().places().stream()
                 .map(this::mapDay)
                 .toList();
+    }
+
+    public List<RecommendedRoute> mapRoutes(
+            AiPlaceSelectionResponse response
+    ) {
+        List<RecommendedRoute> routes = new ArrayList<>();
+        routes.add(new RecommendedRoute(
+                ScheduleStrategy.SHORTEST,
+                null,
+                mapDailyPlaces(response)
+        ));
+        routes.add(mapRoute(
+                response,
+                AiPlaceSelectionResponse.Strategy.PREFERENCE
+        ));
+        routes.add(mapRoute(
+                response,
+                AiPlaceSelectionResponse.Strategy.BALANCED
+        ));
+        return List.copyOf(routes);
+    }
+
+    private RecommendedRoute mapRoute(
+            AiPlaceSelectionResponse response,
+            AiPlaceSelectionResponse.Strategy strategy
+    ) {
+        AiPlaceSelectionResponse.Route route = response.data().routes().stream()
+                .filter(candidate -> candidate.strategy() == strategy)
+                .findFirst()
+                .orElseThrow(() -> invalid("AI 추천 경로 전략이 누락되었습니다."));
+        return new RecommendedRoute(
+                ScheduleStrategy.valueOf(strategy.name()),
+                route.preferenceScore(),
+                route.days().stream()
+                        .map(this::mapDay)
+                        .toList()
+        );
     }
 
     private List<RecommendedPlace> mapDay(

@@ -34,6 +34,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.Optional;
 import java.util.UUID;
@@ -50,11 +51,13 @@ class PhotoMissionSubmissionTransactionServiceTest {
 
     private static final UUID USER_PUBLIC_ID =
             UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
+    private static final LocalDate TODAY = LocalDate.of(2026, 10, 18);
+    private static final ZoneId SEOUL_ZONE = ZoneId.of("Asia/Seoul");
     private static final LocalDateTime SEOUL_NOW =
             LocalDateTime.of(2026, 10, 18, 10, 0);
     private static final Clock SEOUL_CLOCK = Clock.fixed(
             Instant.parse("2026-10-18T01:00:00Z"),
-            ZoneId.of("Asia/Seoul")
+            SEOUL_ZONE
     );
 
     private MissionRepository missionRepository;
@@ -65,6 +68,7 @@ class PhotoMissionSubmissionTransactionServiceTest {
     private TripMemberRepository tripMemberRepository;
     private ImageFileRepository imageFileRepository;
     private PhotoMissionSubmissionTransactionService service;
+    private Clock clock;
 
     @BeforeEach
     void setUp() {
@@ -75,6 +79,7 @@ class PhotoMissionSubmissionTransactionServiceTest {
         userRepository = mock(UserRepository.class);
         tripMemberRepository = mock(TripMemberRepository.class);
         imageFileRepository = mock(ImageFileRepository.class);
+        clock = SEOUL_CLOCK;
         service = new PhotoMissionSubmissionTransactionService(
                 missionRepository,
                 participationRepository,
@@ -83,7 +88,7 @@ class PhotoMissionSubmissionTransactionServiceTest {
                 userRepository,
                 tripMemberRepository,
                 imageFileRepository,
-                SEOUL_CLOCK
+                clock
         );
     }
 
@@ -323,6 +328,112 @@ class PhotoMissionSubmissionTransactionServiceTest {
         verify(imageFileRepository, never()).save(any());
     }
 
+    @DisplayName("아직 공개되지 않은 미래 Day 미션에는 사진을 제출할 수 없다")
+    @Test
+    void rejectsPhotoBeforeMissionPublication() {
+        Fixture fixture = fixture(
+                MissionScope.GROUP,
+                TODAY.plusDays(1)
+        );
+        stubCommon(fixture);
+
+        assertThatThrownBy(() -> service.save(
+                USER_PUBLIC_ID.toString(),
+                31L,
+                UUID.randomUUID(),
+                "missions/31/photo.jpg",
+                "photo.jpg",
+                "image/jpeg",
+                1024,
+                null,
+                null
+        ))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception ->
+                        ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.PHOTO_MISSION_SUBMISSION_NOT_ALLOWED);
+        verify(imageFileRepository, never()).save(any());
+    }
+
+    @DisplayName("미션 당일 00시 30분 전에는 사진을 제출할 수 없다")
+    @Test
+    void rejectsPhotoBeforeDailyPublicationTime() {
+        service = new PhotoMissionSubmissionTransactionService(
+                missionRepository,
+                participationRepository,
+                groupStateRepository,
+                photoRepository,
+                userRepository,
+                tripMemberRepository,
+                imageFileRepository,
+                fixedClock(LocalTime.of(0, 29, 59))
+        );
+        Fixture fixture = fixture(MissionScope.GROUP, TODAY);
+        stubCommon(fixture);
+
+        assertThatThrownBy(() -> service.save(
+                USER_PUBLIC_ID.toString(),
+                31L,
+                UUID.randomUUID(),
+                "missions/31/photo.jpg",
+                "photo.jpg",
+                "image/jpeg",
+                1024,
+                null,
+                null
+        ))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception ->
+                        ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.PHOTO_MISSION_SUBMISSION_NOT_ALLOWED);
+        verify(imageFileRepository, never()).save(any());
+    }
+
+    @DisplayName("미션 당일 00시 30분부터 사진을 제출할 수 있다")
+    @Test
+    void acceptsPhotoAtDailyPublicationTime() {
+        service = new PhotoMissionSubmissionTransactionService(
+                missionRepository,
+                participationRepository,
+                groupStateRepository,
+                photoRepository,
+                userRepository,
+                tripMemberRepository,
+                imageFileRepository,
+                fixedClock(LocalTime.of(0, 30))
+        );
+        Fixture fixture = fixture(MissionScope.GROUP, TODAY);
+        MissionGroupState state = MissionGroupState.create(
+                fixture.mission(), LocalDateTime.now()
+        );
+        stubCommon(fixture);
+        when(groupStateRepository.findByMissionId(31L))
+                .thenReturn(Optional.of(state));
+        when(imageFileRepository.save(any(ImageFile.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(photoRepository.save(any(MissionPhoto.class)))
+                .thenAnswer(invocation -> {
+                    MissionPhoto photo = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(photo, "id", 43L);
+                    return photo;
+                });
+
+        Long photoId = service.save(
+                USER_PUBLIC_ID.toString(),
+                31L,
+                UUID.randomUUID(),
+                "missions/31/photo.jpg",
+                "photo.jpg",
+                "image/jpeg",
+                1024,
+                null,
+                null
+        );
+
+        assertThat(photoId).isEqualTo(43L);
+        verify(imageFileRepository).save(any(ImageFile.class));
+    }
+
     private void stubCommon(Fixture fixture) {
         when(photoRepository.findByIdempotencyKey(any()))
                 .thenReturn(Optional.empty());
@@ -336,8 +447,12 @@ class PhotoMissionSubmissionTransactionServiceTest {
     }
 
     private Fixture fixture(MissionScope scope) {
+        return fixture(scope, TODAY.minusDays(1));
+    }
+
+    private Fixture fixture(MissionScope scope, LocalDate scheduleDate) {
         Trip trip = mock(Trip.class);
-        when(trip.getEndDate()).thenReturn(LocalDate.now().plusDays(1));
+        when(trip.getEndDate()).thenReturn(TODAY.plusDays(1));
         User user = new User(null, USER_PUBLIC_ID, "여행자");
         TripMember member = TripMember.createMember(trip, user);
         ReflectionTestUtils.setField(member, "id", 21L);
@@ -346,6 +461,7 @@ class PhotoMissionSubmissionTransactionServiceTest {
         ScheduleVisit visit = mock(ScheduleVisit.class);
         when(visit.getDay()).thenReturn(day);
         when(day.getSchedule()).thenReturn(schedule);
+        when(day.getScheduleDate()).thenReturn(scheduleDate);
         when(schedule.getTrip()).thenReturn(trip);
         Mission mission = Mission.create(
                 visit,
@@ -357,6 +473,15 @@ class PhotoMissionSubmissionTransactionServiceTest {
         );
         ReflectionTestUtils.setField(mission, "id", 31L);
         return new Fixture(trip, user, member, mission);
+    }
+
+    private Clock fixedClock(LocalTime time) {
+        return Clock.fixed(
+                LocalDateTime.of(TODAY, time)
+                        .atZone(SEOUL_ZONE)
+                        .toInstant(),
+                SEOUL_ZONE
+        );
     }
 
     private record Fixture(

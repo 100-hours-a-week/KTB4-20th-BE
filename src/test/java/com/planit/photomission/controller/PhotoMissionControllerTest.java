@@ -1,8 +1,11 @@
 package com.planit.photomission.controller;
 
 import com.planit.photomission.ai.PhotoMissionVerifyResponse;
+import com.planit.photomission.dto.PhotoMissionAlbumResponse;
+import com.planit.photomission.dto.PhotoMissionCompletionResponse;
 import com.planit.photomission.dto.PhotoMissionDetailResponse;
 import com.planit.photomission.dto.PhotoMissionListResponse;
+import com.planit.photomission.dto.PhotoMissionPhotoDetailResponse;
 import com.planit.photomission.service.PhotoMissionManualCompletionService;
 import com.planit.photomission.service.PhotoMissionPhotoManagementService;
 import com.planit.photomission.service.PhotoMissionQueryService;
@@ -17,6 +20,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -215,6 +219,115 @@ class PhotoMissionControllerTest {
                 .andExpect(jsonPath("$.data.missionId").value(31))
                 .andExpect(jsonPath("$.data.scope").value("PERSONAL"))
                 .andExpect(jsonPath("$.data.retryCount").value(1));
+    }
+
+    @DisplayName("완료 사진 상세를 조회한다")
+    @Test
+    void getsPhotoDetail() throws Exception {
+        UUID submitterId = UUID.randomUUID();
+        when(queryService.getPhotoDetail(any(), any(), any()))
+                .thenReturn(new PhotoMissionPhotoDetailResponse(
+                        301L,
+                        "https://image/photo.jpg",
+                        LocalDateTime.of(2026, 9, 1, 14, 40),
+                        true,
+                        new PhotoMissionPhotoDetailResponse.MissionSummary(
+                                31L,
+                                "GROUP",
+                                "다 같이 그룹 사진 찍기",
+                                null
+                        ),
+                        new PhotoMissionPhotoDetailResponse.PlaceSummary(
+                                "place_abc",
+                                "첨성대"
+                        ),
+                        new PhotoMissionPhotoDetailResponse.SubmittedBy(
+                                submitterId,
+                                "지영"
+                        )
+                ));
+
+        mockMvc.perform(get("/api/photomissions/31/photos/301")
+                        .principal(new UsernamePasswordAuthenticationToken(
+                                "550e8400-e29b-41d4-a716-446655440000",
+                                ""
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code")
+                        .value("PHOTO_MISSION_PHOTO_DETAIL_FOUND"))
+                .andExpect(jsonPath("$.data.photoId").value(301))
+                .andExpect(jsonPath("$.data.mission.scope").value("GROUP"))
+                .andExpect(jsonPath("$.data.place.placeName").value("첨성대"))
+                .andExpect(jsonPath("$.data.submittedBy.username")
+                        .value("지영"));
+    }
+
+    @DisplayName("여행의 개인·단체 포토미션 앨범을 조회한다")
+    @Test
+    void getsPhotoMissionAlbum() throws Exception {
+        when(queryService.getAlbum(any(), any()))
+                .thenReturn(new PhotoMissionAlbumResponse(
+                        10L,
+                        "경주 여행",
+                        2,
+                        3,
+                        List.of()
+                ));
+
+        mockMvc.perform(get("/api/trips/10/photomissions/album")
+                        .principal(new UsernamePasswordAuthenticationToken(
+                                "550e8400-e29b-41d4-a716-446655440000",
+                                ""
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code")
+                        .value("PHOTO_MISSION_ALBUM_FOUND"))
+                .andExpect(jsonPath("$.data.completedMissionCount")
+                        .value(2))
+                .andExpect(jsonPath("$.data.totalPhotoCount").value(3));
+    }
+
+    @DisplayName("포토미션 Day 완주 결과를 조회한다")
+    @Test
+    void getsPhotoMissionCompletion() throws Exception {
+        when(queryService.getCompletion(any(), any(), any()))
+                .thenReturn(new PhotoMissionCompletionResponse(
+                        10L,
+                        "경주 여행",
+                        LocalDate.of(2026, 8, 31),
+                        LocalDate.of(2026, 9, 2),
+                        "DAY",
+                        2,
+                        LocalDate.of(2026, 9, 1),
+                        5,
+                        5,
+                        0,
+                        9,
+                        2,
+                        true,
+                        false,
+                        true,
+                        List.of(new PhotoMissionCompletionResponse.PreviewPhoto(
+                                31L,
+                                "https://image/photo.jpg"
+                        ))
+                ));
+
+        mockMvc.perform(get("/api/trips/10/photomissions/completion")
+                        .param("day", "2")
+                        .principal(new UsernamePasswordAuthenticationToken(
+                                "550e8400-e29b-41d4-a716-446655440000",
+                                ""
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code")
+                        .value("PHOTO_MISSION_COMPLETION_FOUND"))
+                .andExpect(jsonPath("$.data.scope").value("DAY"))
+                .andExpect(jsonPath("$.data.completedMissionCount").value(5))
+                .andExpect(jsonPath("$.data.totalPhotoCount").value(9))
+                .andExpect(jsonPath("$.data.landmarkCount").value(2))
+                .andExpect(jsonPath("$.data.previewPhotos[0].photoId")
+                        .value(31));
     }
 
     private UsernamePasswordAuthenticationToken authentication() {

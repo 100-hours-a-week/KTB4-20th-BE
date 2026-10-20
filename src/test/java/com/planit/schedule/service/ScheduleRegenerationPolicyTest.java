@@ -59,6 +59,18 @@ class ScheduleRegenerationPolicyTest {
                 .isEqualTo(ScheduleGenerationMode.INITIAL);
     }
 
+    @DisplayName("확정하지 않은 후보만 있으면 다시 만들 수 없다")
+    @Test
+    void rejectsGenerationWhileCandidatesPending() {
+        when(scheduleRepository.existsByTripIdAndStatus(TRIP_ID, "DRAFT"))
+                .thenReturn(true);
+
+        assertError(
+                ScheduleGenerationReason.GENERAL,
+                ErrorCode.SCHEDULE_CANDIDATES_PENDING
+        );
+    }
+
     @DisplayName("확정 일정이 있고 횟수가 남았으면 일반 재생성이다")
     @Test
     void resolvesGeneralRegeneration() {

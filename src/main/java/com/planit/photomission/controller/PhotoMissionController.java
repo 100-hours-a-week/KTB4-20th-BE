@@ -2,8 +2,11 @@ package com.planit.photomission.controller;
 
 import com.planit.global.response.ApiResponse;
 import com.planit.photomission.ai.PhotoMissionVerifyResponse;
+import com.planit.photomission.dto.PhotoMissionAlbumResponse;
+import com.planit.photomission.dto.PhotoMissionCompletionResponse;
 import com.planit.photomission.dto.PhotoMissionDetailResponse;
 import com.planit.photomission.dto.PhotoMissionListResponse;
+import com.planit.photomission.dto.PhotoMissionPhotoDetailResponse;
 import com.planit.photomission.dto.PhotoMissionPhotoUploadResponse;
 import com.planit.photomission.service.PhotoMissionManualCompletionService;
 import com.planit.photomission.service.PhotoMissionPhotoManagementService;
@@ -148,6 +151,52 @@ public class PhotoMissionController {
                 queryService.getMissionDetail(
                         authentication.getName(),
                         missionId
+                )
+        );
+    }
+
+    @GetMapping("/photomissions/{missionId}/photos/{photoId}")
+    public ApiResponse<PhotoMissionPhotoDetailResponse> getPhotoDetail(
+            Authentication authentication,
+            @PathVariable Long missionId,
+            @PathVariable Long photoId
+    ) {
+        return ApiResponse.success(
+                "PHOTO_MISSION_PHOTO_DETAIL_FOUND",
+                "포토미션 사진 상세를 조회했습니다.",
+                queryService.getPhotoDetail(
+                        authentication.getName(),
+                        missionId,
+                        photoId
+                )
+        );
+    }
+
+    @GetMapping("/trips/{tripId}/photomissions/album")
+    public ApiResponse<PhotoMissionAlbumResponse> getPhotoMissionAlbum(
+            Authentication authentication,
+            @PathVariable Long tripId
+    ) {
+        return ApiResponse.success(
+                "PHOTO_MISSION_ALBUM_FOUND",
+                "포토미션 앨범을 조회했습니다.",
+                queryService.getAlbum(authentication.getName(), tripId)
+        );
+    }
+
+    @GetMapping("/trips/{tripId}/photomissions/completion")
+    public ApiResponse<PhotoMissionCompletionResponse> getCompletion(
+            Authentication authentication,
+            @PathVariable Long tripId,
+            @RequestParam(required = false) Integer day
+    ) {
+        return ApiResponse.success(
+                "PHOTO_MISSION_COMPLETION_FOUND",
+                "포토미션 완주 결과를 조회했습니다.",
+                queryService.getCompletion(
+                        authentication.getName(),
+                        tripId,
+                        day
                 )
         );
     }

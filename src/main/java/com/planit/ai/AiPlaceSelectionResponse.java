@@ -10,7 +10,26 @@ public record AiPlaceSelectionResponse(
         Data data
 ) {
 
-    public record Data(List<List<Place>> places) {
+    public record Data(
+            List<List<Place>> places,
+            List<Route> routes
+    ) {
+        public Data(List<List<Place>> places) {
+            this(places, List.of());
+        }
+    }
+
+    public record Route(
+            Strategy strategy,
+            @JsonProperty("preference_score")
+            Integer preferenceScore,
+            List<List<Place>> days
+    ) {
+    }
+
+    public enum Strategy {
+        PREFERENCE,
+        BALANCED
     }
 
     public record Place(

@@ -15,6 +15,10 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -24,16 +28,22 @@ class TripRemindNotificationSchedulerTest {
     private static final ZoneId SEOUL_ZONE = ZoneId.of("Asia/Seoul");
 
     private TripRemindNotificationWorkflow workflow;
+    private TripRemindNotificationObservability observability;
     private TripRemindNotificationScheduler scheduler;
 
     @BeforeEach
     void setUp() {
         workflow = mock(TripRemindNotificationWorkflow.class);
+        observability = mock(TripRemindNotificationObservability.class);
         Clock clock = Clock.fixed(
                 Instant.parse("2026-10-14T16:30:00Z"),
                 SEOUL_ZONE
         );
-        scheduler = new TripRemindNotificationScheduler(workflow, clock);
+        scheduler = new TripRemindNotificationScheduler(
+                workflow,
+                observability,
+                clock
+        );
         LockAssert.TestHelper.makeAllAssertsPass(true);
     }
 
@@ -89,6 +99,29 @@ class TripRemindNotificationSchedulerTest {
         assertThat(primary.lockAtLeastFor()).isEqualTo("PT1M");
         assertThat(recovery.lockAtMostFor()).isEqualTo("PT5M");
         assertThat(recovery.lockAtLeastFor()).isEqualTo("PT1M");
+    }
+
+    @DisplayName("복구 실행이 실패하면 최종 실패와 실행 결과를 기록한다")
+    @Test
+    void recordsFinalRecoveryFailure() {
+        IllegalStateException failure = new IllegalStateException(
+                "복구 실패"
+        );
+        doThrow(failure).when(workflow)
+                .execute(LocalDate.of(2026, 10, 16));
+
+        assertThatThrownBy(scheduler::runRecovery)
+                .isSameAs(failure);
+
+        verify(observability).recordFinalRecoveryFailure(
+                LocalDate.of(2026, 10, 16),
+                failure
+        );
+        verify(observability).recordExecution(
+                eq("recovery"),
+                eq("failure"),
+                any(java.time.Duration.class)
+        );
     }
 
     private static Method method(String name) throws NoSuchMethodException {

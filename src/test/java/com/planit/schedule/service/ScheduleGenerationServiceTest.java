@@ -143,6 +143,12 @@ class ScheduleGenerationServiceTest {
                 .thenReturn(List.of(seafood));
         when(aiTripClient.selectPlaces(any()))
                 .thenReturn(aiResponse());
+        AiRecommendedPlaceMapper actualMapper =
+                new AiRecommendedPlaceMapper();
+        when(recommendedPlaceMapper.mapRoutes(any()))
+                .thenAnswer(invocation -> actualMapper.mapRoutes(
+                        invocation.getArgument(0)
+                ));
         when(regenerationPolicy.resolve(
                 any(Trip.class),
                 any(ScheduleGenerationReason.class)
@@ -162,7 +168,7 @@ class ScheduleGenerationServiceTest {
         );
 
         verify(aiTripClient).selectPlaces(any());
-        verify(schedulePersistenceService).save(
+        verify(schedulePersistenceService).saveCandidates(
                 org.mockito.ArgumentMatchers.eq(TRIP_ID),
                 any(),
                 org.mockito.ArgumentMatchers.eq(
@@ -220,7 +226,7 @@ class ScheduleGenerationServiceTest {
         assertThat(response.places()).hasSize(3);
         assertThat(response.places())
                 .allSatisfy(places -> assertThat(places).hasSize(6));
-        verify(schedulePersistenceService).save(
+        verify(schedulePersistenceService).saveCandidates(
                 org.mockito.ArgumentMatchers.eq(TRIP_ID),
                 any(),
                 org.mockito.ArgumentMatchers.eq(ScheduleGenerationMode.INITIAL)
@@ -243,7 +249,7 @@ class ScheduleGenerationServiceTest {
         assertThat(response.places()).hasSize(2);
         assertThat(response.places())
                 .allSatisfy(places -> assertThat(places).hasSize(5));
-        verify(schedulePersistenceService).save(
+        verify(schedulePersistenceService).saveCandidates(
                 org.mockito.ArgumentMatchers.eq(TRIP_ID),
                 any(),
                 org.mockito.ArgumentMatchers.eq(ScheduleGenerationMode.INITIAL)
@@ -258,7 +264,7 @@ class ScheduleGenerationServiceTest {
         assertError(ErrorCode.AI_SCHEDULE_GENERATION_FAILED);
 
         verify(schedulePersistenceService, never())
-                .save(any(Long.class), any(), any());
+                .saveCandidates(any(Long.class), any(), any());
     }
 
     @DisplayName("방장이 아닌 사용자의 일정 생성을 거부한다")
@@ -377,6 +383,118 @@ class ScheduleGenerationServiceTest {
         assertError(ErrorCode.AI_SCHEDULE_GENERATION_FAILED);
     }
 
+    @DisplayName("취향 우선과 균형 코스가 모두 포함된 AI 응답을 허용한다")
+    @Test
+    void acceptsPreferenceAndBalancedRoutes() {
+        SchedulePlaceSelectionResponse response = service.generate(
+                USER_ID.toString(),
+                TRIP_ID,
+                ScheduleGenerationReason.GENERAL
+        );
+
+        assertThat(response.places()).hasSize(1);
+        verify(schedulePersistenceService).saveCandidates(
+                org.mockito.ArgumentMatchers.eq(TRIP_ID),
+                any(),
+                org.mockito.ArgumentMatchers.eq(ScheduleGenerationMode.INITIAL)
+        );
+    }
+
+    @DisplayName("AI 응답에 균형 코스가 없으면 거부한다")
+    @Test
+    void rejectsAiResponseWithoutBalancedRoute() {
+        AiPlaceSelectionResponse response = aiResponse();
+        when(aiTripClient.selectPlaces(any())).thenReturn(
+                new AiPlaceSelectionResponse(
+                        200,
+                        new AiPlaceSelectionResponse.Data(
+                                response.data().places(),
+                                List.of(response.data().routes().getFirst())
+                        )
+                )
+        );
+
+        assertError(ErrorCode.AI_SCHEDULE_GENERATION_FAILED);
+
+        verify(schedulePersistenceService, never())
+                .saveCandidates(any(Long.class), any(), any());
+    }
+
+    @DisplayName("AI 응답에 같은 전략의 코스가 중복되면 거부한다")
+    @Test
+    void rejectsDuplicateRouteStrategies() {
+        AiPlaceSelectionResponse response = aiResponse();
+        AiPlaceSelectionResponse.Route preference =
+                response.data().routes().getFirst();
+        when(aiTripClient.selectPlaces(any())).thenReturn(
+                new AiPlaceSelectionResponse(
+                        200,
+                        new AiPlaceSelectionResponse.Data(
+                                response.data().places(),
+                                List.of(preference, preference)
+                        )
+                )
+        );
+
+        assertError(ErrorCode.AI_SCHEDULE_GENERATION_FAILED);
+    }
+
+    @DisplayName("후보 코스의 Day 수가 여행 일수와 다르면 거부한다")
+    @Test
+    void rejectsRouteWithMismatchedDayCount() {
+        when(trip.getEndDate()).thenReturn(LocalDate.of(2026, 10, 2));
+        AiPlaceSelectionResponse response = aiResponse(2, 5);
+        AiPlaceSelectionResponse.Route preference =
+                response.data().routes().getFirst();
+        AiPlaceSelectionResponse.Route invalidBalanced =
+                new AiPlaceSelectionResponse.Route(
+                        AiPlaceSelectionResponse.Strategy.BALANCED,
+                        68,
+                        List.of(response.data().places().getFirst())
+                );
+        when(aiTripClient.selectPlaces(any())).thenReturn(
+                new AiPlaceSelectionResponse(
+                        200,
+                        new AiPlaceSelectionResponse.Data(
+                                response.data().places(),
+                                List.of(preference, invalidBalanced)
+                        )
+                )
+        );
+
+        assertError(ErrorCode.AI_SCHEDULE_GENERATION_FAILED);
+    }
+
+    @DisplayName("후보 코스 Day 안의 중복 장소를 거부한다")
+    @Test
+    void rejectsDuplicatePlaceWithinRouteDay() {
+        AiPlaceSelectionResponse response = aiResponse();
+        List<AiPlaceSelectionResponse.Place> places = new ArrayList<>(
+                response.data().places().getFirst()
+        );
+        places.set(1, places.getFirst());
+        AiPlaceSelectionResponse.Route invalidPreference =
+                new AiPlaceSelectionResponse.Route(
+                        AiPlaceSelectionResponse.Strategy.PREFERENCE,
+                        92,
+                        List.of(places)
+                );
+        when(aiTripClient.selectPlaces(any())).thenReturn(
+                new AiPlaceSelectionResponse(
+                        200,
+                        new AiPlaceSelectionResponse.Data(
+                                response.data().places(),
+                                List.of(
+                                        invalidPreference,
+                                        response.data().routes().get(1)
+                                )
+                        )
+                )
+        );
+
+        assertError(ErrorCode.AI_SCHEDULE_GENERATION_FAILED);
+    }
+
     @DisplayName("AI가 장소를 다섯 개만 반환해도 허용한다")
     @Test
     void acceptsFivePlacesWhenAiFallsShortOfSix() {
@@ -490,7 +608,21 @@ class ScheduleGenerationServiceTest {
         }
         return new AiPlaceSelectionResponse(
                 200,
-                new AiPlaceSelectionResponse.Data(dailyPlaces)
+                new AiPlaceSelectionResponse.Data(
+                        dailyPlaces,
+                        List.of(
+                                new AiPlaceSelectionResponse.Route(
+                                        AiPlaceSelectionResponse.Strategy.PREFERENCE,
+                                        92,
+                                        dailyPlaces
+                                ),
+                                new AiPlaceSelectionResponse.Route(
+                                        AiPlaceSelectionResponse.Strategy.BALANCED,
+                                        68,
+                                        dailyPlaces
+                                )
+                        )
+                )
         );
     }
 }
