@@ -59,7 +59,7 @@ public class TripServiceImpl implements TripService {
 
     private static final int MAX_TRIP_LIST_SIZE = 10;
     private static final int DEFAULT_TRIP_CAPACITY = 4;
-    private static final int MAX_TRIP_DURATION_DAYS = 10;
+    private static final int MAX_TRIP_DURATION_DAYS = 9;
     private static final String WITHDRAWN_USER_NAME = "탈퇴한 사용자";
 
     @Override
