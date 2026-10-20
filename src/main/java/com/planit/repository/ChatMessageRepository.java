@@ -35,9 +35,11 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
                    sender.publicId AS senderPublicId,
                    sender.username AS senderUsername,
                    sender.deletedAt AS senderDeletedAt,
+                   profileImage.imageKey AS senderImageKey,
                    message.createdAt AS createdAt
             FROM ChatMessage message
             JOIN message.sender sender
+            LEFT JOIN sender.imageFile profileImage
             LEFT JOIN TextChatMessage textMessage
                    ON textMessage.chatMessage = message
             WHERE message.regionalChatRoom.id = :roomId
@@ -58,9 +60,11 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
                    sender.publicId AS senderPublicId,
                    sender.username AS senderUsername,
                    sender.deletedAt AS senderDeletedAt,
+                   profileImage.imageKey AS senderImageKey,
                    message.createdAt AS createdAt
             FROM ChatMessage message
             JOIN message.sender sender
+            LEFT JOIN sender.imageFile profileImage
             LEFT JOIN TextChatMessage textMessage
                    ON textMessage.chatMessage = message
             WHERE message.regionalChatRoom.id = :roomId
@@ -85,9 +89,11 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
                    sender.publicId AS senderPublicId,
                    sender.username AS senderUsername,
                    sender.deletedAt AS senderDeletedAt,
+                   profileImage.imageKey AS senderImageKey,
                    message.createdAt AS createdAt
             FROM ChatMessage message
             JOIN message.sender sender
+            LEFT JOIN sender.imageFile profileImage
             LEFT JOIN TextChatMessage textMessage
                    ON textMessage.chatMessage = message
             WHERE message.regionalChatRoom.id = :roomId
@@ -119,6 +125,8 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
         String getSenderUsername();
 
         LocalDateTime getSenderDeletedAt();
+
+        String getSenderImageKey();
 
         LocalDateTime getCreatedAt();
     }

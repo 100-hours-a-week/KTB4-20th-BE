@@ -9,37 +9,237 @@ import com.planit.repository.TripMemberRepository;
 import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
 import com.planit.schedule.domain.Schedule;
+import com.planit.schedule.domain.Place;
+import com.planit.schedule.domain.PlaceDetails;
 import com.planit.schedule.domain.ScheduleDay;
 import com.planit.schedule.domain.ScheduleLeg;
+import com.planit.schedule.domain.ScheduleStrategy;
 import com.planit.schedule.domain.ScheduleVisit;
+import com.planit.schedule.dto.ScheduleCandidateDetailResponse;
+import com.planit.schedule.dto.ScheduleCandidateListResponse;
 import com.planit.schedule.dto.ScheduleDetailResponse;
+import com.planit.schedule.dto.ScheduleConfirmRequest;
+import com.planit.schedule.dto.ScheduleConfirmResponse;
+import com.planit.schedule.dto.ScheduleStopAddRequest;
+import com.planit.schedule.dto.ScheduleStopAddResponse;
+import com.planit.schedule.dto.ScheduleStopDeleteResponse;
+import com.planit.schedule.repository.PlaceRepository;
 import com.planit.schedule.repository.ScheduleDayRepository;
 import com.planit.schedule.repository.ScheduleLegRepository;
 import com.planit.schedule.repository.ScheduleRepository;
 import com.planit.schedule.repository.ScheduleVisitRepository;
+import com.planit.trip.service.TripMemberAccessService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
+import static com.planit.schedule.route.HaversineDistanceCalculator.distanceMeters;
+
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ScheduleServiceImpl implements ScheduleService {
 
     private static final byte ACTIVE_CONFIRMED_SLOT = 1;
+    /** 하루(일차)에 둘 수 있는 활성 장소 수 범위 */
+    private static final int MINIMUM_DAY_STOPS = 3;
+    private static final int MAXIMUM_DAY_STOPS = 10;
     private static final ZoneId SEOUL_ZONE = ZoneId.of("Asia/Seoul");
 
     private final UserRepository userRepository;
     private final TripRepository tripRepository;
     private final TripMemberRepository tripMemberRepository;
+    private final TripMemberAccessService tripMemberAccessService;
+    private final PlaceRepository placeRepository;
     private final ScheduleRepository scheduleRepository;
     private final ScheduleDayRepository scheduleDayRepository;
     private final ScheduleVisitRepository scheduleVisitRepository;
     private final ScheduleLegRepository scheduleLegRepository;
+
+    @Override
+    @Transactional
+    public ScheduleConfirmResponse confirmSchedule(
+            String userPublicId,
+            Long tripId,
+            ScheduleConfirmRequest request
+    ) {
+        User user = findActiveUser(userPublicId);
+        Trip trip = tripRepository.findByIdForUpdate(tripId)
+                .filter(value -> value.getDeletedAt() == null)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.TRIP_NOT_FOUND
+                ));
+        TripMember host = tripMemberAccessService.findActiveHost(
+                trip,
+                user,
+                ErrorCode.TRIP_HOST_REQUIRED
+        );
+        validateScheduleChangeDeadline(trip);
+
+        Schedule selected = scheduleRepository
+                .findByIdAndTripId(request.scheduleId(), tripId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.SCHEDULE_CANDIDATE_NOT_FOUND
+                ));
+        Schedule latest = scheduleRepository
+                .findFirstByTripIdOrderByCreatedAtDesc(tripId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.SCHEDULE_CANDIDATE_NOT_FOUND
+                ));
+        if (!isCandidateStrategy(selected)
+                || !selected.getCreatedAt().equals(latest.getCreatedAt())) {
+            throw new BusinessException(
+                    ErrorCode.SCHEDULE_CANDIDATES_SUPERSEDED
+            );
+        }
+        if (!selected.isActive()) {
+            scheduleRepository
+                    .findByTripIdAndActiveConfirmedSlot(
+                            tripId,
+                            ACTIVE_CONFIRMED_SLOT
+                    )
+                    .ifPresent(Schedule::supersede);
+            scheduleRepository.flush();
+            selected.confirm(host, LocalDateTime.now(SEOUL_ZONE));
+            // 고르지 않은 후보는 더 이상 조회·확정되지 않도록 함께 대체 처리한다.
+            scheduleRepository.findByTripIdAndStatus(tripId, "DRAFT").stream()
+                    .filter(candidate -> !candidate.getId().equals(selected.getId()))
+                    .forEach(Schedule::supersede);
+        }
+
+        return toConfirmResponse(trip, selected);
+    }
+
+    private boolean isCandidateStrategy(Schedule schedule) {
+        try {
+            ScheduleStrategy.valueOf(schedule.getStrategy());
+            return true;
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
+    }
+
+    private ScheduleConfirmResponse toConfirmResponse(
+            Trip trip,
+            Schedule schedule
+    ) {
+        return new ScheduleConfirmResponse(
+                trip.getId().toString(),
+                schedule.getId().toString(),
+                schedule.getStrategy(),
+                schedule.getStatus(),
+                schedule.getConfirmedAt()
+                        .atZone(SEOUL_ZONE)
+                        .toOffsetDateTime()
+        );
+    }
+
+    @Override
+    public ScheduleCandidateListResponse getScheduleCandidates(
+            String userPublicId,
+            Long tripId
+    ) {
+        User user = findActiveUser(userPublicId);
+        Trip trip = findActiveTrip(tripId);
+        findActiveMember(trip, user);
+
+        List<Schedule> schedules = scheduleRepository.findByTripIdAndStatus(
+                tripId,
+                "DRAFT"
+        );
+        if (schedules.isEmpty()) {
+            throw new BusinessException(
+                    ErrorCode.SCHEDULE_CANDIDATES_NOT_FOUND
+            );
+        }
+        if (schedules.size() != ScheduleStrategy.values().length) {
+            // 후보는 항상 전략 수만큼 한 번에 저장되므로, 개수가 다르면 데이터가 어긋난 상태다.
+            log.error(
+                    "일정 후보 개수가 올바르지 않습니다. tripId={}, count={}",
+                    tripId,
+                    schedules.size()
+            );
+            throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
+        }
+        List<ScheduleCandidateListResponse.Candidate> candidates = schedules
+                .stream()
+                .sorted(Comparator.comparingInt(schedule ->
+                        ScheduleStrategy.valueOf(
+                                schedule.getStrategy()
+                        ).ordinal()
+                ))
+                .map(this::toCandidateResponse)
+                .toList();
+
+        return new ScheduleCandidateListResponse(
+                trip.getId().toString(),
+                candidates
+        );
+    }
+
+    @Override
+    public ScheduleCandidateDetailResponse getScheduleCandidate(
+            String userPublicId,
+            Long tripId,
+            Long scheduleId
+    ) {
+        User user = findActiveUser(userPublicId);
+        Trip trip = findActiveTrip(tripId);
+        findActiveMember(trip, user);
+
+        Schedule schedule = scheduleRepository
+                .findByIdAndTripIdAndStatus(scheduleId, tripId, "DRAFT")
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.SCHEDULE_CANDIDATE_NOT_FOUND
+                ));
+        List<ScheduleDetailResponse.Day> days = scheduleDayRepository
+                .findByScheduleIdOrderByDayNumberAsc(scheduleId)
+                .stream()
+                .map(this::toDayResponse)
+                .toList();
+
+        return new ScheduleCandidateDetailResponse(
+                trip.getId().toString(),
+                schedule.getId().toString(),
+                schedule.getStrategy(),
+                schedule.getSummary(),
+                schedule.getPreferenceScore(),
+                totalDistanceMeters(days),
+                false,
+                days
+        );
+    }
+
+    private ScheduleCandidateListResponse.Candidate toCandidateResponse(
+            Schedule schedule
+    ) {
+        List<ScheduleDetailResponse.Day> days = scheduleDayRepository
+                .findByScheduleIdOrderByDayNumberAsc(schedule.getId())
+                .stream()
+                .map(this::toDayResponse)
+                .toList();
+        return new ScheduleCandidateListResponse.Candidate(
+                schedule.getId().toString(),
+                schedule.getStrategy(),
+                schedule.getSummary(),
+                schedule.getPreferenceScore(),
+                totalDistanceMeters(days)
+        );
+    }
+
+    private int totalDistanceMeters(List<ScheduleDetailResponse.Day> days) {
+        return days.stream()
+                .mapToInt(ScheduleDetailResponse.Day::totalDistanceMeters)
+                .sum();
+    }
 
     @Override
     public ScheduleDetailResponse getSchedule(
@@ -48,7 +248,7 @@ public class ScheduleServiceImpl implements ScheduleService {
     ) {
         User user = findActiveUser(userPublicId);
         Trip trip = findActiveTrip(tripId);
-        findActiveMember(trip, user);
+        TripMember member = findActiveMember(trip, user);
 
         Schedule schedule = scheduleRepository
                 .findByTripIdAndActiveConfirmedSlot(tripId, ACTIVE_CONFIRMED_SLOT)
@@ -71,16 +271,318 @@ public class ScheduleServiceImpl implements ScheduleService {
                 schedule.getId().toString(),
                 schedule.getStrategy(),
                 schedule.getStatus(),
-                false,
+                member.isCurrentHost() && isScheduleChangeAllowed(trip),
                 totalDistanceMeters,
-                schedule.getCreatedAt().atZone(SEOUL_ZONE).toOffsetDateTime(),
+                schedule.getConfirmedAt().atZone(SEOUL_ZONE).toOffsetDateTime(),
+                ScheduleRegenerationPolicy.remainingRegenerations(trip),
                 days
+        );
+    }
+
+    @Override
+    @Transactional
+    public ScheduleStopDeleteResponse deleteStop(
+            String userPublicId,
+            Long tripId,
+            Long stopId
+    ) {
+        User user = findActiveUser(userPublicId);
+        Trip trip = tripRepository.findByIdForUpdate(tripId)
+                .filter(value -> value.getDeletedAt() == null)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.TRIP_NOT_FOUND
+                ));
+        tripMemberAccessService.findActiveHost(
+                trip,
+                user,
+                ErrorCode.TRIP_HOST_REQUIRED
+        );
+        validateScheduleChangeDeadline(trip);
+
+        Schedule schedule = scheduleRepository
+                .findByTripIdAndActiveConfirmedSlot(
+                        tripId,
+                        ACTIVE_CONFIRMED_SLOT
+                )
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.ACTIVE_SCHEDULE_NOT_FOUND
+                ));
+        ScheduleVisit target = scheduleVisitRepository
+                .findWithDayAndScheduleById(stopId)
+                .filter(visit -> visit.getDay().getSchedule().getId()
+                        .equals(schedule.getId()))
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.SCHEDULE_STOP_NOT_FOUND
+                ));
+        ScheduleDay day = target.getDay();
+
+        if ("REMOVED".equals(target.getStatus())) {
+            return deleteResponse(schedule, target, day);
+        }
+        List<ScheduleVisit> visits = scheduleVisitRepository
+                .findByDayIdAndStatusOrderByVisitOrderAsc(
+                        day.getId(),
+                        "ACTIVE"
+                );
+        if (visits.size() <= MINIMUM_DAY_STOPS) {
+            throw new BusinessException(
+                    ErrorCode.SCHEDULE_MINIMUM_STOPS_REQUIRED
+            );
+        }
+        int targetIndex = findVisitIndex(visits, target.getId());
+        if (targetIndex < 0) {
+            throw new BusinessException(ErrorCode.SCHEDULE_STOP_NOT_FOUND);
+        }
+
+        updateLegsForDeletion(day, visits, targetIndex);
+        target.remove(LocalDateTime.now());
+        visits.subList(targetIndex + 1, visits.size())
+                .forEach(ScheduleVisit::moveForward);
+
+        return deleteResponse(schedule, target, day);
+    }
+
+    @Override
+    @Transactional
+    public ScheduleStopAddResponse addStop(
+            String userPublicId,
+            Long tripId,
+            ScheduleStopAddRequest request
+    ) {
+        User user = findActiveUser(userPublicId);
+        Trip trip = tripRepository.findByIdForUpdate(tripId)
+                .filter(value -> value.getDeletedAt() == null)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.TRIP_NOT_FOUND
+                ));
+        tripMemberAccessService.findActiveHost(
+                trip,
+                user,
+                ErrorCode.TRIP_HOST_REQUIRED
+        );
+        validateScheduleChangeDeadline(trip);
+
+        Schedule schedule = scheduleRepository
+                .findByTripIdAndActiveConfirmedSlot(
+                        tripId,
+                        ACTIVE_CONFIRMED_SLOT
+                )
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.ACTIVE_SCHEDULE_NOT_FOUND
+                ));
+        ScheduleDay day = scheduleDayRepository
+                .findByIdAndSchedule_Id(
+                        request.scheduleDayId(),
+                        schedule.getId()
+                )
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.SCHEDULE_DAY_NOT_FOUND
+                ));
+        List<ScheduleVisit> visits = scheduleVisitRepository
+                .findByDayIdAndStatusOrderByVisitOrderAsc(
+                        day.getId(),
+                        "ACTIVE"
+                );
+        if (visits.size() >= MAXIMUM_DAY_STOPS) {
+            throw new BusinessException(
+                    ErrorCode.SCHEDULE_MAXIMUM_STOPS_EXCEEDED
+            );
+        }
+        int position = request.position();
+        if (position > visits.size() + 1) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST);
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        Place place = saveOrUpdatePlace(trip, request.place(), now);
+        if (scheduleVisitRepository
+                .existsByDay_Schedule_IdAndPlace_IdAndStatus(
+                        schedule.getId(),
+                        place.getId(),
+                        "ACTIVE"
+                )) {
+            throw new BusinessException(
+                    ErrorCode.SCHEDULE_PLACE_ALREADY_EXISTS
+            );
+        }
+
+        insertVisitAndUpdateLegs(
+                day,
+                visits,
+                place,
+                position,
+                now
+        );
+
+        return new ScheduleStopAddResponse(
+                schedule.getId().toString(),
+                toDayResponse(day)
+        );
+    }
+
+    private Place saveOrUpdatePlace(
+            Trip trip,
+            ScheduleStopAddRequest.Place request,
+            LocalDateTime now
+    ) {
+        PlaceDetails details = toPlaceDetails(request);
+        return placeRepository.findByRegion_IdAndGooglePlaceId(
+                        trip.getRegion().getId(),
+                        request.googlePlaceId().trim()
+                )
+                .map(existing -> {
+                    existing.update(details, now);
+                    return existing;
+                })
+                .orElseGet(() -> placeRepository.save(
+                        new Place(trip.getRegion(), details, now)
+                ));
+    }
+
+    private PlaceDetails toPlaceDetails(ScheduleStopAddRequest.Place request) {
+        return new PlaceDetails(
+                request.googlePlaceId(),
+                request.name(),
+                request.categoryName(),
+                request.address(),
+                request.roadAddress(),
+                request.longitude(),
+                request.latitude(),
+                request.phone(),
+                request.placeUrl()
+        );
+    }
+
+    private void insertVisitAndUpdateLegs(
+            ScheduleDay day,
+            List<ScheduleVisit> visits,
+            Place place,
+            int position,
+            LocalDateTime now
+    ) {
+        ScheduleVisit previous = position > 1
+                ? visits.get(position - 2)
+                : null;
+        ScheduleVisit next = position <= visits.size()
+                ? visits.get(position - 1)
+                : null;
+        List<ScheduleLeg> legs = scheduleLegRepository
+                .findByDayIdOrderByLegOrderAsc(day.getId());
+
+        if (previous != null && next != null) {
+            legs.stream()
+                    .filter(leg -> leg.getFromVisit().getId()
+                            .equals(previous.getId()))
+                    .filter(leg -> leg.getToVisit().getId()
+                            .equals(next.getId()))
+                    .findFirst()
+                    .ifPresent(scheduleLegRepository::delete);
+        }
+
+        visits.stream()
+                .filter(visit -> visit.getVisitOrder() >= position)
+                .forEach(ScheduleVisit::moveBackward);
+        legs.stream()
+                .filter(leg -> leg.getLegOrder() >= position)
+                .forEach(ScheduleLeg::moveBackward);
+
+        ScheduleVisit added = scheduleVisitRepository.save(
+                ScheduleVisit.createManual(day, place, position, now)
+        );
+        if (previous != null) {
+            scheduleLegRepository.save(new ScheduleLeg(
+                    day,
+                    previous,
+                    added,
+                    position - 1,
+                    distanceMeters(
+                            previous.getPlace().getLatitude(),
+                            previous.getPlace().getLongitude(),
+                            place.getLatitude(),
+                            place.getLongitude()
+                    )
+            ));
+        }
+        if (next != null) {
+            scheduleLegRepository.save(new ScheduleLeg(
+                    day,
+                    added,
+                    next,
+                    position,
+                    distanceMeters(
+                            place.getLatitude(),
+                            place.getLongitude(),
+                            next.getPlace().getLatitude(),
+                            next.getPlace().getLongitude()
+                    )
+            ));
+        }
+    }
+
+    private int findVisitIndex(List<ScheduleVisit> visits, Long visitId) {
+        for (int index = 0; index < visits.size(); index++) {
+            if (visits.get(index).getId().equals(visitId)) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private void updateLegsForDeletion(
+            ScheduleDay day,
+            List<ScheduleVisit> visits,
+            int targetIndex
+    ) {
+        ScheduleVisit target = visits.get(targetIndex);
+        List<ScheduleLeg> legs = scheduleLegRepository
+                .findByDayIdOrderByLegOrderAsc(day.getId());
+        List<ScheduleLeg> connectedLegs = legs.stream()
+                .filter(leg -> leg.getFromVisit().getId().equals(target.getId())
+                        || leg.getToVisit().getId().equals(target.getId()))
+                .toList();
+        scheduleLegRepository.deleteAll(connectedLegs);
+
+        if (targetIndex > 0 && targetIndex < visits.size() - 1) {
+            ScheduleVisit previous = visits.get(targetIndex - 1);
+            ScheduleVisit next = visits.get(targetIndex + 1);
+            scheduleLegRepository.save(new ScheduleLeg(
+                    day,
+                    previous,
+                    next,
+                    targetIndex,
+                    distanceMeters(
+                            previous.getPlace().getLatitude(),
+                            previous.getPlace().getLongitude(),
+                            next.getPlace().getLatitude(),
+                            next.getPlace().getLongitude()
+                    )
+            ));
+        }
+
+        legs.stream()
+                .filter(leg -> !connectedLegs.contains(leg))
+                .filter(leg -> leg.getLegOrder() > targetIndex)
+                .forEach(ScheduleLeg::moveForward);
+    }
+
+    private ScheduleStopDeleteResponse deleteResponse(
+            Schedule schedule,
+            ScheduleVisit deletedVisit,
+            ScheduleDay day
+    ) {
+        return new ScheduleStopDeleteResponse(
+                schedule.getId().toString(),
+                deletedVisit.getId().toString(),
+                toDayResponse(day)
         );
     }
 
     private ScheduleDetailResponse.Day toDayResponse(ScheduleDay day) {
         List<ScheduleVisit> visits = scheduleVisitRepository
-                .findByDayIdOrderByVisitOrderAsc(day.getId());
+                .findByDayIdAndStatusOrderByVisitOrderAsc(
+                        day.getId(),
+                        "ACTIVE"
+                );
         List<ScheduleLeg> legs = scheduleLegRepository
                 .findByDayIdOrderByLegOrderAsc(day.getId());
 
@@ -127,6 +629,19 @@ public class ScheduleServiceImpl implements ScheduleService {
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.TRIP_MEMBER_REQUIRED
                 ));
+    }
+
+    private void validateScheduleChangeDeadline(Trip trip) {
+        if (!isScheduleChangeAllowed(trip)) {
+            throw new BusinessException(ErrorCode.SCHEDULE_CHANGE_NOT_ALLOWED);
+        }
+    }
+
+    private boolean isScheduleChangeAllowed(Trip trip) {
+        return ScheduleChangeDeadline.isAllowed(
+                trip.getStartDate(),
+                LocalDateTime.now(SEOUL_ZONE)
+        );
     }
 
     private Trip findActiveTrip(Long tripId) {

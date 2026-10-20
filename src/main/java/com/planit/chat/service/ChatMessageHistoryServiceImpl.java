@@ -10,7 +10,7 @@ import com.planit.domain.ChatMessage;
 import com.planit.domain.ChatMessageStatus;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
-import com.planit.image.config.ImageProperties;
+import com.planit.image.storage.ImageStorage;
 import com.planit.repository.ChatMessageRepository;
 import com.planit.repository.ChatMessageRepository.ChatMessageHistoryProjection;
 import com.planit.repository.RegionalChatRoomMemberRepository;
@@ -39,7 +39,7 @@ public class ChatMessageHistoryServiceImpl implements ChatMessageHistoryService 
     private final RegionalChatRoomMemberRepository memberRepository;
     private final ChatMessageRepository messageRepository;
     private final ChatMessageCursorStore cursorStore;
-    private final ImageProperties imageProperties;
+    private final ImageStorage imageStorage;
 
     @Override
     public ChatMessageHistoryResponse getMessages(
@@ -153,12 +153,17 @@ public class ChatMessageHistoryServiceImpl implements ChatMessageHistoryService 
                 new ChatSenderResponse(
                         withdrawn ? null : row.getSenderPublicId().toString(),
                         withdrawn ? WITHDRAWN_USER_NAME : row.getSenderUsername(),
-                        withdrawn
-                                ? null
-                                : imageProperties.defaultProfileUrl().toString()
+                        withdrawn ? null : profileImageUrl(row)
                 ),
                 row.getCreatedAt().toInstant(ZoneOffset.UTC)
         );
+    }
+
+    private String profileImageUrl(ChatMessageHistoryProjection row) {
+        String imageKey = row.getSenderImageKey();
+        return imageKey == null
+                ? null
+                : imageStorage.createReadUrl(imageKey);
     }
 
     private void validateQuery(String cursor, Long afterMessageId) {

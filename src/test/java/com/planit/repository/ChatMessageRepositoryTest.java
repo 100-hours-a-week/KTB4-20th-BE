@@ -3,7 +3,6 @@ package com.planit.repository;
 import com.planit.domain.ChatMessage;
 import com.planit.domain.ChatMessageStatus;
 import com.planit.domain.ChatMessageType;
-import com.planit.domain.ImagePurpose;
 import com.planit.domain.RegionalChatRoom;
 import com.planit.domain.TextChatMessage;
 import com.planit.domain.User;
@@ -32,9 +31,6 @@ class ChatMessageRepositoryTest {
     private RegionalChatRoomRepository roomRepository;
 
     @Autowired
-    private ImageFileRepository imageFileRepository;
-
-    @Autowired
     private UserRepository userRepository;
 
     @DisplayName("채팅 내역 조회 시 메시지 내용과 발신자 정보를 함께 반환한다")
@@ -42,9 +38,7 @@ class ChatMessageRepositoryTest {
     void queriesTextMessageHistoryProjection() {
         RegionalChatRoom room = roomRepository.findById(1L).orElseThrow();
         User sender = userRepository.save(new User(
-                imageFileRepository.findByImagePurposeAndDeletedAtIsNull(
-                        ImagePurpose.DEFAULT_PROFILE
-                ).orElseThrow(),
+                null,
                 UUID.randomUUID(),
                 "메시지테스트"
         ));

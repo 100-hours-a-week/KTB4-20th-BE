@@ -20,8 +20,17 @@ public class ScheduleLeg {
         this.legOrder = (short) order; this.distanceMeters = Math.toIntExact(distance);
     }
     public Long getId() { return id; }
+    public ScheduleDay getDay() { return day; }
     public ScheduleVisit getFromVisit() { return fromVisit; }
     public ScheduleVisit getToVisit() { return toVisit; }
     public short getLegOrder() { return legOrder; }
     public int getDistanceMeters() { return distanceMeters; }
+
+    public void moveForward() {
+        this.legOrder--;
+    }
+
+    public void moveBackward() {
+        this.legOrder++;
+    }
 }

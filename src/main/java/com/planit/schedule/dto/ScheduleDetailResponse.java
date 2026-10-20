@@ -5,7 +5,11 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 
-/** SCHEDULE_API_SPEC.md 3장(생성 일정 조회) 계약과 같은 모양이다. V1은 항상 editable=false다. */
+/**
+ * SCHEDULE_API_SPEC.md의 확정 일정 조회 계약과 같은 모양이다.
+ * editable은 현재 방장이 변경 기한 전 조회할 때만 true다.
+ * remainingRegenerations는 날씨 사유를 제외한 일반 재생성 남은 횟수다.
+ */
 public record ScheduleDetailResponse(
         String tripId,
         String scheduleId,
@@ -13,7 +17,8 @@ public record ScheduleDetailResponse(
         String status,
         boolean editable,
         int totalDistanceMeters,
-        OffsetDateTime createdAt,
+        OffsetDateTime confirmedAt,
+        int remainingRegenerations,
         List<Day> days
 ) {
     public ScheduleDetailResponse {
