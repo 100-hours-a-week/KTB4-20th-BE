@@ -12,14 +12,13 @@ import com.planit.auth.token.SecureTokenGenerator;
 import com.planit.auth.token.JwtTokenProvider;
 import com.planit.auth.token.TokenHasher;
 import com.planit.domain.ImageFile;
-import com.planit.domain.ImagePurpose;
 import com.planit.domain.OAuthAccount;
 import com.planit.domain.OAuthProvider;
 import com.planit.domain.RefreshToken;
 import com.planit.domain.User;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
-import com.planit.repository.ImageFileRepository;
+import com.planit.image.service.KakaoProfileImageService;
 import com.planit.repository.OAuthAccountRepository;
 import com.planit.repository.RefreshTokenRepository;
 import com.planit.repository.UserRepository;
@@ -51,10 +50,10 @@ class AuthServiceImplTest {
     private KakaoOAuthClient kakaoOAuthClient;
     private OAuthAccountRepository oauthAccountRepository;
     private UserRepository userRepository;
-    private ImageFileRepository imageFileRepository;
     private RefreshTokenRepository refreshTokenRepository;
     private TokenHasher tokenHasher;
     private JwtTokenProvider jwtTokenProvider;
+    private KakaoProfileImageService kakaoProfileImageService;
     private AuthServiceImpl authService;
 
     @BeforeEach
@@ -65,12 +64,14 @@ class AuthServiceImplTest {
                 OAuthAccountRepository.class
         );
         userRepository = mock(UserRepository.class);
-        imageFileRepository = mock(ImageFileRepository.class);
         refreshTokenRepository = mock(
                 RefreshTokenRepository.class
         );
         tokenHasher = new TokenHasher();
         jwtTokenProvider = mock(JwtTokenProvider.class);
+        kakaoProfileImageService = mock(
+                KakaoProfileImageService.class
+        );
 
         authService = new AuthServiceImpl(
                 authProperties,
@@ -82,8 +83,8 @@ class AuthServiceImplTest {
                 kakaoOAuthClient,
                 oauthAccountRepository,
                 userRepository,
-                imageFileRepository,
-                refreshTokenRepository
+                refreshTokenRepository,
+                kakaoProfileImageService
         );
     }
 
@@ -414,24 +415,23 @@ class AuthServiceImplTest {
                 ));
         assertThat(savedToken.getExpiresAt())
                 .isEqualTo(savedToken.getIssuedAt().plusDays(30));
+        verifyNoInteractions(kakaoProfileImageService);
     }
 
     @DisplayName("신규 카카오 계정으로 사용자를 생성한다")
     @Test
     void createsUserForNewKakaoAccount() {
-        ImageFile defaultProfile = mock(ImageFile.class);
-        prepareKakaoUser("플랜잇사용자");
+        KakaoUserResponse kakaoUser = prepareKakaoUser(
+                "플랜잇사용자",
+                null,
+                true
+        );
         when(oauthAccountRepository
                 .findByProviderAndProviderUserId(
                         OAuthProvider.KAKAO,
                         "123456789"
                 ))
                 .thenReturn(Optional.empty());
-        when(imageFileRepository
-                .findByImagePurposeAndDeletedAtIsNull(
-                        ImagePurpose.DEFAULT_PROFILE
-                ))
-                .thenReturn(Optional.of(defaultProfile));
         when(userRepository.save(any(User.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(oauthAccountRepository.save(any(OAuthAccount.class)))
@@ -462,8 +462,7 @@ class AuthServiceImplTest {
                 "http://localhost:5173/invitations/"
                         + "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         ));
-        assertThat(savedUser.getImageFile())
-                .isSameAs(defaultProfile);
+        assertThat(savedUser.getImageFile()).isNull();
         assertThat(savedUser.getPublicId().version())
                 .isEqualTo(7);
         assertThat(savedUser.getUsername())
@@ -474,12 +473,57 @@ class AuthServiceImplTest {
                 .isEqualTo(OAuthProvider.KAKAO);
         assertThat(savedAccount.getProviderUserId())
                 .isEqualTo("123456789");
+        verify(kakaoProfileImageService).importIfPresent(
+                savedUser.getPublicId(),
+                kakaoUser
+        );
+    }
+
+    @DisplayName("신규 사용자의 카카오 프로필 이미지를 연결한다")
+    @Test
+    void connectsKakaoProfileImageToNewUser() {
+        KakaoUserResponse kakaoUser = prepareKakaoUser(
+                "플랜잇사용자",
+                "https://example.com/profile.jpg",
+                false
+        );
+        ImageFile profileImage = mock(ImageFile.class);
+        when(oauthAccountRepository
+                .findByProviderAndProviderUserId(
+                        OAuthProvider.KAKAO,
+                        "123456789"
+                ))
+                .thenReturn(Optional.empty());
+        when(userRepository.save(any(User.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(kakaoProfileImageService.importIfPresent(
+                any(UUID.class),
+                any(KakaoUserResponse.class)
+        )).thenReturn(Optional.of(profileImage));
+
+        authService.login(
+                "test-code",
+                "same-state",
+                null,
+                "same-state",
+                "/"
+        );
+
+        ArgumentCaptor<User> userCaptor =
+                ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(userCaptor.capture());
+        User savedUser = userCaptor.getValue();
+
+        assertThat(savedUser.getImageFile()).isSameAs(profileImage);
+        verify(kakaoProfileImageService).importIfPresent(
+                savedUser.getPublicId(),
+                kakaoUser
+        );
     }
 
     @DisplayName("카카오 닉네임의 앞뒤 공백을 제거해 저장한다")
     @Test
     void trimsKakaoNicknameBeforeSavingUser() {
-        ImageFile defaultProfile = mock(ImageFile.class);
         prepareKakaoUser("  플랜잇사용자  ");
         when(oauthAccountRepository
                 .findByProviderAndProviderUserId(
@@ -487,11 +531,6 @@ class AuthServiceImplTest {
                         "123456789"
                 ))
                 .thenReturn(Optional.empty());
-        when(imageFileRepository
-                .findByImagePurposeAndDeletedAtIsNull(
-                        ImagePurpose.DEFAULT_PROFILE
-                ))
-                .thenReturn(Optional.of(defaultProfile));
         when(userRepository.save(any(User.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(oauthAccountRepository.save(any(OAuthAccount.class)))
@@ -518,11 +557,6 @@ class AuthServiceImplTest {
     @Test
     void rejectsKakaoUserWithoutNickname() {
         prepareKakaoUser(null);
-        when(imageFileRepository
-                .findByImagePurposeAndDeletedAtIsNull(
-                        ImagePurpose.DEFAULT_PROFILE
-                ))
-                .thenReturn(Optional.of(mock(ImageFile.class)));
 
         assertThatThrownBy(() -> authService.login(
                 "test-code",
@@ -541,17 +575,29 @@ class AuthServiceImplTest {
     }
 
     private void prepareKakaoUser(String nickname) {
+        prepareKakaoUser(nickname, null, true);
+    }
+
+    private KakaoUserResponse prepareKakaoUser(
+            String nickname,
+            String profileImageUrl,
+            boolean defaultImage
+    ) {
+        KakaoUserResponse kakaoUser = new KakaoUserResponse(
+                123456789L,
+                new KakaoUserResponse.KakaoAccount(
+                        new KakaoUserResponse.Profile(
+                                nickname,
+                                profileImageUrl,
+                                defaultImage
+                        )
+                )
+        );
         when(kakaoOAuthClient.exchangeCode("test-code"))
                 .thenReturn("kakao-access-token");
         when(kakaoOAuthClient.getUser("kakao-access-token"))
-                .thenReturn(new KakaoUserResponse(
-                        123456789L,
-                        new KakaoUserResponse.KakaoAccount(
-                                new KakaoUserResponse.Profile(
-                                        nickname
-                                )
-                        )
-                ));
+                .thenReturn(kakaoUser);
+        return kakaoUser;
     }
 
     private AuthProperties createAuthProperties() {

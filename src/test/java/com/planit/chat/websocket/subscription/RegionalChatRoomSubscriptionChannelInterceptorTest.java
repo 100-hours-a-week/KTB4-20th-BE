@@ -4,6 +4,7 @@ import com.planit.chat.presence.RegionalChatRoomPresenceRegistry;
 import com.planit.global.error.ErrorCode;
 import com.planit.repository.RegionalChatRoomMemberRepository;
 import com.planit.repository.RegionalChatRoomRepository;
+import com.planit.websocket.subscription.StompSubscriptionReceiptEvent;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -75,7 +76,7 @@ class RegionalChatRoomSubscriptionChannelInterceptorTest {
                 "session-1",
                 "subscription-1"
         );
-        verify(eventPublisher).publishEvent(new ChatSubscriptionReceiptEvent(
+        verify(eventPublisher).publishEvent(new StompSubscriptionReceiptEvent(
                 "session-1",
                 "subscribe-3001"
         ));

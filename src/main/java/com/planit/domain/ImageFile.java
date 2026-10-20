@@ -41,4 +41,93 @@ public class ImageFile {
 
     protected ImageFile() {
     }
+
+    private ImageFile(
+            String imageKey,
+            ImagePurpose imagePurpose,
+            String mimeType,
+            Integer sizeBytes,
+            LocalDateTime createdAt
+    ) {
+        this.imageKey = imageKey;
+        this.imagePurpose = imagePurpose;
+        this.mimeType = mimeType;
+        this.sizeBytes = sizeBytes;
+        this.createdAt = createdAt;
+    }
+
+    public static ImageFile profile(
+            String imageKey,
+            String mimeType,
+            int sizeBytes
+    ) {
+        return new ImageFile(
+                imageKey,
+                ImagePurpose.PROFILE,
+                mimeType,
+                sizeBytes,
+                LocalDateTime.now()
+        );
+    }
+
+    public static ImageFile mission(
+            String imageKey,
+            String originalFilename,
+            String mimeType,
+            int sizeBytes
+    ) {
+        return mission(
+                imageKey,
+                originalFilename,
+                mimeType,
+                sizeBytes,
+                LocalDateTime.now()
+        );
+    }
+
+    public static ImageFile mission(
+            String imageKey,
+            String originalFilename,
+            String mimeType,
+            int sizeBytes,
+            LocalDateTime createdAt
+    ) {
+        ImageFile imageFile = new ImageFile(
+                imageKey,
+                ImagePurpose.MISSION,
+                mimeType,
+                sizeBytes,
+                createdAt
+        );
+        imageFile.originalFilename = originalFilename;
+        return imageFile;
+    }
+
+    public String getImageKey() {
+        return imageKey;
+    }
+
+    public ImagePurpose getImagePurpose() {
+        return imagePurpose;
+    }
+
+    public String getOriginalFilename() {
+        return originalFilename;
+    }
+
+    public String getMimeType() {
+        return mimeType;
+    }
+
+    public Integer getSizeBytes() {
+        return sizeBytes;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public LocalDateTime getDeletedAt() {
+        return deletedAt;
+    }
 }

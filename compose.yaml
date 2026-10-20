@@ -24,5 +24,21 @@ services:
       retries: 20
       start_period: 30s
 
+  redis:
+    image: redis:8.10.2-alpine
+    container_name: planit-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - planit-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
 volumes:
   planit-mysql-data:
+  planit-redis-data:

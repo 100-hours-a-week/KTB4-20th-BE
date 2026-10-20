@@ -34,6 +34,16 @@ jobs:
           --health-timeout=5s
           --health-retries=12
 
+      redis:
+        image: redis:8
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=10
+
     steps:
       - name: Check main PR source
         if: >-
@@ -66,6 +76,9 @@ jobs:
           DB_URL: jdbc:mysql://127.0.0.1:3306/planit?sslMode=DISABLED&allowPublicKeyRetrieval=true&connectionTimeZone=Asia/Seoul
           DB_USERNAME: planit_ci
           DB_PASSWORD: ${{ secrets.CI_MYSQL_PASSWORD }}
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: "6379"
+          REDIS_PASSWORD: ""
           AUTH_COOKIE_SECURE: "false"
           JWT_HS256_SECRET_BASE64: ${{ secrets.CI_JWT_HS256_SECRET_BASE64 }}
           KAKAO_REST_API_KEY: ci-client-id

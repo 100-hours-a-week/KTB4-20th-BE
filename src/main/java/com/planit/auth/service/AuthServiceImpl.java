@@ -11,15 +11,13 @@ import com.planit.auth.oauth.ReturnToValidator;
 import com.planit.auth.token.SecureTokenGenerator;
 import com.planit.auth.token.JwtTokenProvider;
 import com.planit.auth.token.TokenHasher;
-import com.planit.domain.ImageFile;
-import com.planit.domain.ImagePurpose;
 import com.planit.domain.OAuthAccount;
 import com.planit.domain.OAuthProvider;
 import com.planit.domain.RefreshToken;
 import com.planit.domain.User;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
-import com.planit.repository.ImageFileRepository;
+import com.planit.image.service.KakaoProfileImageService;
 import com.planit.repository.OAuthAccountRepository;
 import com.planit.repository.RefreshTokenRepository;
 import com.planit.repository.UserRepository;
@@ -35,6 +33,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -50,8 +49,8 @@ public class AuthServiceImpl implements AuthService {
     private final KakaoOAuthClient kakaoOAuthClient;
     private final OAuthAccountRepository oauthAccountRepository;
     private final UserRepository userRepository;
-    private final ImageFileRepository imageFileRepository;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final KakaoProfileImageService kakaoProfileImageService;
 
     @Override
     public OAuthAuthorizeResult createAuthorizationRequest(
@@ -237,21 +236,18 @@ public class AuthServiceImpl implements AuthService {
             return user;
         }
 
-        ImageFile defaultProfile = imageFileRepository
-                .findByImagePurposeAndDeletedAtIsNull(
-                        ImagePurpose.DEFAULT_PROFILE
-                )
-                .orElseThrow(() -> new BusinessException(
-                        ErrorCode.OAUTH_LOGIN_FAILED
-                ));
-
+        UUID userPublicId = uuidV7Generator.generate();
         User user = userRepository.save(
                 new User(
-                        defaultProfile,
-                        uuidV7Generator.generate(),
+                        null,
+                        userPublicId,
                         nickname
                 )
         );
+
+        kakaoProfileImageService
+                .importIfPresent(userPublicId, kakaoUser)
+                .ifPresent(user::changeProfileImage);
 
         oauthAccountRepository.save(
                 new OAuthAccount(

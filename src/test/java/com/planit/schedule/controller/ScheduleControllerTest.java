@@ -1,0 +1,301 @@
+package com.planit.schedule.controller;
+
+import com.planit.global.error.BusinessException;
+import com.planit.global.error.ErrorCode;
+import com.planit.global.error.GlobalExceptionHandler;
+import com.planit.schedule.dto.ScheduleDetailResponse;
+import com.planit.schedule.dto.ScheduleCandidateDetailResponse;
+import com.planit.schedule.dto.ScheduleCandidateListResponse;
+import com.planit.schedule.dto.ScheduleConfirmRequest;
+import com.planit.schedule.dto.ScheduleConfirmResponse;
+import com.planit.schedule.dto.ScheduleStopDeleteResponse;
+import com.planit.schedule.dto.ScheduleStopAddRequest;
+import com.planit.schedule.dto.ScheduleStopAddResponse;
+import com.planit.schedule.service.ScheduleService;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.util.List;
+
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class ScheduleControllerTest {
+
+    private static final String USER_PUBLIC_ID =
+            "01991f6e-7300-7b21-a3cc-1436db3df95e";
+
+    private ScheduleService service;
+    private MockMvc mockMvc;
+
+    @BeforeEach
+    void setUp() {
+        service = mock(ScheduleService.class);
+        mockMvc = MockMvcBuilders.standaloneSetup(
+                        new ScheduleController(service)
+                )
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+    }
+
+    @DisplayName("방장이 선택한 일정 후보를 확정한다")
+    @Test
+    void confirmsScheduleCandidate() throws Exception {
+        when(service.confirmSchedule(
+                USER_PUBLIC_ID,
+                1L,
+                new ScheduleConfirmRequest(10L)
+        )).thenReturn(new ScheduleConfirmResponse(
+                "1",
+                "10",
+                "PREFERENCE",
+                "ACTIVE",
+                OffsetDateTime.parse("2026-10-18T19:00:00+09:00")
+        ));
+
+        mockMvc.perform(put("/api/trips/1/schedule")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        ))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {"scheduleId": 10}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SCHEDULE_CONFIRMED"))
+                .andExpect(jsonPath("$.data.scheduleId").value("10"))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.data.confirmedAt")
+                        .value("2026-10-18T19:00:00+09:00"));
+    }
+
+    @DisplayName("확정할 일정 ID가 없으면 요청을 거부한다")
+    @Test
+    void rejectsConfirmationWithoutScheduleId() throws Exception {
+        mockMvc.perform(put("/api/trips/1/schedule")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        ))
+                        .contentType(APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+    }
+
+    @DisplayName("확정할 일정 ID가 양수가 아니면 요청을 거부한다")
+    @Test
+    void rejectsConfirmationWithInvalidScheduleId() throws Exception {
+        mockMvc.perform(put("/api/trips/1/schedule")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        ))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {"scheduleId": 0}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+    }
+
+    @DisplayName("여행방의 일정 후보 목록을 조회한다")
+    @Test
+    void getsScheduleCandidates() throws Exception {
+        when(service.getScheduleCandidates(USER_PUBLIC_ID, 1L))
+                .thenReturn(new ScheduleCandidateListResponse(
+                        "1",
+                        List.of(new ScheduleCandidateListResponse.Candidate(
+                                "10",
+                                "SHORTEST",
+                                "이동거리를 줄인 일정",
+                                null,
+                                7200
+                        ))
+                ));
+
+        mockMvc.perform(get("/api/trips/1/schedule-candidates")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code")
+                        .value("SCHEDULE_CANDIDATES_RETRIEVED"))
+                .andExpect(jsonPath("$.data.tripId").value("1"))
+                .andExpect(jsonPath("$.data.candidates[0].strategy")
+                        .value("SHORTEST"))
+                .andExpect(jsonPath("$.data.candidates[0].totalDistanceMeters")
+                        .value(7200));
+    }
+
+    @DisplayName("일정 후보의 날짜별 상세 동선을 조회한다")
+    @Test
+    void getsScheduleCandidateDetail() throws Exception {
+        when(service.getScheduleCandidate(USER_PUBLIC_ID, 1L, 10L))
+                .thenReturn(new ScheduleCandidateDetailResponse(
+                        "1",
+                        "10",
+                        "PREFERENCE",
+                        "그룹 취향을 우선한 일정",
+                        92,
+                        100,
+                        false,
+                        List.of(new ScheduleDetailResponse.Day(
+                                "20",
+                                1,
+                                LocalDate.of(2026, 10, 20),
+                                100,
+                                List.of(),
+                                List.of()
+                        ))
+                ));
+
+        mockMvc.perform(get("/api/trips/1/schedule-candidates/10")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code")
+                        .value("SCHEDULE_CANDIDATE_RETRIEVED"))
+                .andExpect(jsonPath("$.data.scheduleId").value("10"))
+                .andExpect(jsonPath("$.data.preferenceScore").value(92))
+                .andExpect(jsonPath("$.data.editable").value(false))
+                .andExpect(jsonPath("$.data.days[0].dayNumber").value(1));
+    }
+
+    @DisplayName("확정 일정의 장소를 삭제한다")
+    @Test
+    void deletesScheduleStop() throws Exception {
+        ScheduleDetailResponse.Day day = new ScheduleDetailResponse.Day(
+                "20",
+                1,
+                LocalDate.of(2026, 10, 20),
+                0,
+                List.of(),
+                List.of()
+        );
+        when(service.deleteStop(USER_PUBLIC_ID, 1L, 101L))
+                .thenReturn(new ScheduleStopDeleteResponse(
+                        "10",
+                        "101",
+                        day
+                ));
+
+        mockMvc.perform(delete("/api/trips/1/schedule/stops/101")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SCHEDULE_STOP_DELETED"))
+                .andExpect(jsonPath("$.data.scheduleId").value("10"))
+                .andExpect(jsonPath("$.data.deletedStopId").value("101"));
+
+        verify(service).deleteStop(USER_PUBLIC_ID, 1L, 101L);
+    }
+
+    @DisplayName("장소가 세 개뿐이면 삭제 요청을 거부한다")
+    @Test
+    void rejectsDeletionBelowMinimum() throws Exception {
+        when(service.deleteStop(USER_PUBLIC_ID, 1L, 101L))
+                .thenThrow(new BusinessException(
+                        ErrorCode.SCHEDULE_MINIMUM_STOPS_REQUIRED
+                ));
+
+        mockMvc.perform(delete("/api/trips/1/schedule/stops/101")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        )))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code")
+                        .value("SCHEDULE_MINIMUM_STOPS_REQUIRED"));
+    }
+
+    @DisplayName("Google 장소 정보를 받아 확정 일정에 장소를 추가한다")
+    @Test
+    void addsScheduleStop() throws Exception {
+        ScheduleDetailResponse.Day day = new ScheduleDetailResponse.Day(
+                "20",
+                1,
+                LocalDate.of(2026, 10, 20),
+                0,
+                List.of(),
+                List.of()
+        );
+        when(service.addStop(
+                org.mockito.ArgumentMatchers.eq(USER_PUBLIC_ID),
+                org.mockito.ArgumentMatchers.eq(1L),
+                org.mockito.ArgumentMatchers.any(ScheduleStopAddRequest.class)
+        )).thenReturn(new ScheduleStopAddResponse("10", day));
+
+        mockMvc.perform(post("/api/trips/1/schedule/stops")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        ))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "scheduleDayId": 20,
+                                  "position": 3,
+                                  "place": {
+                                    "googlePlaceId": "ChIJ-example",
+                                    "name": "경주 카페",
+                                    "categoryName": "카페",
+                                    "address": "경주시 주소",
+                                    "roadAddress": null,
+                                    "longitude": 129.2107,
+                                    "latitude": 35.8381,
+                                    "phone": "054-000-0000",
+                                    "placeUrl": "https://maps.example/place"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.code").value("SCHEDULE_STOP_ADDED"))
+                .andExpect(jsonPath("$.data.scheduleId").value("10"));
+    }
+
+    @DisplayName("장소 이름이 비어 있으면 추가 요청을 거부한다")
+    @Test
+    void rejectsInvalidAddRequest() throws Exception {
+        mockMvc.perform(post("/api/trips/1/schedule/stops")
+                        .principal(new TestingAuthenticationToken(
+                                USER_PUBLIC_ID,
+                                null
+                        ))
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "scheduleDayId": 20,
+                                  "position": 1,
+                                  "place": {
+                                    "googlePlaceId": "ChIJ-example",
+                                    "name": " ",
+                                    "longitude": 129.2107,
+                                    "latitude": 35.8381
+                                  }
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+    }
+}
