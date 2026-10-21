@@ -21,15 +21,17 @@ public record AiPlaceSelectionResponse(
 
     public record Route(
             Strategy strategy,
-            @JsonProperty("preference_score")
-            Integer preferenceScore,
+            @JsonProperty("preference_count")
+            Integer preferenceCount,
+            @JsonProperty("discovery_count")
+            Integer discoveryCount,
             List<List<Place>> days
     ) {
     }
 
     public enum Strategy {
         PREFERENCE,
-        BALANCED
+        DIVERSITY
     }
 
     public record Place(

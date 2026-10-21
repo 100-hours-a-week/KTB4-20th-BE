@@ -211,7 +211,8 @@ public class ScheduleServiceImpl implements ScheduleService {
                 schedule.getId().toString(),
                 schedule.getStrategy(),
                 schedule.getSummary(),
-                schedule.getPreferenceScore(),
+                schedule.getPreferenceCount(),
+                schedule.getDiscoveryCount(),
                 totalDistanceMeters(days),
                 false,
                 days
@@ -230,7 +231,8 @@ public class ScheduleServiceImpl implements ScheduleService {
                 schedule.getId().toString(),
                 schedule.getStrategy(),
                 schedule.getSummary(),
-                schedule.getPreferenceScore(),
+                schedule.getPreferenceCount(),
+                schedule.getDiscoveryCount(),
                 totalDistanceMeters(days)
         );
     }

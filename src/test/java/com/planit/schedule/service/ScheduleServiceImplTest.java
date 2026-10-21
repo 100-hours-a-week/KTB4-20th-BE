@@ -169,13 +169,13 @@ class ScheduleServiceImplTest {
     void supersedesUnselectedCandidatesOnConfirm() {
         Schedule shortest = candidate(11L, ScheduleStrategy.SHORTEST, null);
         Schedule selected = candidate(12L, ScheduleStrategy.PREFERENCE, 92);
-        Schedule balanced = candidate(13L, ScheduleStrategy.BALANCED, 68);
+        Schedule diversity = candidate(13L, ScheduleStrategy.DIVERSITY, 5, 2);
         when(scheduleRepository.findByIdAndTripId(12L, 1L))
                 .thenReturn(Optional.of(selected));
         when(scheduleRepository.findFirstByTripIdOrderByCreatedAtDesc(1L))
                 .thenReturn(Optional.of(selected));
         when(scheduleRepository.findByTripIdAndStatus(1L, "DRAFT"))
-                .thenReturn(List.of(shortest, balanced));
+                .thenReturn(List.of(shortest, diversity));
 
         service.confirmSchedule(
                 USER_PUBLIC_ID.toString(),
@@ -185,7 +185,7 @@ class ScheduleServiceImplTest {
 
         assertThat(selected.getStatus()).isEqualTo("ACTIVE");
         assertThat(shortest.getStatus()).isEqualTo("SUPERSEDED");
-        assertThat(balanced.getStatus()).isEqualTo("SUPERSEDED");
+        assertThat(diversity.getStatus()).isEqualTo("SUPERSEDED");
     }
 
     @DisplayName("같은 후보를 다시 확정해도 확정 정보가 변경되지 않는다")
@@ -236,7 +236,7 @@ class ScheduleServiceImplTest {
     @Test
     void rejectsOutdatedScheduleCandidate() {
         Schedule selected = candidate(12L, ScheduleStrategy.PREFERENCE, 92);
-        Schedule latest = candidate(13L, ScheduleStrategy.BALANCED, 68);
+        Schedule latest = candidate(13L, ScheduleStrategy.DIVERSITY, 5, 2);
         ReflectionTestUtils.setField(
                 selected,
                 "createdAt",
@@ -301,13 +301,13 @@ class ScheduleServiceImplTest {
                 .thenReturn(Optional.of(member));
 
         Schedule shortest = candidate(11L, ScheduleStrategy.SHORTEST, null);
-        Schedule preference = candidate(12L, ScheduleStrategy.PREFERENCE, 92);
-        Schedule balanced = candidate(13L, ScheduleStrategy.BALANCED, 68);
+        Schedule preference = candidate(12L, ScheduleStrategy.PREFERENCE, 7);
+        Schedule diversity = candidate(13L, ScheduleStrategy.DIVERSITY, 5, 2);
         when(scheduleRepository.findByTripIdAndStatus(1L, "DRAFT"))
-                .thenReturn(List.of(balanced, shortest, preference));
+                .thenReturn(List.of(diversity, shortest, preference));
         givenCandidateDay(shortest, 21L, 120);
         givenCandidateDay(preference, 22L, 240);
-        givenCandidateDay(balanced, 23L, 180);
+        givenCandidateDay(diversity, 23L, 180);
 
         ScheduleCandidateListResponse response =
                 service.getScheduleCandidates(
@@ -318,20 +318,21 @@ class ScheduleServiceImplTest {
         assertThat(response.candidates())
                 .extracting(
                         ScheduleCandidateListResponse.Candidate::strategy,
-                        ScheduleCandidateListResponse.Candidate::preferenceScore,
+                        ScheduleCandidateListResponse.Candidate::preferenceCount,
+                        ScheduleCandidateListResponse.Candidate::discoveryCount,
                         ScheduleCandidateListResponse.Candidate::totalDistanceMeters
                 )
                 .containsExactly(
-                        org.assertj.core.groups.Tuple.tuple("SHORTEST", null, 120),
-                        org.assertj.core.groups.Tuple.tuple("PREFERENCE", 92, 240),
-                        org.assertj.core.groups.Tuple.tuple("BALANCED", 68, 180)
+                        org.assertj.core.groups.Tuple.tuple("SHORTEST", null, null, 120),
+                        org.assertj.core.groups.Tuple.tuple("PREFERENCE", 7, 0, 240),
+                        org.assertj.core.groups.Tuple.tuple("DIVERSITY", 5, 2, 180)
                 );
     }
 
     @DisplayName("후보 상세에 날짜별 방문 순서와 이동 구간을 반환한다")
     @Test
     void getsScheduleCandidateDetail() {
-        Schedule preference = candidate(12L, ScheduleStrategy.PREFERENCE, 92);
+        Schedule preference = candidate(12L, ScheduleStrategy.PREFERENCE, 7);
         ScheduleDay candidateDay = givenCandidateDay(preference, 22L, 240);
         when(scheduleRepository.findByIdAndTripIdAndStatus(12L, 1L, "DRAFT"))
                 .thenReturn(Optional.of(preference));
@@ -349,7 +350,8 @@ class ScheduleServiceImplTest {
 
         assertThat(response.scheduleId()).isEqualTo("12");
         assertThat(response.strategy()).isEqualTo("PREFERENCE");
-        assertThat(response.preferenceScore()).isEqualTo(92);
+        assertThat(response.preferenceCount()).isEqualTo(7);
+        assertThat(response.discoveryCount()).isZero();
         assertThat(response.editable()).isFalse();
         assertThat(response.totalDistanceMeters()).isEqualTo(240);
         assertThat(response.days()).singleElement()
@@ -829,12 +831,27 @@ class ScheduleServiceImplTest {
     private Schedule candidate(
             long id,
             ScheduleStrategy strategy,
-            Integer preferenceScore
+            Integer preferenceCount
+    ) {
+        return candidate(
+                id,
+                strategy,
+                preferenceCount,
+                strategy == ScheduleStrategy.SHORTEST ? null : 0
+        );
+    }
+
+    private Schedule candidate(
+            long id,
+            ScheduleStrategy strategy,
+            Integer preferenceCount,
+            Integer discoveryCount
     ) {
         Schedule candidate = new Schedule(
                 trip,
                 strategy,
-                preferenceScore,
+                preferenceCount,
+                discoveryCount,
                 LocalDateTime.now()
         );
         ReflectionTestUtils.setField(candidate, "id", id);

@@ -7,7 +7,8 @@ public record ScheduleCandidateDetailResponse(
         String scheduleId,
         String strategy,
         String summary,
-        Integer preferenceScore,
+        Integer preferenceCount,
+        Integer discoveryCount,
         int totalDistanceMeters,
         boolean editable,
         List<ScheduleDetailResponse.Day> days

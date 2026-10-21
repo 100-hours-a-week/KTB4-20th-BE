@@ -383,6 +383,7 @@ class UnconfirmedTripDeletionIntegrationTest {
                         trip,
                         strategy,
                         strategy == ScheduleStrategy.SHORTEST ? null : 80,
+                        strategy == ScheduleStrategy.SHORTEST ? null : 20,
                         now
                 ));
                 ScheduleDay day = dayRepository.save(new ScheduleDay(

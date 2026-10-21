@@ -48,7 +48,7 @@ class AiRecommendedPlaceMapperTest {
                 .isEqualTo("day-2-place-1");
     }
 
-    @DisplayName("최단거리·취향 우선·균형 코스를 전략별 추천 경로로 변환한다")
+    @DisplayName("최단거리·취향 우선·다양성 코스를 전략별 추천 경로로 변환한다")
     @Test
     void mapsThreeRecommendedRoutes() {
         List<List<AiPlaceSelectionResponse.Place>> shortest = List.of(
@@ -57,8 +57,8 @@ class AiRecommendedPlaceMapperTest {
         List<List<AiPlaceSelectionResponse.Place>> preference = List.of(
                 selectionPlaces("preference")
         );
-        List<List<AiPlaceSelectionResponse.Place>> balanced = List.of(
-                selectionPlaces("balanced")
+        List<List<AiPlaceSelectionResponse.Place>> diversity = List.of(
+                selectionPlaces("diversity")
         );
         AiPlaceSelectionResponse response = new AiPlaceSelectionResponse(
                 200,
@@ -66,13 +66,15 @@ class AiRecommendedPlaceMapperTest {
                         shortest,
                         List.of(
                                 new AiPlaceSelectionResponse.Route(
-                                        AiPlaceSelectionResponse.Strategy.BALANCED,
-                                        68,
-                                        balanced
+                                        AiPlaceSelectionResponse.Strategy.DIVERSITY,
+                                        5,
+                                        2,
+                                        diversity
                                 ),
                                 new AiPlaceSelectionResponse.Route(
                                         AiPlaceSelectionResponse.Strategy.PREFERENCE,
-                                        92,
+                                        7,
+                                        0,
                                         preference
                                 )
                         )
@@ -86,11 +88,14 @@ class AiRecommendedPlaceMapperTest {
                 .containsExactly(
                         ScheduleStrategy.SHORTEST,
                         ScheduleStrategy.PREFERENCE,
-                        ScheduleStrategy.BALANCED
+                        ScheduleStrategy.DIVERSITY
                 );
         assertThat(result)
-                .extracting(RecommendedRoute::preferenceScore)
-                .containsExactly(null, 92, 68);
+                .extracting(RecommendedRoute::preferenceCount)
+                .containsExactly(null, 7, 5);
+        assertThat(result)
+                .extracting(RecommendedRoute::discoveryCount)
+                .containsExactly(null, 0, 2);
         assertThat(result.get(1).days().getFirst())
                 .extracting(RecommendedPlace::googlePlaceId)
                 .containsExactly(
@@ -103,11 +108,11 @@ class AiRecommendedPlaceMapperTest {
         assertThat(result.get(2).days().getFirst())
                 .extracting(RecommendedPlace::googlePlaceId)
                 .containsExactly(
-                        "balanced-place-1",
-                        "balanced-place-2",
-                        "balanced-place-3",
-                        "balanced-place-4",
-                        "balanced-place-5"
+                        "diversity-place-1",
+                        "diversity-place-2",
+                        "diversity-place-3",
+                        "diversity-place-4",
+                        "diversity-place-5"
                 );
     }
 

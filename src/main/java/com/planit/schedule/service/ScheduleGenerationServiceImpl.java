@@ -192,7 +192,7 @@ public class ScheduleGenerationServiceImpl
             if (route == null
                     || route.strategy() == null
                     || !strategies.add(route.strategy())
-                    || route.preferenceScore() == null
+                    || hasInvalidCounts(route)
                     || route.days() == null
                     || route.days().size() != tripDayCount
                     || !route.days().stream()
@@ -203,8 +203,16 @@ public class ScheduleGenerationServiceImpl
 
         return strategies.equals(Set.of(
                 AiPlaceSelectionResponse.Strategy.PREFERENCE,
-                AiPlaceSelectionResponse.Strategy.BALANCED
+                AiPlaceSelectionResponse.Strategy.DIVERSITY
         ));
+    }
+
+    private boolean hasInvalidCounts(AiPlaceSelectionResponse.Route route) {
+        return route.preferenceCount() == null
+                || route.preferenceCount() < 0
+                || route.discoveryCount() == null
+                || route.discoveryCount() < 0
+                || route.preferenceCount() + route.discoveryCount() == 0;
     }
 
     private boolean isValidDailyPlaces(

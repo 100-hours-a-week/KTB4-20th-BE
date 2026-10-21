@@ -134,7 +134,8 @@ class AiTripClientTest {
                             "routes": [
                               {
                                 "strategy": "PREFERENCE",
-                                "preference_score": 92,
+                                "preference_count": 7,
+                                "discovery_count": 0,
                                 "days": [[
                                   {
                                     "id": "preference-place",
@@ -150,8 +151,9 @@ class AiTripClientTest {
                                 ]]
                               },
                               {
-                                "strategy": "BALANCED",
-                                "preference_score": 68,
+                                "strategy": "DIVERSITY",
+                                "preference_count": 5,
+                                "discovery_count": 2,
                                 "days": [[
                                   {
                                     "id": "balanced-place",
@@ -195,10 +197,12 @@ class AiTripClientTest {
         assertThat(response.data().routes()).hasSize(2);
         assertThat(response.data().routes().getFirst().strategy())
                 .isEqualTo(AiPlaceSelectionResponse.Strategy.PREFERENCE);
-        assertThat(response.data().routes().getFirst().preferenceScore())
-                .isEqualTo(92);
+        assertThat(response.data().routes().getFirst().preferenceCount())
+                .isEqualTo(7);
+        assertThat(response.data().routes().getFirst().discoveryCount())
+                .isZero();
         assertThat(response.data().routes().get(1).strategy())
-                .isEqualTo(AiPlaceSelectionResponse.Strategy.BALANCED);
+                .isEqualTo(AiPlaceSelectionResponse.Strategy.DIVERSITY);
         assertThat(response.data().routes().get(1).days().getFirst()
                 .getFirst().id()).isEqualTo("balanced-place");
         server.verify();
