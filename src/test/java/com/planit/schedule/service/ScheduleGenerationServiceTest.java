@@ -383,9 +383,9 @@ class ScheduleGenerationServiceTest {
         assertError(ErrorCode.AI_SCHEDULE_GENERATION_FAILED);
     }
 
-    @DisplayName("취향 우선과 균형 코스가 모두 포함된 AI 응답을 허용한다")
+    @DisplayName("취향 우선과 다양성 코스가 모두 포함된 AI 응답을 허용한다")
     @Test
-    void acceptsPreferenceAndBalancedRoutes() {
+    void acceptsPreferenceAndDiversityRoutes() {
         SchedulePlaceSelectionResponse response = service.generate(
                 USER_ID.toString(),
                 TRIP_ID,
@@ -400,9 +400,9 @@ class ScheduleGenerationServiceTest {
         );
     }
 
-    @DisplayName("AI 응답에 균형 코스가 없으면 거부한다")
+    @DisplayName("AI 응답에 다양성 코스가 없으면 거부한다")
     @Test
-    void rejectsAiResponseWithoutBalancedRoute() {
+    void rejectsAiResponseWithoutDiversityRoute() {
         AiPlaceSelectionResponse response = aiResponse();
         when(aiTripClient.selectPlaces(any())).thenReturn(
                 new AiPlaceSelectionResponse(
@@ -439,6 +439,33 @@ class ScheduleGenerationServiceTest {
         assertError(ErrorCode.AI_SCHEDULE_GENERATION_FAILED);
     }
 
+    @DisplayName("후보 코스의 취향 수와 발견 수 합계가 0이면 거부한다")
+    @Test
+    void rejectsRouteWithZeroTotalCount() {
+        AiPlaceSelectionResponse response = aiResponse();
+        AiPlaceSelectionResponse.Route invalidPreference =
+                new AiPlaceSelectionResponse.Route(
+                        AiPlaceSelectionResponse.Strategy.PREFERENCE,
+                        0,
+                        0,
+                        response.data().places()
+                );
+        when(aiTripClient.selectPlaces(any())).thenReturn(
+                new AiPlaceSelectionResponse(
+                        200,
+                        new AiPlaceSelectionResponse.Data(
+                                response.data().places(),
+                                List.of(
+                                        invalidPreference,
+                                        response.data().routes().get(1)
+                                )
+                        )
+                )
+        );
+
+        assertError(ErrorCode.AI_SCHEDULE_GENERATION_FAILED);
+    }
+
     @DisplayName("후보 코스의 Day 수가 여행 일수와 다르면 거부한다")
     @Test
     void rejectsRouteWithMismatchedDayCount() {
@@ -446,10 +473,11 @@ class ScheduleGenerationServiceTest {
         AiPlaceSelectionResponse response = aiResponse(2, 5);
         AiPlaceSelectionResponse.Route preference =
                 response.data().routes().getFirst();
-        AiPlaceSelectionResponse.Route invalidBalanced =
+        AiPlaceSelectionResponse.Route invalidDiversity =
                 new AiPlaceSelectionResponse.Route(
-                        AiPlaceSelectionResponse.Strategy.BALANCED,
-                        68,
+                        AiPlaceSelectionResponse.Strategy.DIVERSITY,
+                        5,
+                        2,
                         List.of(response.data().places().getFirst())
                 );
         when(aiTripClient.selectPlaces(any())).thenReturn(
@@ -457,7 +485,7 @@ class ScheduleGenerationServiceTest {
                         200,
                         new AiPlaceSelectionResponse.Data(
                                 response.data().places(),
-                                List.of(preference, invalidBalanced)
+                                List.of(preference, invalidDiversity)
                         )
                 )
         );
@@ -476,7 +504,8 @@ class ScheduleGenerationServiceTest {
         AiPlaceSelectionResponse.Route invalidPreference =
                 new AiPlaceSelectionResponse.Route(
                         AiPlaceSelectionResponse.Strategy.PREFERENCE,
-                        92,
+                        7,
+                        0,
                         List.of(places)
                 );
         when(aiTripClient.selectPlaces(any())).thenReturn(
@@ -613,12 +642,14 @@ class ScheduleGenerationServiceTest {
                         List.of(
                                 new AiPlaceSelectionResponse.Route(
                                         AiPlaceSelectionResponse.Strategy.PREFERENCE,
-                                        92,
+                                        7,
+                                        0,
                                         dailyPlaces
                                 ),
                                 new AiPlaceSelectionResponse.Route(
-                                        AiPlaceSelectionResponse.Strategy.BALANCED,
-                                        68,
+                                        AiPlaceSelectionResponse.Strategy.DIVERSITY,
+                                        5,
+                                        2,
                                         dailyPlaces
                                 )
                         )

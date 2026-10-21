@@ -125,6 +125,7 @@ class ScheduleControllerTest {
                                 "SHORTEST",
                                 "이동거리를 줄인 일정",
                                 null,
+                                null,
                                 7200
                         ))
                 ));
@@ -153,7 +154,8 @@ class ScheduleControllerTest {
                         "10",
                         "PREFERENCE",
                         "그룹 취향을 우선한 일정",
-                        92,
+                        7,
+                        0,
                         100,
                         false,
                         List.of(new ScheduleDetailResponse.Day(
@@ -175,7 +177,8 @@ class ScheduleControllerTest {
                 .andExpect(jsonPath("$.code")
                         .value("SCHEDULE_CANDIDATE_RETRIEVED"))
                 .andExpect(jsonPath("$.data.scheduleId").value("10"))
-                .andExpect(jsonPath("$.data.preferenceScore").value(92))
+                .andExpect(jsonPath("$.data.preferenceCount").value(7))
+                .andExpect(jsonPath("$.data.discoveryCount").value(0))
                 .andExpect(jsonPath("$.data.editable").value(false))
                 .andExpect(jsonPath("$.data.days[0].dayNumber").value(1));
     }
