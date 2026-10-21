@@ -42,6 +42,7 @@ public final class AiRecommendedPlaceMapper {
         routes.add(new RecommendedRoute(
                 ScheduleStrategy.SHORTEST,
                 null,
+                null,
                 mapDailyPlaces(response)
         ));
         routes.add(mapRoute(
@@ -50,7 +51,7 @@ public final class AiRecommendedPlaceMapper {
         ));
         routes.add(mapRoute(
                 response,
-                AiPlaceSelectionResponse.Strategy.BALANCED
+                AiPlaceSelectionResponse.Strategy.DIVERSITY
         ));
         return List.copyOf(routes);
     }
@@ -65,7 +66,8 @@ public final class AiRecommendedPlaceMapper {
                 .orElseThrow(() -> invalid("AI 추천 경로 전략이 누락되었습니다."));
         return new RecommendedRoute(
                 ScheduleStrategy.valueOf(strategy.name()),
-                route.preferenceScore(),
+                route.preferenceCount(),
+                route.discoveryCount(),
                 route.days().stream()
                         .map(this::mapDay)
                         .toList()

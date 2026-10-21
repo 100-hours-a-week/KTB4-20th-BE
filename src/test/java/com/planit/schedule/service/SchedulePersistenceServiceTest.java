@@ -210,18 +210,19 @@ class SchedulePersistenceServiceTest {
                         Schedule::getStrategy,
                         Schedule::getStatus,
                         Schedule::getActiveConfirmedSlot,
-                        Schedule::getPreferenceScore,
+                        Schedule::getPreferenceCount,
+                        Schedule::getDiscoveryCount,
                         Schedule::getConfirmedAt
                 )
                 .containsExactly(
                         org.assertj.core.groups.Tuple.tuple(
-                                "SHORTEST", "DRAFT", null, null, null
+                                "SHORTEST", "DRAFT", null, null, null, null
                         ),
                         org.assertj.core.groups.Tuple.tuple(
-                                "PREFERENCE", "DRAFT", null, 92, null
+                                "PREFERENCE", "DRAFT", null, 7, 0, null
                         ),
                         org.assertj.core.groups.Tuple.tuple(
-                                "BALANCED", "DRAFT", null, 68, null
+                                "DIVERSITY", "DRAFT", null, 5, 2, null
                         )
                 );
         verify(dayRepository, times(3)).save(any(ScheduleDay.class));
@@ -235,7 +236,7 @@ class SchedulePersistenceServiceTest {
         doThrow(new IllegalStateException("third candidate failed"))
                 .when(dayRepository)
                 .save(org.mockito.ArgumentMatchers.argThat(day ->
-                        day.getSchedule().getStrategy().equals("BALANCED")
+                        day.getSchedule().getStrategy().equals("DIVERSITY")
                 ));
 
         assertThatThrownBy(() -> service.saveCandidates(
@@ -255,6 +256,7 @@ class SchedulePersistenceServiceTest {
                 new RecommendedRoute(
                         ScheduleStrategy.SHORTEST,
                         100,
+                        null,
                         List.of(recommendations("shortest", 5))
                 ),
                 candidates().get(1),
@@ -424,17 +426,20 @@ class SchedulePersistenceServiceTest {
                 new RecommendedRoute(
                         ScheduleStrategy.SHORTEST,
                         null,
+                        null,
                         List.of(recommendations("shortest", 5))
                 ),
                 new RecommendedRoute(
                         ScheduleStrategy.PREFERENCE,
-                        92,
+                        7,
+                        0,
                         List.of(recommendations("preference", 5))
                 ),
                 new RecommendedRoute(
-                        ScheduleStrategy.BALANCED,
-                        68,
-                        List.of(recommendations("balanced", 5))
+                        ScheduleStrategy.DIVERSITY,
+                        5,
+                        2,
+                        List.of(recommendations("diversity", 5))
                 )
         );
     }

@@ -14,7 +14,8 @@ public record ScheduleCandidateListResponse(
             String scheduleId,
             String strategy,
             String summary,
-            Integer preferenceScore,
+            Integer preferenceCount,
+            Integer discoveryCount,
             int totalDistanceMeters
     ) {
     }
