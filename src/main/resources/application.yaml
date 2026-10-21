@@ -77,7 +77,7 @@ management:
       discovery:
         enabled: false
       exposure:
-        include: health,metrics
+        include: health,prometheus
   endpoint:
     health:
       show-details: never
@@ -85,6 +85,10 @@ management:
   health:
     db:
       enabled: true
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
 
 sentry:
   # SENTRY_DSN이 없으면 Sentry가 꺼진다. 운영 서버에만 설정한다.
