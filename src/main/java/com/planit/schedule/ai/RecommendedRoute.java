@@ -6,7 +6,8 @@ import java.util.List;
 
 public record RecommendedRoute(
         ScheduleStrategy strategy,
-        Integer preferenceScore,
+        Integer preferenceCount,
+        Integer discoveryCount,
         List<List<RecommendedPlace>> days
 ) {
     public RecommendedRoute {

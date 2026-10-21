@@ -145,17 +145,22 @@ public class SchedulePersistenceService {
         if (route == null
                 || route.strategy() == null
                 || !strategies.add(route.strategy())
-                || hasInvalidPreferenceScore(route)
+                || hasInvalidCounts(route)
                 || route.days() == null
                 || route.days().size() != tripDayCount) {
             throw new BusinessException(INVALID_AI_PLACE_RESULT);
         }
     }
 
-    private boolean hasInvalidPreferenceScore(RecommendedRoute route) {
+    private boolean hasInvalidCounts(RecommendedRoute route) {
         return route.strategy() == ScheduleStrategy.SHORTEST
-                ? route.preferenceScore() != null
-                : route.preferenceScore() == null;
+                ? route.preferenceCount() != null
+                || route.discoveryCount() != null
+                : route.preferenceCount() == null
+                || route.preferenceCount() < 0
+                || route.discoveryCount() == null
+                || route.discoveryCount() < 0
+                || route.preferenceCount() + route.discoveryCount() == 0;
     }
 
     private GeneratedScheduleResult saveCandidate(
@@ -166,7 +171,8 @@ public class SchedulePersistenceService {
         Schedule schedule = scheduleRepository.save(new Schedule(
                 trip,
                 route.strategy(),
-                route.preferenceScore(),
+                route.preferenceCount(),
+                route.discoveryCount(),
                 now
         ));
         List<String> dayIds = new ArrayList<>();
