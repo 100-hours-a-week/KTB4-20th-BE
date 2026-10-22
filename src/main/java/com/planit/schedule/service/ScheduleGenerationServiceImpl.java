@@ -17,6 +17,7 @@ import com.planit.repository.TripMemberRepository;
 import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
 import com.planit.schedule.domain.ScheduleGenerationReason;
+import com.planit.schedule.domain.ScheduleDayPlacePolicy;
 import com.planit.schedule.dto.SchedulePlaceSelectionResponse;
 import com.planit.schedule.ai.AiRecommendedPlaceMapper;
 import com.planit.schedule.ai.RecommendedRoute;
@@ -41,8 +42,6 @@ public class ScheduleGenerationServiceImpl
         implements ScheduleGenerationService {
 
     private static final ZoneId SEOUL_ZONE = ZoneId.of("Asia/Seoul");
-    private static final int REQUIRED_PLACE_MIN_COUNT = 5;
-
     private final UserRepository userRepository;
     private final TripRepository tripRepository;
     private final TripMemberRepository tripMemberRepository;
@@ -173,9 +172,7 @@ public class ScheduleGenerationServiceImpl
                 trip.getStartDate(),
                 trip.getEndDate()
         ) + 1;
-        return response.data().places().size() == tripDayCount
-                && response.data().places().stream()
-                .allMatch(this::isValidDailyPlaces)
+        return hasValidDailyPlaces(response.data().places(), tripDayCount)
                 && isValidRoutes(response.data().routes(), tripDayCount);
     }
 
@@ -194,9 +191,7 @@ public class ScheduleGenerationServiceImpl
                     || !strategies.add(route.strategy())
                     || hasInvalidCounts(route)
                     || route.days() == null
-                    || route.days().size() != tripDayCount
-                    || !route.days().stream()
-                    .allMatch(this::isValidDailyPlaces)) {
+                    || !hasValidDailyPlaces(route.days(), tripDayCount)) {
                 return false;
             }
         }
@@ -215,10 +210,31 @@ public class ScheduleGenerationServiceImpl
                 || route.preferenceCount() + route.discoveryCount() == 0;
     }
 
-    private boolean isValidDailyPlaces(
-            List<AiPlaceSelectionResponse.Place> places
+    private boolean hasValidDailyPlaces(
+            List<List<AiPlaceSelectionResponse.Place>> dailyPlaces,
+            long tripDayCount
     ) {
-        if (places == null || places.size() < REQUIRED_PLACE_MIN_COUNT) {
+        if (dailyPlaces == null || dailyPlaces.size() != tripDayCount) {
+            return false;
+        }
+
+        for (int dayIndex = 0; dayIndex < dailyPlaces.size(); dayIndex++) {
+            int minimumCount = ScheduleDayPlacePolicy.minimumGeneratedPlaces(
+                    dayIndex + 1,
+                    dailyPlaces.size()
+            );
+            if (!isValidDailyPlaces(dailyPlaces.get(dayIndex), minimumCount)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean isValidDailyPlaces(
+            List<AiPlaceSelectionResponse.Place> places,
+            int minimumCount
+    ) {
+        if (places == null || places.size() < minimumCount) {
             return false;
         }
 

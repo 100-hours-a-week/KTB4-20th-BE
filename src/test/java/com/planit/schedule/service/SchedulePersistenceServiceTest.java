@@ -248,6 +248,58 @@ class SchedulePersistenceServiceTest {
         verify(scheduleRepository, times(3)).save(any(Schedule.class));
     }
 
+    @DisplayName("여러 날 후보의 마지막 날은 장소 두 개를 저장한다")
+    @Test
+    void savesTwoPlacesOnLastDayOfMultiDayCandidates() {
+        when(trip.getEndDate()).thenReturn(LocalDate.of(2026, 10, 2));
+
+        List<GeneratedScheduleResult> results = service.saveCandidates(
+                1L,
+                candidatesByDay(5, 2),
+                ScheduleGenerationMode.INITIAL
+        );
+
+        assertThat(results)
+                .extracting(GeneratedScheduleResult::placeCount)
+                .containsExactly(7, 7, 7);
+    }
+
+    @DisplayName("여러 날 후보의 첫날이 다섯 개 미만이면 저장 전에 거부한다")
+    @Test
+    void rejectsFewerThanFivePlacesBeforeLastDay() {
+        when(trip.getEndDate()).thenReturn(LocalDate.of(2026, 10, 2));
+
+        assertThatThrownBy(() -> service.saveCandidates(
+                1L,
+                candidatesByDay(4, 2),
+                ScheduleGenerationMode.INITIAL
+        )).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(INVALID_AI_PLACE_RESULT)
+        );
+
+        verify(scheduleRepository, never()).save(any(Schedule.class));
+    }
+
+    @DisplayName("여러 날 후보의 마지막 날이 두 개 미만이면 저장 전에 거부한다")
+    @Test
+    void rejectsFewerThanTwoPlacesOnLastDay() {
+        when(trip.getEndDate()).thenReturn(LocalDate.of(2026, 10, 2));
+
+        assertThatThrownBy(() -> service.saveCandidates(
+                1L,
+                candidatesByDay(5, 1),
+                ScheduleGenerationMode.INITIAL
+        )).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(INVALID_AI_PLACE_RESULT)
+        );
+
+        verify(scheduleRepository, never()).save(any(Schedule.class));
+    }
+
     @DisplayName("후보 값이 유효하지 않으면 기존 일정을 변경하기 전에 거부한다")
     @Test
     void validatesCandidateValuesBeforeReplacingExistingSchedule() {
@@ -440,6 +492,41 @@ class SchedulePersistenceServiceTest {
                         5,
                         2,
                         List.of(recommendations("diversity", 5))
+                )
+        );
+    }
+
+    private List<RecommendedRoute> candidatesByDay(
+            int firstDayCount,
+            int lastDayCount
+    ) {
+        return List.of(
+                new RecommendedRoute(
+                        ScheduleStrategy.SHORTEST,
+                        null,
+                        null,
+                        List.of(
+                                recommendations("shortest-first", firstDayCount),
+                                recommendations("shortest-last", lastDayCount)
+                        )
+                ),
+                new RecommendedRoute(
+                        ScheduleStrategy.PREFERENCE,
+                        7,
+                        0,
+                        List.of(
+                                recommendations("preference-first", firstDayCount),
+                                recommendations("preference-last", lastDayCount)
+                        )
+                ),
+                new RecommendedRoute(
+                        ScheduleStrategy.DIVERSITY,
+                        5,
+                        2,
+                        List.of(
+                                recommendations("diversity-first", firstDayCount),
+                                recommendations("diversity-last", lastDayCount)
+                        )
                 )
         );
     }

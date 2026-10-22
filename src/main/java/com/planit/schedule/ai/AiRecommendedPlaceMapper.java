@@ -11,13 +11,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.stream.IntStream;
 
+import static com.planit.schedule.domain.ScheduleDayPlacePolicy.minimumGeneratedPlaces;
 import static com.planit.schedule.route.RouteCalculationException.Reason.INVALID_PLACE_RESULT;
 
 @Component
 public final class AiRecommendedPlaceMapper {
-
-    private static final int REQUIRED_PLACE_MIN_COUNT = 5;
 
     public List<List<RecommendedPlace>> mapDailyPlaces(
             AiPlaceSelectionResponse response
@@ -30,9 +30,7 @@ public final class AiRecommendedPlaceMapper {
             throw invalid("AI 추천 장소 응답은 날짜별 장소 목록을 포함해야 합니다.");
         }
 
-        return response.data().places().stream()
-                .map(this::mapDay)
-                .toList();
+        return mapDays(response.data().places());
     }
 
     public List<RecommendedRoute> mapRoutes(
@@ -68,18 +66,31 @@ public final class AiRecommendedPlaceMapper {
                 ScheduleStrategy.valueOf(strategy.name()),
                 route.preferenceCount(),
                 route.discoveryCount(),
-                route.days().stream()
-                        .map(this::mapDay)
-                        .toList()
+                mapDays(route.days())
         );
     }
 
+    private List<List<RecommendedPlace>> mapDays(
+            List<List<AiPlaceSelectionResponse.Place>> dailyPlaces
+    ) {
+        return IntStream.range(0, dailyPlaces.size())
+                .mapToObj(dayIndex -> mapDay(
+                        dailyPlaces.get(dayIndex),
+                        minimumGeneratedPlaces(
+                                dayIndex + 1,
+                                dailyPlaces.size()
+                        )
+                ))
+                .toList();
+    }
+
     private List<RecommendedPlace> mapDay(
-            List<AiPlaceSelectionResponse.Place> places
+            List<AiPlaceSelectionResponse.Place> places,
+            int minimumCount
     ) {
         if (places == null
-                || places.size() < REQUIRED_PLACE_MIN_COUNT) {
-            throw invalid("날짜별 AI 추천 장소는 5개 이상이어야 합니다.");
+                || places.size() < minimumCount) {
+            throw invalid("날짜별 AI 추천 장소 수가 최소 기준보다 적습니다.");
         }
 
         Set<String> googlePlaceIds = new HashSet<>();
