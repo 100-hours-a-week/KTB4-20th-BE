@@ -9,6 +9,7 @@ import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
 import com.planit.photomission.domain.Mission;
 import com.planit.photomission.domain.MissionGroupState;
+import com.planit.photomission.domain.MissionCompletionMethod;
 import com.planit.photomission.domain.MissionCompletionStatus;
 import com.planit.photomission.domain.MissionParticipation;
 import com.planit.photomission.domain.MissionPhoto;
@@ -432,6 +433,130 @@ class PhotoMissionSubmissionTransactionServiceTest {
 
         assertThat(photoId).isEqualTo(43L);
         verify(imageFileRepository).save(any(ImageFile.class));
+    }
+
+    @DisplayName("직접 완료 사진을 올리면 개인 미션의 남은 사진을 교체하고 바로 직접 완료한다")
+    @Test
+    void completesPersonalMissionManuallyWithNewPhoto() {
+        Fixture fixture = fixture(MissionScope.PERSONAL);
+        MissionParticipation participation = MissionParticipation.create(
+                fixture.mission(), fixture.member(), LocalDateTime.now()
+        );
+        ReflectionTestUtils.setField(participation, "id", 61L);
+        failThreeTimes(participation);
+        MissionPhoto previous = MissionPhoto.personal(
+                participation,
+                ImageFile.mission("old.jpg", "old.jpg", "image/jpeg", 10),
+                UUID.randomUUID(),
+                null,
+                null,
+                LocalDateTime.now().minusMinutes(1)
+        );
+        stubCommon(fixture);
+        when(participationRepository.findByMissionIdAndTripMemberId(31L, 21L))
+                .thenReturn(Optional.of(participation));
+        when(photoRepository.findActiveByParticipationId(61L))
+                .thenReturn(Optional.of(previous));
+        stubSave(44L);
+
+        Long photoId = saveManualCompletionPhoto();
+
+        assertThat(photoId).isEqualTo(44L);
+        assertThat(previous.getReplacedAt()).isEqualTo(SEOUL_NOW);
+        verify(photoRepository).flush();
+        ArgumentCaptor<MissionPhoto> captor =
+                ArgumentCaptor.forClass(MissionPhoto.class);
+        verify(photoRepository).save(captor.capture());
+        assertThat(captor.getValue().getActiveSlot()).isEqualTo((byte) 1);
+        assertThat(participation.getStatus())
+                .isEqualTo(MissionCompletionStatus.COMPLETED);
+        assertThat(participation.getCompletionMethod())
+                .isEqualTo(MissionCompletionMethod.MANUAL);
+    }
+
+    @DisplayName("직접 완료 사진을 올리면 단체 미션의 대표 사진으로 지정하고 바로 직접 완료한다")
+    @Test
+    void completesGroupMissionManuallyWithNewPhoto() {
+        Fixture fixture = fixture(MissionScope.GROUP);
+        MissionGroupState state = MissionGroupState.create(
+                fixture.mission(), LocalDateTime.now()
+        );
+        state.recordUnsuccessfulEvaluation(LocalDateTime.now());
+        state.recordUnsuccessfulEvaluation(LocalDateTime.now());
+        state.recordUnsuccessfulEvaluation(LocalDateTime.now());
+        stubCommon(fixture);
+        when(groupStateRepository.findByMissionId(31L))
+                .thenReturn(Optional.of(state));
+        stubSave(45L);
+
+        Long photoId = saveManualCompletionPhoto();
+
+        assertThat(photoId).isEqualTo(45L);
+        ArgumentCaptor<MissionPhoto> captor =
+                ArgumentCaptor.forClass(MissionPhoto.class);
+        verify(photoRepository).save(captor.capture());
+        assertThat(captor.getValue().getRepresentativeSlot())
+                .isEqualTo((byte) 1);
+        assertThat(captor.getValue().getSubmittedBy())
+                .isSameAs(fixture.member());
+        assertThat(state.getStatus())
+                .isEqualTo(MissionCompletionStatus.COMPLETED);
+        assertThat(state.getCompletionMethod())
+                .isEqualTo(MissionCompletionMethod.MANUAL);
+    }
+
+    @DisplayName("판정 실패 3회 전에는 사진으로 직접 완료할 수 없다")
+    @Test
+    void rejectsManualCompletionPhotoBeforeThreeFailures() {
+        Fixture fixture = fixture(MissionScope.PERSONAL);
+        MissionParticipation participation = MissionParticipation.create(
+                fixture.mission(), fixture.member(), LocalDateTime.now()
+        );
+        stubCommon(fixture);
+        when(participationRepository.findByMissionIdAndTripMemberId(31L, 21L))
+                .thenReturn(Optional.of(participation));
+
+        assertThatThrownBy(this::saveManualCompletionPhoto)
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception ->
+                        ((BusinessException) exception).getErrorCode())
+                .isEqualTo(
+                        ErrorCode.PHOTO_MISSION_MANUAL_COMPLETION_NOT_ALLOWED
+                );
+        verify(imageFileRepository, never()).save(any());
+        assertThat(participation.getStatus())
+                .isEqualTo(MissionCompletionStatus.PENDING);
+    }
+
+    private Long saveManualCompletionPhoto() {
+        return service.saveManualCompletionPhoto(
+                USER_PUBLIC_ID.toString(),
+                31L,
+                UUID.randomUUID(),
+                "missions/31/manual.jpg",
+                "manual.jpg",
+                "image/jpeg",
+                1024,
+                null,
+                null
+        );
+    }
+
+    private void stubSave(Long photoId) {
+        when(imageFileRepository.save(any(ImageFile.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(photoRepository.save(any(MissionPhoto.class)))
+                .thenAnswer(invocation -> {
+                    MissionPhoto photo = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(photo, "id", photoId);
+                    return photo;
+                });
+    }
+
+    private void failThreeTimes(MissionParticipation participation) {
+        participation.recordUnsuccessfulEvaluation(LocalDateTime.now());
+        participation.recordUnsuccessfulEvaluation(LocalDateTime.now());
+        participation.recordUnsuccessfulEvaluation(LocalDateTime.now());
     }
 
     private void stubCommon(Fixture fixture) {

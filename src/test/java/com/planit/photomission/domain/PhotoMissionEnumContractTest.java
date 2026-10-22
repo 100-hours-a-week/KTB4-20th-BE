@@ -23,8 +23,7 @@ class PhotoMissionEnumContractTest {
         assertThat(MissionCompletionStatus.values())
                 .containsExactly(
                         MissionCompletionStatus.PENDING,
-                        MissionCompletionStatus.COMPLETED,
-                        MissionCompletionStatus.FAILED
+                        MissionCompletionStatus.COMPLETED
                 );
         assertThat(MissionCompletionMethod.values())
                 .containsExactly(
