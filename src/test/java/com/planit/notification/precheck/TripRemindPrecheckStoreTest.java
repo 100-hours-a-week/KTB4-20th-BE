@@ -10,6 +10,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Collections;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -124,6 +125,18 @@ class TripRemindPrecheckStoreTest {
     @DisplayName("사전 점검 키가 없으면 빈 결과를 반환한다")
     @Test
     void returnsEmptyForMissingPrecheck() {
+        // Lettuce는 스크립트의 nil 응답을 [null]로 돌려준다
+        when(redisTemplate.execute(
+                any(RedisScript.class),
+                any()
+        )).thenReturn(Collections.singletonList(null));
+
+        assertThat(store.find(LocalDate.of(2026, 10, 11))).isEmpty();
+    }
+
+    @DisplayName("Redis가 조회 결과를 반환하지 않으면 빈 결과를 반환한다")
+    @Test
+    void returnsEmptyForNullFindResult() {
         when(redisTemplate.execute(
                 any(RedisScript.class),
                 any()
