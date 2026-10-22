@@ -52,11 +52,12 @@ jobs:
             github.event.pull_request.head.repo.full_name != github.repository ||
             (
               github.head_ref != 'dev' &&
-              github.head_ref != vars.MAIN_PR_EXCEPTION_BRANCH
+              github.head_ref != vars.MAIN_PR_EXCEPTION_BRANCH &&
+              !startsWith(github.head_ref, 'hotfix/')
             )
           )
         run: |
-          echo "::error::main에는 같은 저장소의 dev 브랜치에서만 PR을 보낼 수 있습니다."
+          echo "::error::main에는 같은 저장소의 dev 브랜치와 hotfix/ 또는 지정된 예외 브랜치에서만 PR을 보낼 수 있습니다."
           exit 1
 
       - name: Checkout
