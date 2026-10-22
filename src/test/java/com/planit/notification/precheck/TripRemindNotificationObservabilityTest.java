@@ -56,7 +56,7 @@ class TripRemindNotificationObservabilityTest {
         assertThat(output).contains("ShedLock 최대 실행시간을 초과했습니다");
     }
 
-    @DisplayName("11시 복구 실패를 최종 장애로 기록한다")
+    @DisplayName("13시 45분 복구 실패를 최종 장애로 기록한다")
     @Test
     void recordsFinalRecoveryFailure(CapturedOutput output) {
         SimpleMeterRegistry registry = new SimpleMeterRegistry();

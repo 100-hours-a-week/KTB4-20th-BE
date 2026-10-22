@@ -77,9 +77,9 @@ class TripRemindNotificationSchedulerTest {
         Scheduled recovery = method("runRecovery")
                 .getAnnotation(Scheduled.class);
 
-        assertThat(primary.cron()).isEqualTo("0 40 11 * * *");
+        assertThat(primary.cron()).isEqualTo("0 35 13 * * *");
         assertThat(primary.zone()).isEqualTo("Asia/Seoul");
-        assertThat(recovery.cron()).isEqualTo("0 50 11 * * *");
+        assertThat(recovery.cron()).isEqualTo("0 45 13 * * *");
         assertThat(recovery.zone()).isEqualTo("Asia/Seoul");
     }
 
