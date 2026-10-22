@@ -53,7 +53,7 @@ public class TripRemindNotificationObservability {
             RuntimeException exception
     ) {
         Counter.builder("planit.notification.workflow.recovery_failures")
-                .description("13:45 알림 복구 워크플로의 최종 실패 횟수")
+                .description("14:20 알림 복구 워크플로의 최종 실패 횟수")
                 .register(meterRegistry)
                 .increment();
         log.error(
