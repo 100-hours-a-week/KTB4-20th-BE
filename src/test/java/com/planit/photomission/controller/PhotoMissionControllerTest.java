@@ -26,6 +26,7 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -131,6 +132,25 @@ class PhotoMissionControllerTest {
                         .value("PHOTO_MISSION_MANUALLY_COMPLETED"));
 
         verify(manualCompletionService).complete(USER_PUBLIC_ID, 31L);
+    }
+
+    @DisplayName("사진을 함께 보내면 그 사진으로 미션을 직접 완료한다")
+    @Test
+    void completesMissionManuallyWithPhoto() throws Exception {
+        when(submissionService.completeManuallyWithPhoto(
+                any(), any(), any(), any(), any(), any()
+        )).thenReturn(44L);
+
+        mockMvc.perform(multipart("/api/photomissions/31/manual-completion")
+                        .file(jpegPhoto())
+                        .header("Idempotency-Key", UUID.randomUUID())
+                        .principal(authentication()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code")
+                        .value("PHOTO_MISSION_MANUALLY_COMPLETED"))
+                .andExpect(jsonPath("$.data.photoId").value(44));
+
+        verify(manualCompletionService, never()).complete(any(), any());
     }
 
     @DisplayName("선택한 Day의 포토미션 목록을 조회한다")

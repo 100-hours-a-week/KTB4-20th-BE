@@ -116,9 +116,9 @@ class MissionGroupStateTest {
         assertThat(state.getCompletedAt()).isNull();
     }
 
-    @DisplayName("직접 완료한 단체 미션의 마지막 사진을 삭제하면 실패 처리한다")
+    @DisplayName("직접 완료한 단체 미션의 마지막 사진을 삭제하면 판정 횟수를 유지한 채 미완료로 되돌린다")
     @Test
-    void failsManualCompletionAfterDeletingLastPhoto() {
+    void reopensManualCompletionAfterDeletingLastPhoto() {
         MissionGroupState state =
                 MissionGroupState.create(groupMission(), now());
         state.recordUnsuccessfulEvaluation(now());
@@ -129,14 +129,16 @@ class MissionGroupStateTest {
         state.reflectPhotoDeletion(false, now().plusMinutes(1));
 
         assertThat(state.getStatus())
-                .isEqualTo(MissionCompletionStatus.FAILED);
+                .isEqualTo(MissionCompletionStatus.PENDING);
         assertThat(state.getCompletionMethod()).isNull();
         assertThat(state.getCompletedAt()).isNull();
+        assertThat(state.getRetryCount()).isEqualTo(3);
+        assertThat(state.canCompleteManually()).isTrue();
     }
 
-    @DisplayName("직접 완료 가능한 마지막 사진을 삭제하면 단체 미션을 실패 처리한다")
+    @DisplayName("판정 실패 3회 뒤 마지막 사진을 삭제해도 단체 미션을 직접 완료할 수 있다")
     @Test
-    void failsAfterDeletingLastManualCompletionPhoto() {
+    void keepsManualCompletionAfterDeletingLastFailedPhoto() {
         MissionGroupState state =
                 MissionGroupState.create(groupMission(), now());
         state.recordUnsuccessfulEvaluation(now());
@@ -146,8 +148,10 @@ class MissionGroupStateTest {
         state.reflectPhotoDeletion(false, now().plusMinutes(1));
 
         assertThat(state.getStatus())
-                .isEqualTo(MissionCompletionStatus.FAILED);
-        assertThat(state.canCompleteManually()).isFalse();
+                .isEqualTo(MissionCompletionStatus.PENDING);
+        assertThat(state.getRetryCount()).isEqualTo(3);
+        assertThat(state.canCompleteManually()).isTrue();
+        assertThat(state.canSubmitPhoto()).isFalse();
     }
 
     private Mission personalMission() {

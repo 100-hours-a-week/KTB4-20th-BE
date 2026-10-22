@@ -178,6 +178,74 @@ public class PhotoMissionSubmissionTransactionService {
         return photoRepository.save(photo).getId();
     }
 
+    @Transactional
+    public Long saveManualCompletionPhoto(
+            String userPublicId,
+            Long missionId,
+            UUID idempotencyKey,
+            String imageKey,
+            String originalFilename,
+            String mimeType,
+            int sizeBytes,
+            BigDecimal latitude,
+            BigDecimal longitude
+    ) {
+        SubmissionContext context = loadSubmissionContext(
+                userPublicId,
+                missionId,
+                idempotencyKey
+        );
+        Mission mission = context.mission();
+        TripMember member = context.member();
+        LocalDateTime now = context.now();
+        MissionParticipation participation = null;
+        MissionGroupState state = null;
+        if (mission.isPersonal()) {
+            participation = participationRepository
+                    .findByMissionIdAndTripMemberId(missionId, member.getId())
+                    .filter(MissionParticipation::canCompleteManually)
+                    .orElseThrow(this::manualCompletionNotAllowed);
+        } else {
+            state = groupStateRepository.findByMissionId(missionId)
+                    .filter(MissionGroupState::canCompleteManually)
+                    .orElseThrow(this::manualCompletionNotAllowed);
+        }
+
+        ImageFile imageFile = saveImageFile(
+                imageKey, originalFilename, mimeType, sizeBytes, now
+        );
+        MissionPhoto photo;
+        if (participation != null) {
+            photoRepository.findActiveByParticipationId(participation.getId())
+                    .ifPresent(activePhoto -> {
+                        activePhoto.replace(now);
+                        photoRepository.flush();
+                    });
+            photo = MissionPhoto.personal(
+                    participation,
+                    imageFile,
+                    idempotencyKey,
+                    latitude,
+                    longitude,
+                    now
+            );
+            participation.completeManually(now);
+        } else {
+            photo = MissionPhoto.group(
+                    mission,
+                    member,
+                    imageFile,
+                    idempotencyKey,
+                    latitude,
+                    longitude,
+                    now
+            );
+            photo.markRepresentative();
+            state.completeManually(now);
+        }
+        return photoRepository.save(photo).getId();
+    }
+
     private SubmissionContext loadSubmissionContext(
             String userPublicId,
             Long missionId,
@@ -244,6 +312,12 @@ public class PhotoMissionSubmissionTransactionService {
     private BusinessException submissionNotAllowed() {
         return new BusinessException(
                 ErrorCode.PHOTO_MISSION_SUBMISSION_NOT_ALLOWED
+        );
+    }
+
+    private BusinessException manualCompletionNotAllowed() {
+        return new BusinessException(
+                ErrorCode.PHOTO_MISSION_MANUAL_COMPLETION_NOT_ALLOWED
         );
     }
 

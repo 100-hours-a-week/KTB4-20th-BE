@@ -123,6 +123,33 @@ public class PhotoMissionController {
         );
     }
 
+    @PostMapping(
+            path = "/photomissions/{missionId}/manual-completion",
+            consumes = "multipart/form-data"
+    )
+    public ApiResponse<PhotoMissionPhotoUploadResponse> completeManuallyWithPhoto(
+            Authentication authentication,
+            @PathVariable Long missionId,
+            @RequestHeader("Idempotency-Key") UUID idempotencyKey,
+            @RequestPart("photo") MultipartFile photo,
+            @RequestParam(required = false) BigDecimal latitude,
+            @RequestParam(required = false) BigDecimal longitude
+    ) {
+        Long photoId = submissionService.completeManuallyWithPhoto(
+                authentication.getName(),
+                missionId,
+                idempotencyKey,
+                photo,
+                latitude,
+                longitude
+        );
+        return ApiResponse.success(
+                "PHOTO_MISSION_MANUALLY_COMPLETED",
+                "미션을 직접 완료했습니다.",
+                new PhotoMissionPhotoUploadResponse(photoId)
+        );
+    }
+
     @GetMapping("/trips/{tripId}/photomissions")
     public ApiResponse<PhotoMissionListResponse> getPhotoMissions(
             Authentication authentication,

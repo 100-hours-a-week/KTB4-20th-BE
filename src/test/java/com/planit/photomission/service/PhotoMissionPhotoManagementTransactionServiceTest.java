@@ -93,9 +93,9 @@ class PhotoMissionPhotoManagementTransactionServiceTest {
                 .isEqualTo(MissionCompletionStatus.PENDING);
     }
 
-    @DisplayName("직접 완료 가능한 개인 미션의 마지막 사진을 삭제하면 실패 처리한다")
+    @DisplayName("판정 실패 3회 뒤 개인 미션의 마지막 사진을 삭제해도 직접 완료할 수 있다")
     @Test
-    void failsPersonalMissionAfterDeletingLastManualCompletionPhoto() {
+    void keepsPersonalManualCompletionAfterDeletingLastPhoto() {
         Fixture fixture = fixture(MissionScope.PERSONAL, USER_PUBLIC_ID);
         MissionParticipation participation = MissionParticipation.create(
                 fixture.mission(), fixture.member(), now().minusHours(1)
@@ -113,7 +113,8 @@ class PhotoMissionPhotoManagementTransactionServiceTest {
         );
 
         assertThat(participation.getStatus())
-                .isEqualTo(MissionCompletionStatus.FAILED);
+                .isEqualTo(MissionCompletionStatus.PENDING);
+        assertThat(participation.canCompleteManually()).isTrue();
     }
 
     @DisplayName("단체 대표 사진을 삭제하면 가장 오래된 성공 사진을 대표로 승계한다")
@@ -201,9 +202,9 @@ class PhotoMissionPhotoManagementTransactionServiceTest {
                 .isEqualTo(MissionCompletionStatus.COMPLETED);
     }
 
-    @DisplayName("직접 완료한 단체 미션의 마지막 사진을 삭제하면 실패 처리한다")
+    @DisplayName("직접 완료한 단체 미션의 마지막 사진을 삭제하면 미완료로 되돌린다")
     @Test
-    void failsManualGroupMissionAfterDeletingLastPhoto() {
+    void reopensManualGroupMissionAfterDeletingLastPhoto() {
         Fixture fixture = fixture(MissionScope.GROUP, USER_PUBLIC_ID);
         MissionGroupState state = manuallyCompletedGroupState(fixture);
         MissionPhoto representative = groupPhoto(
@@ -223,12 +224,13 @@ class PhotoMissionPhotoManagementTransactionServiceTest {
         );
 
         assertThat(state.getStatus())
-                .isEqualTo(MissionCompletionStatus.FAILED);
+                .isEqualTo(MissionCompletionStatus.PENDING);
+        assertThat(state.canCompleteManually()).isTrue();
     }
 
-    @DisplayName("직접 완료 가능한 단체 미션의 마지막 사진을 삭제하면 실패 처리한다")
+    @DisplayName("판정 실패 3회 뒤 단체 미션의 마지막 사진을 삭제해도 직접 완료할 수 있다")
     @Test
-    void failsPendingGroupMissionAfterDeletingLastPhoto() {
+    void keepsPendingGroupMissionAfterDeletingLastPhoto() {
         Fixture fixture = fixture(MissionScope.GROUP, USER_PUBLIC_ID);
         MissionGroupState state = MissionGroupState.create(
                 fixture.mission(), now().minusHours(1)
@@ -251,7 +253,8 @@ class PhotoMissionPhotoManagementTransactionServiceTest {
         );
 
         assertThat(state.getStatus())
-                .isEqualTo(MissionCompletionStatus.FAILED);
+                .isEqualTo(MissionCompletionStatus.PENDING);
+        assertThat(state.canCompleteManually()).isTrue();
     }
 
     @DisplayName("다른 멤버가 제출한 사진은 삭제할 수 없다")
