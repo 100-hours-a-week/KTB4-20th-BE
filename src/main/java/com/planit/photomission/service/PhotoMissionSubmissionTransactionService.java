@@ -203,7 +203,8 @@ public class PhotoMissionSubmissionTransactionService {
         if (mission.isPersonal()) {
             participation = participationRepository
                     .findByMissionIdAndTripMemberId(missionId, member.getId())
-                    .filter(MissionParticipation::canCompleteManually)
+                    .filter(found -> found.canCompleteManually()
+                            || found.isManuallyCompleted())
                     .orElseThrow(this::manualCompletionNotAllowed);
         } else {
             state = groupStateRepository.findByMissionId(missionId)
@@ -229,7 +230,9 @@ public class PhotoMissionSubmissionTransactionService {
                     longitude,
                     now
             );
-            participation.completeManually(now);
+            if (!participation.isManuallyCompleted()) {
+                participation.completeManually(now);
+            }
         } else {
             photo = MissionPhoto.group(
                     mission,

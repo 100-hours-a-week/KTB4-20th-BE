@@ -127,6 +127,11 @@ public class MissionParticipation {
                 && retryCount >= MAX_RETRY_COUNT;
     }
 
+    public boolean isManuallyCompleted() {
+        return status == MissionCompletionStatus.COMPLETED
+                && completionMethod == MissionCompletionMethod.MANUAL;
+    }
+
     public boolean canSubmitPhoto() {
         return status == MissionCompletionStatus.PENDING
                 && retryCount < MAX_RETRY_COUNT;
