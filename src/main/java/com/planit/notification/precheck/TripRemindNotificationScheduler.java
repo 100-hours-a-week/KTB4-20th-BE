@@ -29,7 +29,7 @@ public class TripRemindNotificationScheduler {
         this.clock = clock;
     }
 
-    @Scheduled(cron = "0 0 10 * * *", zone = SEOUL_ZONE)
+    @Scheduled(cron = "0 45 10 * * *", zone = SEOUL_ZONE)
     @SchedulerLock(
             name = LOCK_NAME,
             lockAtMostFor = "PT5M",
@@ -39,7 +39,7 @@ public class TripRemindNotificationScheduler {
         executeWorkflow("primary", false);
     }
 
-    @Scheduled(cron = "0 30 10 * * *", zone = SEOUL_ZONE)
+    @Scheduled(cron = "0 0 11 * * *", zone = SEOUL_ZONE)
     @SchedulerLock(
             name = LOCK_NAME,
             lockAtMostFor = "PT5M",

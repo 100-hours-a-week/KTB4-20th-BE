@@ -256,6 +256,44 @@ class ScheduleGenerationServiceTest {
         );
     }
 
+    @DisplayName("여러 날 일정의 마지막 날은 장소 두 개를 허용한다")
+    @Test
+    void acceptsTwoPlacesOnLastDayOfMultiDayTrip() {
+        when(trip.getEndDate()).thenReturn(LocalDate.of(2026, 10, 2));
+        when(aiTripClient.selectPlaces(any()))
+                .thenReturn(aiResponseByDay(5, 2));
+
+        SchedulePlaceSelectionResponse response = service.generate(
+                USER_ID.toString(),
+                TRIP_ID,
+                ScheduleGenerationReason.GENERAL
+        );
+
+        assertThat(response.places())
+                .extracting(List::size)
+                .containsExactly(5, 2);
+    }
+
+    @DisplayName("여러 날 일정의 첫날이 다섯 개 미만이면 거부한다")
+    @Test
+    void rejectsFewerThanFivePlacesBeforeLastDay() {
+        when(trip.getEndDate()).thenReturn(LocalDate.of(2026, 10, 2));
+        when(aiTripClient.selectPlaces(any()))
+                .thenReturn(aiResponseByDay(4, 2));
+
+        assertError(ErrorCode.AI_SCHEDULE_GENERATION_FAILED);
+    }
+
+    @DisplayName("여러 날 일정의 마지막 날이 두 개 미만이면 거부한다")
+    @Test
+    void rejectsFewerThanTwoPlacesOnLastDay() {
+        when(trip.getEndDate()).thenReturn(LocalDate.of(2026, 10, 2));
+        when(aiTripClient.selectPlaces(any()))
+                .thenReturn(aiResponseByDay(5, 1));
+
+        assertError(ErrorCode.AI_SCHEDULE_GENERATION_FAILED);
+    }
+
     @DisplayName("여행 일수와 AI의 날짜별 장소 목록 수가 다르면 거부한다")
     @Test
     void rejectsAiResponseWithMismatchedDayCount() {
@@ -610,11 +648,17 @@ class ScheduleGenerationServiceTest {
             int dayCount,
             int placeCount
     ) {
+        int[] placeCounts = new int[dayCount];
+        java.util.Arrays.fill(placeCounts, placeCount);
+        return aiResponseByDay(placeCounts);
+    }
+
+    private AiPlaceSelectionResponse aiResponseByDay(int... placeCounts) {
         List<List<AiPlaceSelectionResponse.Place>> dailyPlaces =
                 new ArrayList<>();
-        for (int day = 1; day <= dayCount; day++) {
+        for (int day = 1; day <= placeCounts.length; day++) {
             List<AiPlaceSelectionResponse.Place> places = new ArrayList<>();
-            for (int index = 1; index <= placeCount; index++) {
+            for (int index = 1; index <= placeCounts[day - 1]; index++) {
                 places.add(new AiPlaceSelectionResponse.Place(
                         "day-" + day + "-google-place-" + index,
                         new AiPlaceSelectionResponse.DisplayName(
