@@ -131,7 +131,8 @@ public class TripRemindPrecheckStore {
                 List.of(key(targetDate))
         );
 
-        if (result == null) {
+        // Lettuce는 MULTI 스크립트의 nil 응답을 [null]로 돌려준다
+        if (result == null || result.isEmpty() || result.get(0) == null) {
             return Optional.empty();
         }
 
