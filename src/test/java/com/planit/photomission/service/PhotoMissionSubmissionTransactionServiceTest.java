@@ -505,6 +505,69 @@ class PhotoMissionSubmissionTransactionServiceTest {
                 .isEqualTo(MissionCompletionMethod.MANUAL);
     }
 
+    @DisplayName("직접 완료한 개인 미션은 다시 올린 사진으로 판정 없이 교체한다")
+    @Test
+    void replacesManuallyCompletedPersonalPhotoWithoutVerification() {
+        Fixture fixture = fixture(MissionScope.PERSONAL);
+        MissionParticipation participation = MissionParticipation.create(
+                fixture.mission(), fixture.member(), LocalDateTime.now()
+        );
+        ReflectionTestUtils.setField(participation, "id", 61L);
+        failThreeTimes(participation);
+        LocalDateTime completedAt = LocalDateTime.now().minusMinutes(5);
+        participation.completeManually(completedAt);
+        MissionPhoto previous = MissionPhoto.personal(
+                participation,
+                ImageFile.mission("old.jpg", "old.jpg", "image/jpeg", 10),
+                UUID.randomUUID(),
+                null,
+                null,
+                completedAt
+        );
+        stubCommon(fixture);
+        when(participationRepository.findByMissionIdAndTripMemberId(31L, 21L))
+                .thenReturn(Optional.of(participation));
+        when(photoRepository.findActiveByParticipationId(61L))
+                .thenReturn(Optional.of(previous));
+        stubSave(46L);
+
+        Long photoId = saveManualCompletionPhoto();
+
+        assertThat(photoId).isEqualTo(46L);
+        assertThat(previous.getReplacedAt()).isEqualTo(SEOUL_NOW);
+        ArgumentCaptor<MissionPhoto> captor =
+                ArgumentCaptor.forClass(MissionPhoto.class);
+        verify(photoRepository).save(captor.capture());
+        assertThat(captor.getValue().getActiveSlot()).isEqualTo((byte) 1);
+        assertThat(participation.getStatus())
+                .isEqualTo(MissionCompletionStatus.COMPLETED);
+        assertThat(participation.getCompletionMethod())
+                .isEqualTo(MissionCompletionMethod.MANUAL);
+        assertThat(participation.getCompletedAt()).isEqualTo(completedAt);
+    }
+
+    @DisplayName("AI로 완료한 개인 미션은 직접 완료 경로로 사진을 바꿀 수 없다")
+    @Test
+    void rejectsManualCompletionPhotoForAiCompletedMission() {
+        Fixture fixture = fixture(MissionScope.PERSONAL);
+        MissionParticipation participation = MissionParticipation.create(
+                fixture.mission(), fixture.member(), LocalDateTime.now()
+        );
+        participation.completeByAi(LocalDateTime.now());
+        stubCommon(fixture);
+        when(participationRepository.findByMissionIdAndTripMemberId(31L, 21L))
+                .thenReturn(Optional.of(participation));
+
+        assertThatThrownBy(this::saveManualCompletionPhoto)
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception ->
+                        ((BusinessException) exception).getErrorCode())
+                .isEqualTo(
+                        ErrorCode.PHOTO_MISSION_MANUAL_COMPLETION_NOT_ALLOWED
+                );
+        verify(imageFileRepository, never()).save(any());
+    }
+
     @DisplayName("판정 실패 3회 전에는 사진으로 직접 완료할 수 없다")
     @Test
     void rejectsManualCompletionPhotoBeforeThreeFailures() {
