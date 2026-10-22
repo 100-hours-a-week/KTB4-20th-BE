@@ -48,6 +48,27 @@ class AiRecommendedPlaceMapperTest {
                 .isEqualTo("day-2-place-1");
     }
 
+    @DisplayName("여러 날 일정의 마지막 날은 장소 두 개를 허용한다")
+    @Test
+    void mapsTwoPlacesOnLastDayOfMultiDayTrip() {
+        List<AiPlaceSelectionResponse.Place> lastDay = selectionPlaces(
+                "last-day"
+        ).subList(0, 2);
+        AiPlaceSelectionResponse response = new AiPlaceSelectionResponse(
+                200,
+                new AiPlaceSelectionResponse.Data(List.of(
+                        selectionPlaces("first-day"),
+                        lastDay
+                ))
+        );
+
+        List<List<RecommendedPlace>> result = mapper.mapDailyPlaces(response);
+
+        assertThat(result).hasSize(2);
+        assertThat(result.getFirst()).hasSize(5);
+        assertThat(result.getLast()).hasSize(2);
+    }
+
     @DisplayName("최단거리·취향 우선·다양성 코스를 전략별 추천 경로로 변환한다")
     @Test
     void mapsThreeRecommendedRoutes() {
@@ -179,7 +200,7 @@ class AiRecommendedPlaceMapperTest {
                 .isEqualTo("historical_landmark");
     }
 
-    @DisplayName("실패 응답이나 다섯 개 미만의 장소를 거부한다")
+    @DisplayName("실패 응답이나 당일 일정의 다섯 개 미만 장소를 거부한다")
     @Test
     void rejectsNonSuccessResponseAndFewerThanFivePlaces() {
         assertInvalid(new AiPlaceSelectionResponse(

@@ -98,6 +98,7 @@ class ScheduleServiceImplTest {
         user = mock(User.class);
         trip = mock(Trip.class);
         when(trip.getStartDate()).thenReturn(LocalDate.now().plusDays(10));
+        when(trip.getEndDate()).thenReturn(LocalDate.now().plusDays(10));
         when(trip.getId()).thenReturn(1L);
         when(tripRepository.findById(1L)).thenReturn(Optional.of(trip));
         when(tripRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(trip));
@@ -752,6 +753,49 @@ class ScheduleServiceImplTest {
                 20L,
                 "ACTIVE"
         )).thenReturn(visits.subList(0, 3));
+
+        assertError(ErrorCode.SCHEDULE_MINIMUM_STOPS_REQUIRED);
+        verify(legRepository, never()).deleteAll(any());
+    }
+
+    @DisplayName("여러 날 일정의 마지막 날은 장소를 두 개까지 줄일 수 있다")
+    @Test
+    void allowsTwoStopsOnLastDayOfMultiDayTrip() {
+        LocalDate startDate = LocalDate.now().plusDays(10);
+        when(trip.getStartDate()).thenReturn(startDate);
+        when(trip.getEndDate()).thenReturn(startDate.plusDays(1));
+        ReflectionTestUtils.setField(day, "dayNumber", (byte) 2);
+        ScheduleVisit target = visits.get(1);
+        when(visitRepository.findWithDayAndScheduleById(102L))
+                .thenReturn(Optional.of(target));
+        when(visitRepository.findByDayIdAndStatusOrderByVisitOrderAsc(
+                20L,
+                "ACTIVE"
+        )).thenReturn(visits.subList(0, 3), List.of(visits.get(0), visits.get(2)));
+
+        ScheduleStopDeleteResponse response = service.deleteStop(
+                USER_PUBLIC_ID.toString(),
+                1L,
+                102L
+        );
+
+        assertThat(response.deletedStopId()).isEqualTo("102");
+        assertThat(target.getStatus()).isEqualTo("REMOVED");
+    }
+
+    @DisplayName("여러 날 일정의 마지막 날은 장소 두 개에서 더 삭제할 수 없다")
+    @Test
+    void preservesTwoStopsOnLastDayOfMultiDayTrip() {
+        LocalDate startDate = LocalDate.now().plusDays(10);
+        when(trip.getStartDate()).thenReturn(startDate);
+        when(trip.getEndDate()).thenReturn(startDate.plusDays(1));
+        ReflectionTestUtils.setField(day, "dayNumber", (byte) 2);
+        when(visitRepository.findWithDayAndScheduleById(102L))
+                .thenReturn(Optional.of(visits.get(1)));
+        when(visitRepository.findByDayIdAndStatusOrderByVisitOrderAsc(
+                20L,
+                "ACTIVE"
+        )).thenReturn(visits.subList(0, 2));
 
         assertError(ErrorCode.SCHEDULE_MINIMUM_STOPS_REQUIRED);
         verify(legRepository, never()).deleteAll(any());

@@ -154,9 +154,9 @@ class ShortestRouteCalculatorTest {
                 .isBetween(555_970L, 555_980L);
     }
 
-    @DisplayName("장소가 다섯 개 미만이면 경로 계산을 거부한다")
+    @DisplayName("장소가 하나이면 경로 계산을 거부한다")
     @Test
-    void rejectsFewerThanFivePlaces() {
+    void rejectsFewerThanTwoPlaces() {
         assertThatThrownBy(() -> calculator.calculate(List.of(
                 place(1, 0, 0, SHOPPING)
         )))
@@ -165,6 +165,24 @@ class ShortestRouteCalculatorTest {
                         exception -> assertThat(exception.getReason())
                                 .isEqualTo(INVALID_PLACE_RESULT)
                 );
+    }
+
+    @DisplayName("두 장소의 경로와 한 개 이동 구간을 생성한다")
+    @Test
+    void buildsRouteForTwoPlaces() {
+        RoutePlan plan = calculator.calculate(List.of(
+                place(2, 0, 1, ACTIVITY),
+                place(1, 0, 0, TOURISM_CULTURE)
+        ));
+
+        assertThat(plan.places())
+                .extracting(RoutePlace::placeId)
+                .containsExactly(1L, 2L);
+        assertThat(plan.legs()).singleElement()
+                .satisfies(leg -> {
+                    assertThat(leg.fromPlaceId()).isEqualTo(1L);
+                    assertThat(leg.toPlaceId()).isEqualTo(2L);
+                });
     }
 
     @DisplayName("다섯 장소의 최단 개방 경로와 네 개 이동 구간을 생성한다")
