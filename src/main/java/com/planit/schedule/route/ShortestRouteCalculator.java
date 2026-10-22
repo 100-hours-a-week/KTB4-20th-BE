@@ -12,7 +12,7 @@ import static com.planit.schedule.route.RouteCalculationException.Reason.ROUTE_N
 
 public final class ShortestRouteCalculator {
 
-    private static final int REQUIRED_PLACE_MIN_COUNT = 5;
+    private static final int REQUIRED_PLACE_MIN_COUNT = 2;
 
     public RoutePlan calculate(List<RoutePlace> places) {
         validate(places);
@@ -142,7 +142,7 @@ public final class ShortestRouteCalculator {
 
     private void validate(List<RoutePlace> places) {
         if (places == null || places.size() < REQUIRED_PLACE_MIN_COUNT) {
-            throw invalid("장소는 5개 이상이어야 합니다.");
+            throw invalid("장소는 2개 이상이어야 합니다.");
         }
 
         Set<Long> placeIds = new HashSet<>();

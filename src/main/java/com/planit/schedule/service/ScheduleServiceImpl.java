@@ -12,6 +12,7 @@ import com.planit.schedule.domain.Schedule;
 import com.planit.schedule.domain.Place;
 import com.planit.schedule.domain.PlaceDetails;
 import com.planit.schedule.domain.ScheduleDay;
+import com.planit.schedule.domain.ScheduleDayPlacePolicy;
 import com.planit.schedule.domain.ScheduleLeg;
 import com.planit.schedule.domain.ScheduleStrategy;
 import com.planit.schedule.domain.ScheduleVisit;
@@ -36,6 +37,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
@@ -49,8 +51,7 @@ import static com.planit.schedule.route.HaversineDistanceCalculator.distanceMete
 public class ScheduleServiceImpl implements ScheduleService {
 
     private static final byte ACTIVE_CONFIRMED_SLOT = 1;
-    /** 하루(일차)에 둘 수 있는 활성 장소 수 범위 */
-    private static final int MINIMUM_DAY_STOPS = 3;
+    /** 하루(일차)에 둘 수 있는 활성 장소 수 상한 */
     private static final int MAXIMUM_DAY_STOPS = 10;
     private static final ZoneId SEOUL_ZONE = ZoneId.of("Asia/Seoul");
 
@@ -326,7 +327,15 @@ public class ScheduleServiceImpl implements ScheduleService {
                         day.getId(),
                         "ACTIVE"
                 );
-        if (visits.size() <= MINIMUM_DAY_STOPS) {
+        int tripDayCount = (int) ChronoUnit.DAYS.between(
+                trip.getStartDate(),
+                trip.getEndDate()
+        ) + 1;
+        int minimumStops = ScheduleDayPlacePolicy.minimumEditablePlaces(
+                day.getDayNumber(),
+                tripDayCount
+        );
+        if (visits.size() <= minimumStops) {
             throw new BusinessException(
                     ErrorCode.SCHEDULE_MINIMUM_STOPS_REQUIRED
             );

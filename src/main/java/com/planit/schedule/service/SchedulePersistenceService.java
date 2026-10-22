@@ -9,6 +9,7 @@ import com.planit.schedule.domain.Place;
 import com.planit.schedule.domain.PlaceDetails;
 import com.planit.schedule.domain.Schedule;
 import com.planit.schedule.domain.ScheduleDay;
+import com.planit.schedule.domain.ScheduleDayPlacePolicy;
 import com.planit.schedule.domain.ScheduleLeg;
 import com.planit.schedule.domain.ScheduleStrategy;
 import com.planit.schedule.domain.ScheduleVisit;
@@ -147,9 +148,26 @@ public class SchedulePersistenceService {
                 || !strategies.add(route.strategy())
                 || hasInvalidCounts(route)
                 || route.days() == null
-                || route.days().size() != tripDayCount) {
+                || route.days().size() != tripDayCount
+                || hasInvalidDailyPlaceCounts(route.days())) {
             throw new BusinessException(INVALID_AI_PLACE_RESULT);
         }
+    }
+
+    private boolean hasInvalidDailyPlaceCounts(
+            List<List<RecommendedPlace>> days
+    ) {
+        for (int dayIndex = 0; dayIndex < days.size(); dayIndex++) {
+            List<RecommendedPlace> places = days.get(dayIndex);
+            int minimumCount = ScheduleDayPlacePolicy.minimumGeneratedPlaces(
+                    dayIndex + 1,
+                    days.size()
+            );
+            if (places == null || places.size() < minimumCount) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean hasInvalidCounts(RecommendedRoute route) {
