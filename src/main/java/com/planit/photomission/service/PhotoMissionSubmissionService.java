@@ -102,6 +102,33 @@ public class PhotoMissionSubmissionService {
         }
     }
 
+    public Long completeManuallyWithPhoto(
+            String userPublicId,
+            Long missionId,
+            UUID idempotencyKey,
+            MultipartFile file,
+            BigDecimal latitude,
+            BigDecimal longitude
+    ) {
+        StoredImage image = storeImage(missionId, file, latitude, longitude);
+        try {
+            return transactionService.saveManualCompletionPhoto(
+                    userPublicId,
+                    missionId,
+                    idempotencyKey,
+                    image.imageKey(),
+                    image.originalFilename(),
+                    image.mimeType(),
+                    image.sizeBytes(),
+                    image.latitude(),
+                    image.longitude()
+            );
+        } catch (RuntimeException exception) {
+            compensateDelete(image.imageKey());
+            throw exception;
+        }
+    }
+
     private StoredImage storeImage(
             Long missionId,
             MultipartFile file,

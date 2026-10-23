@@ -166,9 +166,9 @@ class MissionParticipationTest {
         assertThat(participation.getCompletedAt()).isNull();
     }
 
-    @DisplayName("직접 완료 가능한 마지막 사진을 삭제하면 개인 미션을 실패 처리한다")
+    @DisplayName("판정 실패 3회 뒤 마지막 사진을 삭제해도 직접 완료할 수 있다")
     @Test
-    void failsAfterDeletingLastManualCompletionPhoto() {
+    void keepsManualCompletionAfterDeletingLastFailedPhoto() {
         MissionParticipation participation = MissionParticipation.create(
                 personalMission(),
                 mock(TripMember.class),
@@ -181,13 +181,15 @@ class MissionParticipationTest {
         participation.reflectPhotoDeletion(false, now().plusMinutes(1));
 
         assertThat(participation.getStatus())
-                .isEqualTo(MissionCompletionStatus.FAILED);
-        assertThat(participation.canCompleteManually()).isFalse();
+                .isEqualTo(MissionCompletionStatus.PENDING);
+        assertThat(participation.getRetryCount()).isEqualTo(3);
+        assertThat(participation.canCompleteManually()).isTrue();
+        assertThat(participation.canSubmitPhoto()).isFalse();
     }
 
-    @DisplayName("직접 완료한 개인 미션의 마지막 사진을 삭제하면 실패 처리한다")
+    @DisplayName("직접 완료한 개인 미션의 마지막 사진을 삭제하면 판정 횟수를 유지한 채 미완료로 되돌린다")
     @Test
-    void failsManualCompletionAfterDeletingLastPhoto() {
+    void reopensManualCompletionAfterDeletingLastPhoto() {
         MissionParticipation participation = MissionParticipation.create(
                 personalMission(),
                 mock(TripMember.class),
@@ -201,9 +203,11 @@ class MissionParticipationTest {
         participation.reflectPhotoDeletion(false, now().plusMinutes(1));
 
         assertThat(participation.getStatus())
-                .isEqualTo(MissionCompletionStatus.FAILED);
+                .isEqualTo(MissionCompletionStatus.PENDING);
         assertThat(participation.getCompletionMethod()).isNull();
         assertThat(participation.getCompletedAt()).isNull();
+        assertThat(participation.getRetryCount()).isEqualTo(3);
+        assertThat(participation.canCompleteManually()).isTrue();
     }
 
     private Mission personalMission() {

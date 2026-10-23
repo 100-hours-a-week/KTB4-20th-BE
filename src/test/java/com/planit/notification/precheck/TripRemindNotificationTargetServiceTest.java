@@ -38,7 +38,7 @@ class TripRemindNotificationTargetServiceTest {
                     tripMemberRepository
             );
 
-    @DisplayName("여행 기간의 지역별 점검 결과에 따라 참여자 알림 유형을 산출한다")
+    @DisplayName("수집되지 않은 지역은 정상 날씨로 보고 참여자 알림 유형을 산출한다")
     @Test
     void findsTargetsByTripPeriodAndRegion() {
         LocalDate targetDate = LocalDate.of(2026, 10, 16);
@@ -221,14 +221,12 @@ class TripRemindNotificationTargetServiceTest {
                         new TripRemindPrecheckCache.Forecast(
                                 targetDate,
                                 List.of(
-                                        region("REGION-SEOUL", false),
                                         region("REGION-BUSAN", false)
                                 )
                         ),
                         new TripRemindPrecheckCache.Forecast(
                                 targetDate.plusDays(2),
                                 List.of(
-                                        region("REGION-SEOUL", false),
                                         region(
                                                 "REGION-BUSAN",
                                                 true,

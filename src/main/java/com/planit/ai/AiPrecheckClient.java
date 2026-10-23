@@ -30,8 +30,8 @@ public class AiPrecheckClient {
     }
 
     public AiPrecheckResponse precheck() {
-        AiPrecheckResponse response = restClient.get()
-                .uri(aiProperties.baseUrl().resolve("/precheck"))
+        AiPrecheckResponse response = restClient.post()
+                .uri(aiProperties.baseUrl().resolve("/trips/precheck"))
                 .header(
                         INTERNAL_TOKEN_HEADER,
                         aiProperties.internalToken()
@@ -62,27 +62,31 @@ public class AiPrecheckClient {
     private boolean hasValidData(AiPrecheckResponse.Data data) {
         if (data == null || data.generatedAt() == null
                 || data.forecasts() == null
-                || data.forecasts().size() != FORECAST_DAY_COUNT) {
+                || data.forecasts().isEmpty()) {
             return false;
         }
 
         LocalDate generatedDate = data.generatedAt()
                 .atZone(SEOUL_ZONE)
                 .toLocalDate();
+        LocalDate lastForecastDate = generatedDate.plusDays(
+                FORECAST_DAY_COUNT
+        );
+        LocalDate previousDate = generatedDate;
         List<AiPrecheckResponse.Forecast> forecasts =
                 data.forecasts();
 
-        for (int index = 0; index < FORECAST_DAY_COUNT; index++) {
-            AiPrecheckResponse.Forecast forecast =
-                    forecasts.get(index);
+        for (AiPrecheckResponse.Forecast forecast : forecasts) {
             if (forecast == null
-                    || !generatedDate.plusDays(index + 1L)
-                    .equals(forecast.date())
+                    || forecast.date() == null
+                    || !forecast.date().isAfter(previousDate)
+                    || forecast.date().isAfter(lastForecastDate)
                     || forecast.regions() == null
                     || forecast.regions().stream()
                     .anyMatch(this::hasInvalidRegionForecast)) {
                 return false;
             }
+            previousDate = forecast.date();
         }
         return true;
     }

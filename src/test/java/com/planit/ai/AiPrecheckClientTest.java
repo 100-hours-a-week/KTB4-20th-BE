@@ -46,9 +46,9 @@ class AiPrecheckClientTest {
     @Test
     void requestsNineDayRegionalPrecheck() {
         server.expect(once(), requestTo(
-                        "http://localhost:8000/precheck"
+                        "http://localhost:8000/trips/precheck"
                 ))
-                .andExpect(method(HttpMethod.GET))
+                .andExpect(method(HttpMethod.POST))
                 .andExpect(header(
                         "X-Internal-Token",
                         "test-internal-token"
@@ -80,7 +80,7 @@ class AiPrecheckClientTest {
     @Test
     void rejectsEmptyPrecheckResponse() {
         server.expect(once(), requestTo(
-                        "http://localhost:8000/precheck"
+                        "http://localhost:8000/trips/precheck"
                 ))
                 .andRespond(withNoContent());
 
@@ -94,7 +94,7 @@ class AiPrecheckClientTest {
     @Test
     void rejectsInvalidPrecheckStatusCode() {
         server.expect(once(), requestTo(
-                        "http://localhost:8000/precheck"
+                        "http://localhost:8000/trips/precheck"
                 ))
                 .andRespond(withSuccess("""
                         {
@@ -111,34 +111,38 @@ class AiPrecheckClientTest {
         server.verify();
     }
 
-    @DisplayName("예보 날짜 청크가 9개가 아니면 실패한다")
+    @DisplayName("수집된 일부 날짜와 지역만 있어도 정상 응답으로 처리한다")
     @Test
-    void rejectsForecastsWithInvalidDayCount() {
+    void acceptsPartiallyCollectedForecasts() {
         server.expect(once(), requestTo(
-                        "http://localhost:8000/precheck"
+                        "http://localhost:8000/trips/precheck"
                 ))
                 .andRespond(successfulResponse("""
                         [
                           {
                             "date": "2026-10-11",
-                            "regions": []
+                            "regions": [{
+                              "region": "REGION-SEOUL",
+                              "has_issue": false,
+                              "reasons": []
+                            }]
                           }
                         ]
                         """));
 
-        assertThatThrownBy(client::precheck)
-                .isInstanceOf(RestClientException.class)
-                .hasMessage(
-                        "AI 외부 요인 사전 점검 응답 형식이 올바르지 않습니다."
-                );
+        AiPrecheckResponse response = client.precheck();
+
+        assertThat(response.data().forecasts()).hasSize(1);
+        assertThat(response.data().forecasts().getFirst().regions())
+                .hasSize(1);
         server.verify();
     }
 
-    @DisplayName("예보 날짜가 생성일 다음 날부터 연속되지 않으면 실패한다")
+    @DisplayName("예보 날짜가 중복되면 실패한다")
     @Test
-    void rejectsNonConsecutiveForecastDates() {
+    void rejectsDuplicateForecastDates() {
         server.expect(once(), requestTo(
-                        "http://localhost:8000/precheck"
+                        "http://localhost:8000/trips/precheck"
                 ))
                 .andRespond(successfulResponse(
                         nineDayForecasts().replaceFirst(
@@ -159,7 +163,7 @@ class AiPrecheckClientTest {
     @Test
     void rejectsRegionForecastWithoutReasons() {
         server.expect(once(), requestTo(
-                        "http://localhost:8000/precheck"
+                        "http://localhost:8000/trips/precheck"
                 ))
                 .andRespond(successfulResponse(
                         nineDayForecasts().replace(
