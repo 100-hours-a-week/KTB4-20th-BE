@@ -28,7 +28,7 @@ class PhotoMissionGenerationServiceTest {
 
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
     private static final LocalDateTime NOW =
-            LocalDateTime.of(2026, 10, 14, 0, 0);
+            LocalDateTime.of(2026, 10, 14, 14, 10);
 
     private final TripRepository tripRepository = mock(TripRepository.class);
     private final PhotoMissionGenerationTransactionService transactionService =
@@ -45,7 +45,7 @@ class PhotoMissionGenerationServiceTest {
     @DisplayName("생성 대상 여행의 전체 일정을 AI에 요청하고 결과를 저장한다")
     @Test
     void generatesDueTrips() {
-        LocalDateTime now = LocalDateTime.of(2026, 10, 14, 0, 0);
+        LocalDateTime now = LocalDateTime.of(2026, 10, 14, 14, 10);
         PhotoMissionGenerateRequest request =
                 new PhotoMissionGenerateRequest("trip_1", List.of());
         PhotoMissionGenerateResponse response =
@@ -68,7 +68,7 @@ class PhotoMissionGenerationServiceTest {
     @DisplayName("AI 생성 호출이 실패하면 생성 작업을 실패 상태로 변경한다")
     @Test
     void marksJobFailedWhenAiCallFails() {
-        LocalDateTime now = LocalDateTime.of(2026, 10, 14, 0, 0);
+        LocalDateTime now = LocalDateTime.of(2026, 10, 14, 14, 10);
         PhotoMissionGenerateRequest request =
                 new PhotoMissionGenerateRequest("trip_1", List.of());
         when(tripRepository.findPhotoMissionGenerationTargetIds(
@@ -90,7 +90,7 @@ class PhotoMissionGenerationServiceTest {
     @DisplayName("실패 상태 저장이 실패해도 다음 여행 생성을 계속한다")
     @Test
     void continuesWhenMarkingJobFailedAlsoFails() {
-        LocalDateTime now = LocalDateTime.of(2026, 10, 14, 0, 0);
+        LocalDateTime now = LocalDateTime.of(2026, 10, 14, 14, 10);
         PhotoMissionGenerateRequest firstRequest =
                 new PhotoMissionGenerateRequest("trip_1", List.of());
         PhotoMissionGenerateRequest secondRequest =
@@ -124,11 +124,11 @@ class PhotoMissionGenerationServiceTest {
         );
     }
 
-    @DisplayName("여행 시작일 00시 30분부터는 미션 생성을 시도하지 않는다")
+    @DisplayName("여행 시작일 14시 30분부터는 미션 생성을 시도하지 않는다")
     @Test
     void stopsGenerationAtPublicationTime() {
         LocalDateTime publicationTime =
-                LocalDateTime.of(2026, 10, 14, 0, 30);
+                LocalDateTime.of(2026, 10, 14, 14, 30);
 
         service.generateDueTrips(publicationTime);
 
@@ -190,7 +190,7 @@ class PhotoMissionGenerationServiceTest {
     @Test
     void stopsRemainingTripsAtPublicationTime() {
         LocalDateTime beforePublication =
-                LocalDateTime.of(2026, 10, 14, 0, 29);
+                LocalDateTime.of(2026, 10, 14, 14, 29);
         MutableClock clock = new MutableClock(beforePublication, SEOUL);
         PhotoMissionGenerationService generationService =
                 new PhotoMissionGenerationService(
