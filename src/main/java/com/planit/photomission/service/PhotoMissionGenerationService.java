@@ -16,7 +16,7 @@ import java.time.LocalTime;
 @Service
 public class PhotoMissionGenerationService {
 
-    private static final LocalTime PUBLICATION_TIME = LocalTime.of(14, 30);
+    private static final LocalTime PUBLICATION_TIME = LocalTime.of(0, 30);
 
     private final TripRepository tripRepository;
     private final PhotoMissionGenerationTransactionService transactionService;

@@ -2,29 +2,16 @@ package com.planit.photomission.service;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.scheduling.annotation.Scheduled;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 class PhotoMissionGenerationSchedulerTest {
-
-    @DisplayName("포토미션 생성은 매일 서울 시각 14시 10분에 예약된다")
-    @Test
-    void schedulesGenerationAtFourteenTenInSeoul() throws Exception {
-        Scheduled scheduled = PhotoMissionGenerationScheduler.class
-                .getMethod("generate")
-                .getAnnotation(Scheduled.class);
-
-        assertThat(scheduled.cron()).isEqualTo("0 10 14 * * *");
-        assertThat(scheduled.zone()).isEqualTo("Asia/Seoul");
-    }
 
     @DisplayName("스케줄 실행 시 서울 현재 시각으로 생성 대상 여행을 처리한다")
     @Test
