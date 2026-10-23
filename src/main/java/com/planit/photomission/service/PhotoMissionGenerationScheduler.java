@@ -22,7 +22,7 @@ public class PhotoMissionGenerationScheduler {
         this.clock = photoMissionClock;
     }
 
-    @Scheduled(cron = "0 */5 * * * *", zone = "Asia/Seoul")
+    @Scheduled(cron = "0 20 13 * * *", zone = "Asia/Seoul")
     @SchedulerLock(name = "photoMissionGeneration")
     public void generate() {
         generationService.generateDueTrips(LocalDateTime.now(clock));
