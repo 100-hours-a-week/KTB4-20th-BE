@@ -33,7 +33,7 @@ planit:
     base-url: ${AI_BASE_URL:http://localhost:8000}
     internal-token: ${AI_INTERNAL_API_KEY}
     connect-timeout: 3s
-    read-timeout: 60s
+    read-timeout: 120s
   image:
     default-profile-url: ${DEFAULT_PROFILE_IMAGE_URL:http://localhost:8080/images/default-profile.svg}
     bucket: ${IMAGE_S3_BUCKET}
