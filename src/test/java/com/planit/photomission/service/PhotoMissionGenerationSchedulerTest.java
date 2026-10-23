@@ -15,14 +15,14 @@ import static org.mockito.Mockito.verify;
 
 class PhotoMissionGenerationSchedulerTest {
 
-    @DisplayName("포토미션 생성은 매일 서울 시각 14시 10분에 예약된다")
+    @DisplayName("포토미션 생성은 매일 서울 시각 13시 20분에 예약된다")
     @Test
-    void schedulesGenerationAtFourteenTenInSeoul() throws Exception {
+    void schedulesGenerationAtThirteenTwentyInSeoul() throws Exception {
         Scheduled scheduled = PhotoMissionGenerationScheduler.class
                 .getMethod("generate")
                 .getAnnotation(Scheduled.class);
 
-        assertThat(scheduled.cron()).isEqualTo("0 10 14 * * *");
+        assertThat(scheduled.cron()).isEqualTo("0 20 13 * * *");
         assertThat(scheduled.zone()).isEqualTo("Asia/Seoul");
     }
 
