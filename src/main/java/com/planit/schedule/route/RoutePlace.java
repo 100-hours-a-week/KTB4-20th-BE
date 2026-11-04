@@ -1,7 +1,7 @@
 package com.planit.schedule.route;
 
 public record RoutePlace(
-        long placeId,
+        String googlePlaceId,
         double latitude,
         double longitude,
         PlaceCategoryGroup categoryGroup

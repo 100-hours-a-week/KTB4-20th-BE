@@ -19,6 +19,9 @@ import com.planit.schedule.repository.ScheduleLegRepository;
 import com.planit.schedule.repository.ScheduleRepository;
 import com.planit.schedule.repository.ScheduleVisitRepository;
 import com.planit.schedule.route.PlaceCategoryGroup;
+import com.planit.schedule.route.RoutePlace;
+import com.planit.schedule.route.RoutePlan;
+import com.planit.schedule.route.ShortestRouteCalculator;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -304,20 +307,20 @@ class SchedulePersistenceServiceTest {
     @Test
     void validatesCandidateValuesBeforeReplacingExistingSchedule() {
         givenExistingSchedule();
-        List<RecommendedRoute> invalidCandidates = List.of(
+        List<RecommendedRoute> invalidCandidateRoutes = List.of(
                 new RecommendedRoute(
                         ScheduleStrategy.SHORTEST,
                         100,
                         null,
                         List.of(recommendations("shortest", 5))
                 ),
-                candidates().get(1),
-                candidates().get(2)
+                candidateRoutes().get(1),
+                candidateRoutes().get(2)
         );
 
         assertThatThrownBy(() -> service.saveCandidates(
                 1L,
-                invalidCandidates,
+                planRoutes(invalidCandidateRoutes),
                 ScheduleGenerationMode.GENERAL_REGENERATION
         ))
                 .isInstanceOfSatisfying(
@@ -473,7 +476,11 @@ class SchedulePersistenceServiceTest {
         return recommendations(6);
     }
 
-    private List<RecommendedRoute> candidates() {
+    private List<PlannedRoute> candidates() {
+        return planRoutes(candidateRoutes());
+    }
+
+    private List<RecommendedRoute> candidateRoutes() {
         return List.of(
                 new RecommendedRoute(
                         ScheduleStrategy.SHORTEST,
@@ -496,11 +503,11 @@ class SchedulePersistenceServiceTest {
         );
     }
 
-    private List<RecommendedRoute> candidatesByDay(
+    private List<PlannedRoute> candidatesByDay(
             int firstDayCount,
             int lastDayCount
     ) {
-        return List.of(
+        return planRoutes(List.of(
                 new RecommendedRoute(
                         ScheduleStrategy.SHORTEST,
                         null,
@@ -528,7 +535,41 @@ class SchedulePersistenceServiceTest {
                                 recommendations("diversity-last", lastDayCount)
                         )
                 )
-        );
+        ));
+    }
+
+    private List<PlannedRoute> planRoutes(List<RecommendedRoute> routes) {
+        ShortestRouteCalculator calculator = new ShortestRouteCalculator();
+        return routes.stream()
+                .map(route -> new PlannedRoute(
+                        route,
+                        route.days().stream()
+                                .map(places -> {
+                                    if (places.size() < 2) {
+                                        return new RoutePlan(
+                                                List.of(),
+                                                List.of(),
+                                                0
+                                        );
+                                    }
+                                    List<RoutePlace> routePlaces = places.stream()
+                                            .map(place -> new RoutePlace(
+                                                    place.googlePlaceId(),
+                                                    place.latitude(),
+                                                    place.longitude(),
+                                                    place.categoryGroup()
+                                            ))
+                                            .toList();
+                                    return route.strategy()
+                                            == ScheduleStrategy.SHORTEST
+                                            ? calculator.calculate(routePlaces)
+                                            : calculator.calculateInGivenOrder(
+                                                    routePlaces
+                                            );
+                                })
+                                .toList()
+                ))
+                .toList();
     }
 
     private List<RecommendedPlace> recommendations(int count) {

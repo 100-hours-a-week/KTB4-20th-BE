@@ -82,13 +82,13 @@ public class SchedulePersistenceService {
     @Transactional
     public List<GeneratedScheduleResult> saveCandidates(
             long tripId,
-            List<RecommendedRoute> routes,
+            List<PlannedRoute> plannedRoutes,
             ScheduleGenerationMode mode
     ) {
         Trip trip = tripRepository.findByIdForUpdate(tripId)
                 .filter(value -> value.getDeletedAt() == null)
                 .orElseThrow(() -> new BusinessException(TRIP_NOT_FOUND));
-        validateCandidateValues(trip, routes);
+        validateCandidateValues(trip, plannedRoutes);
         if (scheduleRepository.existsByTripIdAndActiveConfirmedSlot(
                 tripId,
                 (byte) 1
@@ -102,16 +102,10 @@ public class SchedulePersistenceService {
         LocalDateTime now = LocalDateTime.now();
         try {
             List<GeneratedScheduleResult> results = new ArrayList<>(3);
-            for (RecommendedRoute route : routes) {
-                results.add(saveCandidate(trip, route, now));
+            for (PlannedRoute plannedRoute : plannedRoutes) {
+                results.add(saveCandidate(trip, plannedRoute, now));
             }
             return List.copyOf(results);
-        } catch (RouteCalculationException exception) {
-            if (exception.getReason()
-                    == RouteCalculationException.Reason.ROUTE_NOT_FOUND) {
-                throw new BusinessException(SCHEDULE_ROUTE_NOT_FOUND, exception);
-            }
-            throw new BusinessException(INVALID_AI_PLACE_RESULT, exception);
         } catch (NullPointerException exception) {
             throw new BusinessException(INVALID_AI_PLACE_RESULT, exception);
         }
@@ -119,9 +113,9 @@ public class SchedulePersistenceService {
 
     private void validateCandidateValues(
             Trip trip,
-            List<RecommendedRoute> routes
+            List<PlannedRoute> plannedRoutes
     ) {
-        if (routes == null || routes.size() != 3) {
+        if (plannedRoutes == null || plannedRoutes.size() != 3) {
             throw new BusinessException(INVALID_AI_PLACE_RESULT);
         }
 
@@ -130,8 +124,16 @@ public class SchedulePersistenceService {
                 trip.getEndDate()
         ) + 1;
         Set<ScheduleStrategy> strategies = new HashSet<>();
-        for (RecommendedRoute route : routes) {
-            validateCandidateValue(route, tripDayCount, strategies);
+        for (PlannedRoute plannedRoute : plannedRoutes) {
+            if (plannedRoute == null
+                    || plannedRoute.dayPlans().size() != tripDayCount) {
+                throw new BusinessException(INVALID_AI_PLACE_RESULT);
+            }
+            validateCandidateValue(
+                    plannedRoute.route(),
+                    tripDayCount,
+                    strategies
+            );
         }
         if (!strategies.equals(EnumSet.allOf(ScheduleStrategy.class))) {
             throw new BusinessException(INVALID_AI_PLACE_RESULT);
@@ -183,9 +185,10 @@ public class SchedulePersistenceService {
 
     private GeneratedScheduleResult saveCandidate(
             Trip trip,
-            RecommendedRoute route,
+            PlannedRoute plannedRoute,
             LocalDateTime now
     ) {
+        RecommendedRoute route = plannedRoute.route();
         Schedule schedule = scheduleRepository.save(new Schedule(
                 trip,
                 route.strategy(),
@@ -204,7 +207,7 @@ public class SchedulePersistenceService {
                     (byte) (dayIndex + 1),
                     route.days().get(dayIndex),
                     now,
-                    route.strategy() != ScheduleStrategy.SHORTEST
+                    plannedRoute.dayPlans().get(dayIndex)
             );
             dayIds.add(dayResult.dayId());
             totalDistanceMeters += dayResult.totalDistanceMeters();
@@ -300,34 +303,82 @@ public class SchedulePersistenceService {
             LocalDateTime now,
             boolean preserveOrder
     ) {
-        Map<Long, RecommendedPlace> recommendationByPlaceId = new HashMap<>();
+        return saveDay(
+                trip,
+                schedule,
+                dayNumber,
+                recommendations,
+                now,
+                null,
+                preserveOrder
+        );
+    }
+
+    private SavedDayResult saveDay(
+            Trip trip,
+            Schedule schedule,
+            byte dayNumber,
+            List<RecommendedPlace> recommendations,
+            LocalDateTime now,
+            RoutePlan plan
+    ) {
+        return saveDay(
+                trip,
+                schedule,
+                dayNumber,
+                recommendations,
+                now,
+                plan,
+                false
+        );
+    }
+
+    private SavedDayResult saveDay(
+            Trip trip,
+            Schedule schedule,
+            byte dayNumber,
+            List<RecommendedPlace> recommendations,
+            LocalDateTime now,
+            RoutePlan precomputedPlan,
+            boolean preserveOrder
+    ) {
+        Map<String, RecommendedPlace> recommendationByGooglePlaceId =
+                new HashMap<>();
+        Map<String, Place> placeByGooglePlaceId = new HashMap<>();
         List<RoutePlace> routePlaces = new ArrayList<>();
         for (RecommendedPlace recommendation : recommendations) {
             Place place = upsertPlace(trip, recommendation, now);
-            recommendationByPlaceId.put(place.getId(), recommendation);
+            recommendationByGooglePlaceId.put(
+                    recommendation.googlePlaceId(),
+                    recommendation
+            );
+            placeByGooglePlaceId.put(recommendation.googlePlaceId(), place);
             routePlaces.add(new RoutePlace(
-                    place.getId(),
+                    recommendation.googlePlaceId(),
                     recommendation.latitude(),
                     recommendation.longitude(),
                     recommendation.categoryGroup()
             ));
         }
 
-        RoutePlan plan = preserveOrder
-                ? calculator.calculateInGivenOrder(routePlaces)
-                : calculator.calculate(routePlaces);
+        RoutePlan plan = precomputedPlan != null
+                ? precomputedPlan
+                : preserveOrder
+                        ? calculator.calculateInGivenOrder(routePlaces)
+                        : calculator.calculate(routePlaces);
         ScheduleDay day = dayRepository.save(new ScheduleDay(
                 schedule,
                 dayNumber,
                 trip.getStartDate().plusDays(dayNumber - 1L)
         ));
-        Map<Long, ScheduleVisit> visitByPlaceId = saveVisits(
+        Map<String, ScheduleVisit> visitByGooglePlaceId = saveVisits(
                 day,
                 plan,
-                recommendationByPlaceId,
+                recommendationByGooglePlaceId,
+                placeByGooglePlaceId,
                 now
         );
-        saveLegs(day, plan, visitByPlaceId);
+        saveLegs(day, plan, visitByGooglePlaceId);
 
         return new SavedDayResult(
                 day.getId().toString(),
@@ -370,21 +421,20 @@ public class SchedulePersistenceService {
         );
     }
 
-    private Map<Long, ScheduleVisit> saveVisits(
+    private Map<String, ScheduleVisit> saveVisits(
             ScheduleDay day,
             RoutePlan plan,
-            Map<Long, RecommendedPlace> recommendationByPlaceId,
+            Map<String, RecommendedPlace> recommendationByGooglePlaceId,
+            Map<String, Place> placeByGooglePlaceId,
             LocalDateTime now
     ) {
-        Map<Long, ScheduleVisit> visitByPlaceId = new HashMap<>();
+        Map<String, ScheduleVisit> visitByGooglePlaceId = new HashMap<>();
         for (int index = 0; index < plan.places().size(); index++) {
             RoutePlace routePlace = plan.places().get(index);
-            Place place = placeRepository.getReferenceById(
-                    routePlace.placeId()
-            );
-            RecommendedPlace recommendation = recommendationByPlaceId.get(
-                    routePlace.placeId()
-            );
+            String googlePlaceId = routePlace.googlePlaceId();
+            Place place = placeByGooglePlaceId.get(googlePlaceId);
+            RecommendedPlace recommendation =
+                    recommendationByGooglePlaceId.get(googlePlaceId);
             ScheduleVisit visit = visitRepository.save(new ScheduleVisit(
                     day,
                     place,
@@ -393,21 +443,21 @@ public class SchedulePersistenceService {
                     recommendation.matchedPreferences(),
                     now
             ));
-            visitByPlaceId.put(routePlace.placeId(), visit);
+            visitByGooglePlaceId.put(googlePlaceId, visit);
         }
-        return visitByPlaceId;
+        return visitByGooglePlaceId;
     }
 
     private void saveLegs(
             ScheduleDay day,
             RoutePlan plan,
-            Map<Long, ScheduleVisit> visitByPlaceId
+            Map<String, ScheduleVisit> visitByGooglePlaceId
     ) {
         for (RouteLeg leg : plan.legs()) {
             legRepository.save(new ScheduleLeg(
                     day,
-                    visitByPlaceId.get(leg.fromPlaceId()),
-                    visitByPlaceId.get(leg.toPlaceId()),
+                    visitByGooglePlaceId.get(leg.fromGooglePlaceId()),
+                    visitByGooglePlaceId.get(leg.toGooglePlaceId()),
                     leg.order(),
                     leg.distanceMeters()
             ));

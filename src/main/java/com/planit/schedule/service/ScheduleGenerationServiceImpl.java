@@ -6,14 +6,20 @@ import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
 import com.planit.schedule.domain.ScheduleGenerationReason;
 import com.planit.schedule.domain.ScheduleDayPlacePolicy;
+import com.planit.schedule.domain.ScheduleStrategy;
 import com.planit.schedule.dto.SchedulePlaceSelectionResponse;
 import com.planit.schedule.ai.AiRecommendedPlaceMapper;
+import com.planit.schedule.ai.RecommendedPlace;
 import com.planit.schedule.ai.RecommendedRoute;
 import com.planit.schedule.route.RouteCalculationException;
+import com.planit.schedule.route.RoutePlace;
+import com.planit.schedule.route.RoutePlan;
+import com.planit.schedule.route.ShortestRouteCalculator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -27,6 +33,8 @@ public class ScheduleGenerationServiceImpl
     private final AiTripClient aiTripClient;
     private final AiRecommendedPlaceMapper recommendedPlaceMapper;
     private final SchedulePersistenceService schedulePersistenceService;
+    private final ShortestRouteCalculator calculator =
+            new ShortestRouteCalculator();
 
     @Override
     public SchedulePlaceSelectionResponse generate(
@@ -60,14 +68,19 @@ public class ScheduleGenerationServiceImpl
             List<RecommendedRoute> routes = recommendedPlaceMapper.mapRoutes(
                     response
             );
+            List<PlannedRoute> plannedRoutes = planRoutes(routes);
             schedulePersistenceService.saveCandidates(
                     tripId,
-                    routes,
+                    plannedRoutes,
                     preparation.mode()
             );
         } catch (RouteCalculationException exception) {
+            ErrorCode errorCode = exception.getReason()
+                    == RouteCalculationException.Reason.ROUTE_NOT_FOUND
+                    ? ErrorCode.SCHEDULE_ROUTE_NOT_FOUND
+                    : ErrorCode.INVALID_AI_PLACE_RESULT;
             throw new BusinessException(
-                    ErrorCode.INVALID_AI_PLACE_RESULT,
+                    errorCode,
                     exception
             );
         }
@@ -76,6 +89,38 @@ public class ScheduleGenerationServiceImpl
                 tripId.toString(),
                 response.data().places()
         );
+    }
+
+    private List<PlannedRoute> planRoutes(List<RecommendedRoute> routes) {
+        List<PlannedRoute> plannedRoutes = new ArrayList<>(routes.size());
+        for (RecommendedRoute route : routes) {
+            List<RoutePlan> dayPlans = new ArrayList<>(route.days().size());
+            for (List<RecommendedPlace> places : route.days()) {
+                dayPlans.add(planDay(
+                        places,
+                        route.strategy() != ScheduleStrategy.SHORTEST
+                ));
+            }
+            plannedRoutes.add(new PlannedRoute(route, dayPlans));
+        }
+        return List.copyOf(plannedRoutes);
+    }
+
+    private RoutePlan planDay(
+            List<RecommendedPlace> places,
+            boolean preserveOrder
+    ) {
+        List<RoutePlace> routePlaces = places.stream()
+                .map(place -> new RoutePlace(
+                        place.googlePlaceId(),
+                        place.latitude(),
+                        place.longitude(),
+                        place.categoryGroup()
+                ))
+                .toList();
+        return preserveOrder
+                ? calculator.calculateInGivenOrder(routePlaces)
+                : calculator.calculate(routePlaces);
     }
 
     private boolean isValidResponse(
