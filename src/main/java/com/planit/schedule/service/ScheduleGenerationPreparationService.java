@@ -24,13 +24,16 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class ScheduleGenerationPreparationService {
 
     private static final ZoneId SEOUL_ZONE = ZoneId.of("Asia/Seoul");
+    private static final int PREFERENCE_QUESTION_COUNT = 15;
 
     private final UserRepository userRepository;
     private final TripRepository tripRepository;
@@ -66,9 +69,7 @@ public class ScheduleGenerationPreparationService {
                 resolveAiRegion(trip.getRegion()),
                 trip.getStartDate(),
                 trip.getEndDate(),
-                submittedSurveys.stream()
-                        .map(this::toMemberSurvey)
-                        .toList()
+                toMemberSurveys(submittedSurveys)
         );
         long tripDayCount = ChronoUnit.DAYS.between(
                 trip.getStartDate(),
@@ -77,15 +78,58 @@ public class ScheduleGenerationPreparationService {
         return new ScheduleGenerationPreparation(request, mode, tripDayCount);
     }
 
-    private AiPlaceSelectionRequest.MemberSurvey toMemberSurvey(
-            Survey survey
+    private List<AiPlaceSelectionRequest.MemberSurvey> toMemberSurveys(
+            List<Survey> submittedSurveys
     ) {
-        List<Integer> scores = surveyAnswerRepository
-                .findBySurveyOrderByPreferenceQuestionDisplayOrderAsc(survey)
+        Map<Long, List<Integer>> scoresBySurveyId = surveyAnswerRepository
+                .findBySurveyInOrderByPreferenceQuestionDisplayOrderAsc(
+                        submittedSurveys
+                )
                 .stream()
-                .map(answer -> answer.getScore())
+                .collect(Collectors.groupingBy(
+                        answer -> answer.getSurvey().getId(),
+                        Collectors.mapping(
+                                answer -> answer.getScore(),
+                                Collectors.toList()
+                        )
+                ));
+        Map<Long, List<String>> exclusionsBySurveyId =
+                excludedCategoryRepository
+                        .findBySurveyInOrderByExclusionCategoryIdAsc(
+                                submittedSurveys
+                        )
+                        .stream()
+                        .collect(Collectors.groupingBy(
+                                excluded -> excluded.getSurvey().getId(),
+                                Collectors.mapping(
+                                        excluded -> excluded
+                                                .getExclusionCategory()
+                                                .getName(),
+                                        Collectors.toList()
+                                )
+                        ));
+
+        return submittedSurveys.stream()
+                .map(survey -> toMemberSurvey(
+                        survey,
+                        scoresBySurveyId.getOrDefault(
+                                survey.getId(),
+                                List.of()
+                        ),
+                        exclusionsBySurveyId.getOrDefault(
+                                survey.getId(),
+                                List.of()
+                        )
+                ))
                 .toList();
-        if (scores.size() != 15) {
+    }
+
+    private AiPlaceSelectionRequest.MemberSurvey toMemberSurvey(
+            Survey survey,
+            List<Integer> scores,
+            List<String> exclusions
+    ) {
+        if (scores.size() != PREFERENCE_QUESTION_COUNT) {
             throw new BusinessException(
                     ErrorCode.SCHEDULE_GENERATION_NOT_READY
             );
@@ -99,13 +143,7 @@ public class ScheduleGenerationPreparationService {
                                 .toString()
                 ),
                 scores,
-                excludedCategoryRepository
-                        .findBySurveyOrderByExclusionCategoryIdAsc(survey)
-                        .stream()
-                        .map(excluded -> excluded
-                                .getExclusionCategory()
-                                .getName())
-                        .toList()
+                exclusions
         );
     }
 
