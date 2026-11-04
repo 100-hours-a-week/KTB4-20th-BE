@@ -16,6 +16,7 @@ import com.planit.schedule.route.RoutePlace;
 import com.planit.schedule.route.RoutePlan;
 import com.planit.schedule.route.ShortestRouteCalculator;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 
@@ -24,11 +25,14 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 @RequiredArgsConstructor
 public class ScheduleGenerationServiceImpl
         implements ScheduleGenerationService {
+
+    private static final int PLACE_SAVE_MAX_ATTEMPTS = 3;
 
     private final ScheduleGenerationPreparationService preparationService;
     private final AiTripClient aiTripClient;
@@ -71,14 +75,13 @@ public class ScheduleGenerationServiceImpl
                     response
             );
             List<PlannedRoute> plannedRoutes = planRoutes(routes);
-            Map<String, Long> placeIds = placePersistenceService
-                    .upsertAndFindIds(
-                            preparation.regionId(),
-                            routes.stream()
-                                    .flatMap(route -> route.days().stream())
-                                    .flatMap(List::stream)
-                                    .toList()
-                    );
+            Map<String, Long> placeIds = savePlacesWithRetry(
+                    preparation.regionId(),
+                    routes.stream()
+                            .flatMap(route -> route.days().stream())
+                            .flatMap(List::stream)
+                            .toList()
+            );
             schedulePersistenceService.saveCandidates(
                     tripId,
                     plannedRoutes,
@@ -100,6 +103,40 @@ public class ScheduleGenerationServiceImpl
                 tripId.toString(),
                 response.data().places()
         );
+    }
+
+    private Map<String, Long> savePlacesWithRetry(
+            long regionId,
+            List<RecommendedPlace> places
+    ) {
+        for (int attempt = 1; ; attempt++) {
+            try {
+                return placePersistenceService.upsertAndFindIds(
+                        regionId,
+                        places
+                );
+            } catch (PessimisticLockingFailureException exception) {
+                if (attempt == PLACE_SAVE_MAX_ATTEMPTS) {
+                    throw exception;
+                }
+                sleepBeforeRetry(attempt, exception);
+            }
+        }
+    }
+
+    private void sleepBeforeRetry(
+            int attempt,
+            PessimisticLockingFailureException exception
+    ) {
+        try {
+            Thread.sleep(ThreadLocalRandom.current().nextLong(
+                    10L * attempt,
+                    30L * attempt + 1
+            ));
+        } catch (InterruptedException interruptedException) {
+            Thread.currentThread().interrupt();
+            throw exception;
+        }
     }
 
     private List<PlannedRoute> planRoutes(List<RecommendedRoute> routes) {

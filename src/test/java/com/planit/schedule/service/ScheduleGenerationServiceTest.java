@@ -28,6 +28,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.web.client.RestClientException;
 
 import java.time.LocalDate;
@@ -43,6 +44,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -247,6 +249,50 @@ class ScheduleGenerationServiceTest {
                 any(),
                 org.mockito.ArgumentMatchers.eq(ScheduleGenerationMode.INITIAL)
         );
+    }
+
+    @DisplayName("장소 저장 잠금 충돌은 최대 횟수 안에서 재시도한다")
+    @Test
+    void retriesPlaceSaveAfterLockFailure() {
+        when(placePersistenceService.upsertAndFindIds(any(Long.class), any()))
+                .thenThrow(new PessimisticLockingFailureException("충돌"))
+                .thenThrow(new PessimisticLockingFailureException("충돌"))
+                .thenReturn(Map.of());
+
+        service.generate(
+                USER_ID.toString(),
+                TRIP_ID,
+                ScheduleGenerationReason.GENERAL
+        );
+
+        verify(placePersistenceService, times(3))
+                .upsertAndFindIds(any(Long.class), any());
+        verify(schedulePersistenceService).saveCandidates(
+                org.mockito.ArgumentMatchers.eq(TRIP_ID),
+                any(),
+                any(),
+                org.mockito.ArgumentMatchers.eq(ScheduleGenerationMode.INITIAL)
+        );
+    }
+
+    @DisplayName("장소 저장 잠금 충돌이 계속되면 세 번째 실패를 전달한다")
+    @Test
+    void stopsRetryingPlaceSaveAfterThreeAttempts() {
+        PessimisticLockingFailureException exception =
+                new PessimisticLockingFailureException("충돌");
+        when(placePersistenceService.upsertAndFindIds(any(Long.class), any()))
+                .thenThrow(exception);
+
+        assertThatThrownBy(() -> service.generate(
+                USER_ID.toString(),
+                TRIP_ID,
+                ScheduleGenerationReason.GENERAL
+        )).isSameAs(exception);
+
+        verify(placePersistenceService, times(3))
+                .upsertAndFindIds(any(Long.class), any());
+        verify(schedulePersistenceService, never())
+                .saveCandidates(any(Long.class), any(), any(), any());
     }
 
     @DisplayName("제출된 설문의 답변과 제외 카테고리를 각각 한 번에 조회한다")

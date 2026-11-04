@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,7 +33,9 @@ public class PlacePersistenceService {
                         (first, ignored) -> first,
                         LinkedHashMap::new
                 ));
-        List<PlaceDetails> places = List.copyOf(detailsById.values());
+        List<PlaceDetails> places = detailsById.values().stream()
+                .sorted(Comparator.comparing(PlaceDetails::googlePlaceId))
+                .toList();
         List<Place> savedPlaces = placeRepository
                 .findByRegion_IdAndGooglePlaceIdIn(
                         regionId,
