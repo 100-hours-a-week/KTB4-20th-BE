@@ -75,7 +75,12 @@ public class ScheduleGenerationPreparationService {
                 trip.getStartDate(),
                 trip.getEndDate()
         ) + 1;
-        return new ScheduleGenerationPreparation(request, mode, tripDayCount);
+        return new ScheduleGenerationPreparation(
+                request,
+                mode,
+                trip.getRegion().getId(),
+                tripDayCount
+        );
     }
 
     private List<AiPlaceSelectionRequest.MemberSurvey> toMemberSurveys(

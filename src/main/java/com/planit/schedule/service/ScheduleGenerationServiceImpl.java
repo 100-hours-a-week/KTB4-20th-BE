@@ -22,6 +22,7 @@ import org.springframework.web.client.RestClientException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Service
@@ -32,6 +33,7 @@ public class ScheduleGenerationServiceImpl
     private final ScheduleGenerationPreparationService preparationService;
     private final AiTripClient aiTripClient;
     private final AiRecommendedPlaceMapper recommendedPlaceMapper;
+    private final PlacePersistenceService placePersistenceService;
     private final SchedulePersistenceService schedulePersistenceService;
     private final ShortestRouteCalculator calculator =
             new ShortestRouteCalculator();
@@ -69,9 +71,18 @@ public class ScheduleGenerationServiceImpl
                     response
             );
             List<PlannedRoute> plannedRoutes = planRoutes(routes);
+            Map<String, Long> placeIds = placePersistenceService
+                    .upsertAndFindIds(
+                            preparation.regionId(),
+                            routes.stream()
+                                    .flatMap(route -> route.days().stream())
+                                    .flatMap(List::stream)
+                                    .toList()
+                    );
             schedulePersistenceService.saveCandidates(
                     tripId,
                     plannedRoutes,
+                    placeIds,
                     preparation.mode()
             );
         } catch (RouteCalculationException exception) {
