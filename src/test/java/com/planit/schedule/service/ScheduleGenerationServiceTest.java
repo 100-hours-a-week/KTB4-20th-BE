@@ -82,18 +82,22 @@ class ScheduleGenerationServiceTest {
         recommendedPlaceMapper = mock(AiRecommendedPlaceMapper.class);
         schedulePersistenceService = mock(SchedulePersistenceService.class);
         regenerationPolicy = mock(ScheduleRegenerationPolicy.class);
+        ScheduleGenerationPreparationService preparationService =
+                new ScheduleGenerationPreparationService(
+                        userRepository,
+                        tripRepository,
+                        tripMemberRepository,
+                        new TripMemberAccessService(tripMemberRepository),
+                        surveyRepository,
+                        surveyAnswerRepository,
+                        excludedCategoryRepository,
+                        regenerationPolicy
+                );
         service = new ScheduleGenerationServiceImpl(
-                userRepository,
-                tripRepository,
-                tripMemberRepository,
-                new TripMemberAccessService(tripMemberRepository),
-                surveyRepository,
-                surveyAnswerRepository,
-                excludedCategoryRepository,
+                preparationService,
                 aiTripClient,
                 recommendedPlaceMapper,
-                schedulePersistenceService,
-                regenerationPolicy
+                schedulePersistenceService
         );
 
         user = mock(User.class);
