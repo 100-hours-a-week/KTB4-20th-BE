@@ -86,6 +86,37 @@ class PlacePersistenceServiceTest {
                 .saveChangedAndMissingAndFindIds(any(Long.class), any());
     }
 
+    @DisplayName("장소는 Google Place ID 순서로 저장한다")
+    @Test
+    void savesPlacesInGooglePlaceIdOrder() {
+        when(placeRepository.findByRegion_IdAndGooglePlaceIdIn(
+                org.mockito.ArgumentMatchers.eq(10L),
+                any()
+        )).thenReturn(List.of());
+        when(placeWriteService.saveChangedAndMissingAndFindIds(
+                org.mockito.ArgumentMatchers.eq(10L),
+                any()
+        )).thenReturn(Map.of());
+
+        service.upsertAndFindIds(
+                10L,
+                List.of(
+                        recommendation("google-2", "장소 2"),
+                        recommendation("google-1", "장소 1")
+                )
+        );
+
+        verify(placeWriteService).saveChangedAndMissingAndFindIds(
+                org.mockito.ArgumentMatchers.eq(10L),
+                org.mockito.ArgumentMatchers.argThat(places ->
+                        places.stream()
+                                .map(details -> details.googlePlaceId())
+                                .toList()
+                                .equals(List.of("google-1", "google-2"))
+                )
+        );
+    }
+
     private RecommendedPlace recommendation(String id, String name) {
         return new RecommendedPlace(
                 id,
