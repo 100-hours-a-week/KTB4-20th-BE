@@ -1,6 +1,9 @@
 spring:
   application:
     name: planit-backend
+  threads:
+    virtual:
+      enabled: true
   servlet:
     multipart:
       max-file-size: 5MB
