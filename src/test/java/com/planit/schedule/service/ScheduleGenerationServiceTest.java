@@ -82,18 +82,22 @@ class ScheduleGenerationServiceTest {
         recommendedPlaceMapper = mock(AiRecommendedPlaceMapper.class);
         schedulePersistenceService = mock(SchedulePersistenceService.class);
         regenerationPolicy = mock(ScheduleRegenerationPolicy.class);
+        ScheduleGenerationPreparationService preparationService =
+                new ScheduleGenerationPreparationService(
+                        userRepository,
+                        tripRepository,
+                        tripMemberRepository,
+                        new TripMemberAccessService(tripMemberRepository),
+                        surveyRepository,
+                        surveyAnswerRepository,
+                        excludedCategoryRepository,
+                        regenerationPolicy
+                );
         service = new ScheduleGenerationServiceImpl(
-                userRepository,
-                tripRepository,
-                tripMemberRepository,
-                new TripMemberAccessService(tripMemberRepository),
-                surveyRepository,
-                surveyAnswerRepository,
-                excludedCategoryRepository,
+                preparationService,
                 aiTripClient,
                 recommendedPlaceMapper,
-                schedulePersistenceService,
-                regenerationPolicy
+                schedulePersistenceService
         );
 
         user = mock(User.class);
@@ -128,18 +132,21 @@ class ScheduleGenerationServiceTest {
         when(tripMemberRepository.findActiveMembersByTrip(trip))
                 .thenReturn(List.of(host));
         when(hostSurvey.getTripMember()).thenReturn(host);
+        when(hostSurvey.getId()).thenReturn(1L);
         when(hostSurvey.getSubmittedAt()).thenReturn(LocalDateTime.now());
         when(surveyRepository.findByTripMemberInAndSubmittedAtIsNotNull(
                 List.of(host)
         )).thenReturn(List.of(hostSurvey));
         List<SurveyAnswer> submittedAnswers = answers();
         when(surveyAnswerRepository
-                .findBySurveyOrderByPreferenceQuestionDisplayOrderAsc(
-                        hostSurvey
+                .findBySurveyInOrderByPreferenceQuestionDisplayOrderAsc(
+                        List.of(hostSurvey)
                 )).thenReturn(submittedAnswers);
         SurveyExcludedCategory seafood = excludedCategory("해산물");
         when(excludedCategoryRepository
-                .findBySurveyOrderByExclusionCategoryIdAsc(hostSurvey))
+                .findBySurveyInOrderByExclusionCategoryIdAsc(
+                        List.of(hostSurvey)
+                ))
                 .thenReturn(List.of(seafood));
         when(aiTripClient.selectPlaces(any()))
                 .thenReturn(aiResponse());
@@ -231,6 +238,29 @@ class ScheduleGenerationServiceTest {
                 any(),
                 org.mockito.ArgumentMatchers.eq(ScheduleGenerationMode.INITIAL)
         );
+    }
+
+    @DisplayName("제출된 설문의 답변과 제외 카테고리를 각각 한 번에 조회한다")
+    @Test
+    void queriesSubmittedSurveyDetailsInBatches() {
+        service.generate(
+                USER_ID.toString(),
+                TRIP_ID,
+                ScheduleGenerationReason.GENERAL
+        );
+
+        verify(surveyAnswerRepository)
+                .findBySurveyInOrderByPreferenceQuestionDisplayOrderAsc(
+                        List.of(hostSurvey)
+                );
+        verify(excludedCategoryRepository)
+                .findBySurveyInOrderByExclusionCategoryIdAsc(
+                        List.of(hostSurvey)
+                );
+        verify(surveyAnswerRepository, never())
+                .findBySurveyOrderByPreferenceQuestionDisplayOrderAsc(any());
+        verify(excludedCategoryRepository, never())
+                .findBySurveyOrderByExclusionCategoryIdAsc(any());
     }
 
     @DisplayName("여행 기간과 같은 개수의 날짜별 장소 목록을 생성한다")
@@ -333,8 +363,8 @@ class ScheduleGenerationServiceTest {
     void rejectsSurveyWithoutFifteenAnswers() {
         List<SurveyAnswer> fourteenAnswers = answers().subList(0, 14);
         when(surveyAnswerRepository
-                .findBySurveyOrderByPreferenceQuestionDisplayOrderAsc(
-                        hostSurvey
+                .findBySurveyInOrderByPreferenceQuestionDisplayOrderAsc(
+                        List.of(hostSurvey)
                 )).thenReturn(fourteenAnswers);
 
         assertError(ErrorCode.SCHEDULE_GENERATION_NOT_READY);
@@ -620,6 +650,7 @@ class ScheduleGenerationServiceTest {
         List<SurveyAnswer> answers = new ArrayList<>();
         for (int index = 0; index < 15; index++) {
             SurveyAnswer answer = mock(SurveyAnswer.class);
+            when(answer.getSurvey()).thenReturn(hostSurvey);
             when(answer.getScore()).thenReturn(index % 5 + 1);
             answers.add(answer);
         }
@@ -632,6 +663,7 @@ class ScheduleGenerationServiceTest {
                 SurveyExclusionCategory.class
         );
         when(category.getName()).thenReturn(name);
+        when(excluded.getSurvey()).thenReturn(hostSurvey);
         when(excluded.getExclusionCategory()).thenReturn(category);
         return excluded;
     }
