@@ -34,6 +34,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -60,6 +61,7 @@ class ScheduleGenerationServiceTest {
     private SurveyExcludedCategoryRepository excludedCategoryRepository;
     private AiTripClient aiTripClient;
     private AiRecommendedPlaceMapper recommendedPlaceMapper;
+    private PlacePersistenceService placePersistenceService;
     private SchedulePersistenceService schedulePersistenceService;
     private ScheduleRegenerationPolicy regenerationPolicy;
     private ScheduleGenerationServiceImpl service;
@@ -80,6 +82,7 @@ class ScheduleGenerationServiceTest {
         );
         aiTripClient = mock(AiTripClient.class);
         recommendedPlaceMapper = mock(AiRecommendedPlaceMapper.class);
+        placePersistenceService = mock(PlacePersistenceService.class);
         schedulePersistenceService = mock(SchedulePersistenceService.class);
         regenerationPolicy = mock(ScheduleRegenerationPolicy.class);
         ScheduleGenerationPreparationService preparationService =
@@ -97,6 +100,7 @@ class ScheduleGenerationServiceTest {
                 preparationService,
                 aiTripClient,
                 recommendedPlaceMapper,
+                placePersistenceService,
                 schedulePersistenceService
         );
 
@@ -117,6 +121,7 @@ class ScheduleGenerationServiceTest {
         when(trip.getSurveyDeadlineAt())
                 .thenReturn(LocalDateTime.now().plusDays(1));
         when(trip.getRegion()).thenReturn(region);
+        when(region.getId()).thenReturn(10L);
         when(region.getCode()).thenReturn("REGION-SEOUL");
         when(host.getRole()).thenReturn(TripMemberRole.HOST);
         when(host.getActiveSlot()).thenReturn((byte) 1);
@@ -160,6 +165,8 @@ class ScheduleGenerationServiceTest {
                 any(Trip.class),
                 any(ScheduleGenerationReason.class)
         )).thenReturn(ScheduleGenerationMode.INITIAL);
+        when(placePersistenceService.upsertAndFindIds(any(Long.class), any()))
+                .thenReturn(Map.of());
     }
 
     @DisplayName("날씨 재생성으로 판정되면 같은 AI 요청을 다시 보내고 재생성 방식으로 저장한다")
@@ -177,6 +184,7 @@ class ScheduleGenerationServiceTest {
         verify(aiTripClient).selectPlaces(any());
         verify(schedulePersistenceService).saveCandidates(
                 org.mockito.ArgumentMatchers.eq(TRIP_ID),
+                any(),
                 any(),
                 org.mockito.ArgumentMatchers.eq(
                         ScheduleGenerationMode.WEATHER_REGENERATION
@@ -236,6 +244,7 @@ class ScheduleGenerationServiceTest {
         verify(schedulePersistenceService).saveCandidates(
                 org.mockito.ArgumentMatchers.eq(TRIP_ID),
                 any(),
+                any(),
                 org.mockito.ArgumentMatchers.eq(ScheduleGenerationMode.INITIAL)
         );
     }
@@ -281,6 +290,7 @@ class ScheduleGenerationServiceTest {
                 .allSatisfy(places -> assertThat(places).hasSize(5));
         verify(schedulePersistenceService).saveCandidates(
                 org.mockito.ArgumentMatchers.eq(TRIP_ID),
+                any(),
                 any(),
                 org.mockito.ArgumentMatchers.eq(ScheduleGenerationMode.INITIAL)
         );
@@ -332,7 +342,7 @@ class ScheduleGenerationServiceTest {
         assertError(ErrorCode.AI_SCHEDULE_GENERATION_FAILED);
 
         verify(schedulePersistenceService, never())
-                .saveCandidates(any(Long.class), any(), any());
+                .saveCandidates(any(Long.class), any(), any(), any());
     }
 
     @DisplayName("방장이 아닌 사용자의 일정 생성을 거부한다")
@@ -464,6 +474,7 @@ class ScheduleGenerationServiceTest {
         verify(schedulePersistenceService).saveCandidates(
                 org.mockito.ArgumentMatchers.eq(TRIP_ID),
                 any(),
+                any(),
                 org.mockito.ArgumentMatchers.eq(ScheduleGenerationMode.INITIAL)
         );
     }
@@ -485,7 +496,7 @@ class ScheduleGenerationServiceTest {
         assertError(ErrorCode.AI_SCHEDULE_GENERATION_FAILED);
 
         verify(schedulePersistenceService, never())
-                .saveCandidates(any(Long.class), any(), any());
+                .saveCandidates(any(Long.class), any(), any(), any());
     }
 
     @DisplayName("AI 응답에 같은 전략의 코스가 중복되면 거부한다")

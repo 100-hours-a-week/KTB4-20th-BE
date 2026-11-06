@@ -36,6 +36,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.planit.global.error.ErrorCode.INVALID_AI_PLACE_RESULT;
 import static com.planit.global.error.ErrorCode.SCHEDULE_ALREADY_EXISTS;
@@ -83,6 +84,7 @@ public class SchedulePersistenceService {
     public List<GeneratedScheduleResult> saveCandidates(
             long tripId,
             List<PlannedRoute> plannedRoutes,
+            Map<String, Long> placeIdsByGooglePlaceId,
             ScheduleGenerationMode mode
     ) {
         Trip trip = tripRepository.findByIdForUpdate(tripId)
@@ -103,7 +105,12 @@ public class SchedulePersistenceService {
         try {
             List<GeneratedScheduleResult> results = new ArrayList<>(3);
             for (PlannedRoute plannedRoute : plannedRoutes) {
-                results.add(saveCandidate(trip, plannedRoute, now));
+                results.add(saveCandidate(
+                        trip,
+                        plannedRoute,
+                        placeIdsByGooglePlaceId,
+                        now
+                ));
             }
             return List.copyOf(results);
         } catch (NullPointerException exception) {
@@ -186,6 +193,7 @@ public class SchedulePersistenceService {
     private GeneratedScheduleResult saveCandidate(
             Trip trip,
             PlannedRoute plannedRoute,
+            Map<String, Long> placeIdsByGooglePlaceId,
             LocalDateTime now
     ) {
         RecommendedRoute route = plannedRoute.route();
@@ -201,13 +209,14 @@ public class SchedulePersistenceService {
         int placeCount = 0;
         int legCount = 0;
         for (int dayIndex = 0; dayIndex < route.days().size(); dayIndex++) {
-            SavedDayResult dayResult = saveDay(
+            SavedDayResult dayResult = savePlannedDay(
                     trip,
                     schedule,
                     (byte) (dayIndex + 1),
                     route.days().get(dayIndex),
-                    now,
-                    plannedRoute.dayPlans().get(dayIndex)
+                    plannedRoute.dayPlans().get(dayIndex),
+                    placeIdsByGooglePlaceId,
+                    now
             );
             dayIds.add(dayResult.dayId());
             totalDistanceMeters += dayResult.totalDistanceMeters();
@@ -311,6 +320,53 @@ public class SchedulePersistenceService {
                 now,
                 null,
                 preserveOrder
+        );
+    }
+
+    private SavedDayResult savePlannedDay(
+            Trip trip,
+            Schedule schedule,
+            byte dayNumber,
+            List<RecommendedPlace> recommendations,
+            RoutePlan plan,
+            Map<String, Long> placeIdsByGooglePlaceId,
+            LocalDateTime now
+    ) {
+        Map<String, RecommendedPlace> recommendationByGooglePlaceId =
+                recommendations.stream().collect(Collectors.toMap(
+                        RecommendedPlace::googlePlaceId,
+                        recommendation -> recommendation
+                ));
+        ScheduleDay day = dayRepository.save(new ScheduleDay(
+                schedule,
+                dayNumber,
+                trip.getStartDate().plusDays(dayNumber - 1L)
+        ));
+        Map<String, ScheduleVisit> visitByGooglePlaceId = new HashMap<>();
+        for (int index = 0; index < plan.places().size(); index++) {
+            String googlePlaceId = plan.places().get(index).googlePlaceId();
+            Long placeId = placeIdsByGooglePlaceId.get(googlePlaceId);
+            RecommendedPlace recommendation =
+                    recommendationByGooglePlaceId.get(googlePlaceId);
+            if (placeId == null || recommendation == null) {
+                throw new BusinessException(INVALID_AI_PLACE_RESULT);
+            }
+            ScheduleVisit visit = visitRepository.save(new ScheduleVisit(
+                    day,
+                    placeRepository.getReferenceById(placeId),
+                    index + 1,
+                    recommendation.editorialSummary(),
+                    recommendation.matchedPreferences(),
+                    now
+            ));
+            visitByGooglePlaceId.put(googlePlaceId, visit);
+        }
+        saveLegs(day, plan, visitByGooglePlaceId);
+        return new SavedDayResult(
+                day.getId().toString(),
+                plan.totalDistanceMeters(),
+                plan.places().size(),
+                plan.legs().size()
         );
     }
 

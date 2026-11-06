@@ -66,6 +66,60 @@ class PlaceTest {
         assertThat(place.getPhone()).isEqualTo("010-0000-0000");
     }
 
+    @DisplayName("DB 저장 정밀도에서 장소 정보가 같으면 변경되지 않은 것으로 판단한다")
+    @Test
+    void recognizesSameDetailsAtStoredCoordinatePrecision() {
+        Place place = new Place(
+                mock(Region.class),
+                details(
+                        "google-place-id",
+                        "기존 장소",
+                        "카페",
+                        "기존 주소",
+                        "010-0000-0000"
+                ),
+                LocalDateTime.now()
+        );
+        PlaceDetails sameDetails = new PlaceDetails(
+                "google-place-id",
+                " 기존 장소 ",
+                null,
+                null,
+                null,
+                new BigDecimal("129.15000004"),
+                new BigDecimal("35.15000004"),
+                null,
+                null
+        );
+
+        assertThat(place.hasSameDetails(sameDetails)).isTrue();
+    }
+
+    @DisplayName("DB에 저장될 장소 정보가 다르면 변경된 것으로 판단한다")
+    @Test
+    void detectsChangedDetails() {
+        Place place = new Place(
+                mock(Region.class),
+                details(
+                        "google-place-id",
+                        "기존 장소",
+                        "카페",
+                        "기존 주소",
+                        "010-0000-0000"
+                ),
+                LocalDateTime.now()
+        );
+        PlaceDetails changedDetails = details(
+                "google-place-id",
+                "변경된 장소",
+                null,
+                null,
+                null
+        );
+
+        assertThat(place.hasSameDetails(changedDetails)).isFalse();
+    }
+
     private PlaceDetails details(
             String googlePlaceId,
             String name,

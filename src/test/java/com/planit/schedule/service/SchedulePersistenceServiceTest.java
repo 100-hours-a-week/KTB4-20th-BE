@@ -31,6 +31,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.IntStream;
@@ -192,8 +193,7 @@ class SchedulePersistenceServiceTest {
     @DisplayName("세 전략 후보를 확정되지 않은 일정으로 함께 저장한다")
     @Test
     void savesThreeDraftCandidates() {
-        List<GeneratedScheduleResult> results = service.saveCandidates(
-                1L,
+        List<GeneratedScheduleResult> results = saveCandidates(
                 candidates(),
                 ScheduleGenerationMode.INITIAL
         );
@@ -242,8 +242,7 @@ class SchedulePersistenceServiceTest {
                         day.getSchedule().getStrategy().equals("DIVERSITY")
                 ));
 
-        assertThatThrownBy(() -> service.saveCandidates(
-                1L,
+        assertThatThrownBy(() -> saveCandidates(
                 candidates(),
                 ScheduleGenerationMode.INITIAL
         )).isInstanceOf(IllegalStateException.class);
@@ -256,8 +255,7 @@ class SchedulePersistenceServiceTest {
     void savesTwoPlacesOnLastDayOfMultiDayCandidates() {
         when(trip.getEndDate()).thenReturn(LocalDate.of(2026, 10, 2));
 
-        List<GeneratedScheduleResult> results = service.saveCandidates(
-                1L,
+        List<GeneratedScheduleResult> results = saveCandidates(
                 candidatesByDay(5, 2),
                 ScheduleGenerationMode.INITIAL
         );
@@ -272,8 +270,7 @@ class SchedulePersistenceServiceTest {
     void rejectsFewerThanFivePlacesBeforeLastDay() {
         when(trip.getEndDate()).thenReturn(LocalDate.of(2026, 10, 2));
 
-        assertThatThrownBy(() -> service.saveCandidates(
-                1L,
+        assertThatThrownBy(() -> saveCandidates(
                 candidatesByDay(4, 2),
                 ScheduleGenerationMode.INITIAL
         )).isInstanceOfSatisfying(
@@ -290,8 +287,7 @@ class SchedulePersistenceServiceTest {
     void rejectsFewerThanTwoPlacesOnLastDay() {
         when(trip.getEndDate()).thenReturn(LocalDate.of(2026, 10, 2));
 
-        assertThatThrownBy(() -> service.saveCandidates(
-                1L,
+        assertThatThrownBy(() -> saveCandidates(
                 candidatesByDay(5, 1),
                 ScheduleGenerationMode.INITIAL
         )).isInstanceOfSatisfying(
@@ -318,8 +314,7 @@ class SchedulePersistenceServiceTest {
                 candidateRoutes().get(2)
         );
 
-        assertThatThrownBy(() -> service.saveCandidates(
-                1L,
+        assertThatThrownBy(() -> saveCandidates(
                 planRoutes(invalidCandidateRoutes),
                 ScheduleGenerationMode.GENERAL_REGENERATION
         ))
@@ -340,8 +335,7 @@ class SchedulePersistenceServiceTest {
                 LocalDateTime.of(2026, 9, 30, 23, 50)
         );
 
-        assertThatThrownBy(() -> service.saveCandidates(
-                1L,
+        assertThatThrownBy(() -> saveCandidates(
                 candidates(),
                 ScheduleGenerationMode.INITIAL
         ))
@@ -391,8 +385,7 @@ class SchedulePersistenceServiceTest {
         when(scheduleRepository.existsByTripIdAndStatus(1L, "DRAFT"))
                 .thenReturn(true);
 
-        assertThatThrownBy(() -> service.saveCandidates(
-                1L,
+        assertThatThrownBy(() -> saveCandidates(
                 candidates(),
                 ScheduleGenerationMode.INITIAL
         ))
@@ -470,6 +463,23 @@ class SchedulePersistenceServiceTest {
         )).thenReturn(true);
         when(scheduleRepository.findByTripId(1L))
                 .thenReturn(List.of(mock(Schedule.class)));
+    }
+
+    private List<GeneratedScheduleResult> saveCandidates(
+            List<PlannedRoute> plannedRoutes,
+            ScheduleGenerationMode mode
+    ) {
+        AtomicLong placeId = new AtomicLong(100);
+        Map<String, Long> placeIds = plannedRoutes.stream()
+                .flatMap(route -> route.route().days().stream())
+                .flatMap(List::stream)
+                .map(RecommendedPlace::googlePlaceId)
+                .distinct()
+                .collect(java.util.stream.Collectors.toMap(
+                        googlePlaceId -> googlePlaceId,
+                        ignored -> placeId.getAndIncrement()
+                ));
+        return service.saveCandidates(1L, plannedRoutes, placeIds, mode);
     }
 
     private List<RecommendedPlace> recommendations() {

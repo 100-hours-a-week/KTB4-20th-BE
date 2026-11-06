@@ -4,11 +4,15 @@ import com.planit.domain.Region;
 import jakarta.persistence.*;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 @Entity
 @Table(name = "places")
 public class Place {
+    private static final int COORDINATE_SCALE = 7;
+
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
@@ -68,6 +72,40 @@ public class Place {
         this.phone = mergeOptional(this.phone, details.phone());
         this.placeUrl = mergeOptional(this.placeUrl, details.placeUrl());
         this.updatedAt = now;
+    }
+
+    public boolean hasSameDetails(PlaceDetails details) {
+        return name.equals(details.name().trim())
+                && Objects.equals(
+                        categoryName,
+                        mergeOptional(categoryName, details.categoryName())
+                )
+                && Objects.equals(
+                        address,
+                        mergeOptional(address, details.address())
+                )
+                && Objects.equals(
+                        roadAddress,
+                        mergeOptional(roadAddress, details.roadAddress())
+                )
+                && Objects.equals(phone, mergeOptional(phone, details.phone()))
+                && Objects.equals(
+                        placeUrl,
+                        mergeOptional(placeUrl, details.placeUrl())
+                )
+                && sameCoordinate(longitude, details.longitude())
+                && sameCoordinate(latitude, details.latitude());
+    }
+
+    private static boolean sameCoordinate(
+            BigDecimal current,
+            BigDecimal source
+    ) {
+        return current.setScale(COORDINATE_SCALE, RoundingMode.HALF_UP)
+                .compareTo(source.setScale(
+                        COORDINATE_SCALE,
+                        RoundingMode.HALF_UP
+                )) == 0;
     }
 
     private static String mergeOptional(String currentValue, String newValue) {
