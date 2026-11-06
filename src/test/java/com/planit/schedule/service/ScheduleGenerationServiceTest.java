@@ -706,7 +706,9 @@ class ScheduleGenerationServiceTest {
                         4820,
                         null,
                         List.of("user_id_1", "user_id_3"),
-                        List.of("HISTORY_CULTURE")
+                        index % 2 == 0
+                                ? List.of("ACTIVITY")
+                                : List.of("HISTORY_CULTURE")
                 ));
             }
             dailyPlaces.add(places);

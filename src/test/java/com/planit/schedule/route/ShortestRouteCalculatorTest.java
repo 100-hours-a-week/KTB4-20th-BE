@@ -34,18 +34,21 @@ class ShortestRouteCalculatorTest {
         RoutePlan plan = calculator.calculateInGivenOrder(places);
 
         assertThat(plan.places())
-                .extracting(RoutePlace::placeId)
-                .containsExactly(3L, 1L, 5L, 2L, 4L);
+                .extracting(RoutePlace::googlePlaceId)
+                .containsExactly("3", "1", "5", "2", "4");
         assertThat(plan.legs())
                 .extracting(RouteLeg::order)
                 .containsExactly(1, 2, 3, 4);
         assertThat(plan.legs())
-                .extracting(RouteLeg::fromPlaceId, RouteLeg::toPlaceId)
+                .extracting(
+                        RouteLeg::fromGooglePlaceId,
+                        RouteLeg::toGooglePlaceId
+                )
                 .containsExactly(
-                        org.assertj.core.groups.Tuple.tuple(3L, 1L),
-                        org.assertj.core.groups.Tuple.tuple(1L, 5L),
-                        org.assertj.core.groups.Tuple.tuple(5L, 2L),
-                        org.assertj.core.groups.Tuple.tuple(2L, 4L)
+                        org.assertj.core.groups.Tuple.tuple("3", "1"),
+                        org.assertj.core.groups.Tuple.tuple("1", "5"),
+                        org.assertj.core.groups.Tuple.tuple("5", "2"),
+                        org.assertj.core.groups.Tuple.tuple("2", "4")
                 );
         assertThat(plan.totalDistanceMeters()).isEqualTo(
                 plan.legs().stream()
@@ -69,8 +72,8 @@ class ShortestRouteCalculatorTest {
         RoutePlan plan = calculator.calculate(places);
 
         assertThat(plan.places())
-                .extracting(RoutePlace::placeId)
-                .containsExactly(1L, 2L, 3L, 4L, 5L, 6L);
+                .extracting(RoutePlace::googlePlaceId)
+                .containsExactly("1", "2", "3", "4", "5", "6");
         assertThat(plan.legs()).hasSize(5);
         assertThat(plan.legs())
                 .extracting(RouteLeg::order)
@@ -129,8 +132,8 @@ class ShortestRouteCalculatorTest {
         RoutePlan plan = calculator.calculate(places);
 
         assertThat(plan.places())
-                .extracting(RoutePlace::placeId)
-                .containsExactly(1L, 2L, 3L, 4L, 5L, 6L);
+                .extracting(RoutePlace::googlePlaceId)
+                .containsExactly("1", "2", "3", "4", "5", "6");
         assertThat(plan.totalDistanceMeters()).isZero();
     }
 
@@ -176,12 +179,12 @@ class ShortestRouteCalculatorTest {
         ));
 
         assertThat(plan.places())
-                .extracting(RoutePlace::placeId)
-                .containsExactly(1L, 2L);
+                .extracting(RoutePlace::googlePlaceId)
+                .containsExactly("1", "2");
         assertThat(plan.legs()).singleElement()
                 .satisfies(leg -> {
-                    assertThat(leg.fromPlaceId()).isEqualTo(1L);
-                    assertThat(leg.toPlaceId()).isEqualTo(2L);
+                    assertThat(leg.fromGooglePlaceId()).isEqualTo("1");
+                    assertThat(leg.toGooglePlaceId()).isEqualTo("2");
                 });
     }
 
@@ -199,8 +202,8 @@ class ShortestRouteCalculatorTest {
         RoutePlan plan = calculator.calculate(places);
 
         assertThat(plan.places())
-                .extracting(RoutePlace::placeId)
-                .containsExactly(1L, 2L, 3L, 4L, 5L);
+                .extracting(RoutePlace::googlePlaceId)
+                .containsExactly("1", "2", "3", "4", "5");
         assertThat(plan.legs()).hasSize(4);
         assertThat(plan.legs())
                 .extracting(RouteLeg::order)
@@ -267,7 +270,7 @@ class ShortestRouteCalculatorTest {
             PlaceCategoryGroup categoryGroup
     ) {
         return new RoutePlace(
-                placeId,
+                Long.toString(placeId),
                 latitude,
                 longitude,
                 categoryGroup

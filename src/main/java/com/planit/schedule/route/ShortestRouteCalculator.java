@@ -19,7 +19,7 @@ public final class ShortestRouteCalculator {
         int placeCount = places.size();
 
         List<RoutePlace> orderedInput = places.stream()
-                .sorted(Comparator.comparingLong(RoutePlace::placeId))
+                .sorted(Comparator.comparing(RoutePlace::googlePlaceId))
                 .toList();
         SearchResult searchResult = new SearchResult();
         search(
@@ -115,8 +115,8 @@ public final class ShortestRouteCalculator {
             );
             totalDistance += distance;
             legs.add(new RouteLeg(
-                    from.placeId(),
-                    to.placeId(),
+                    from.googlePlaceId(),
+                    to.googlePlaceId(),
                     index + 1,
                     distance
             ));
@@ -145,13 +145,15 @@ public final class ShortestRouteCalculator {
             throw invalid("장소는 2개 이상이어야 합니다.");
         }
 
-        Set<Long> placeIds = new HashSet<>();
+        Set<String> googlePlaceIds = new HashSet<>();
         for (RoutePlace place : places) {
             if (place == null) {
                 throw invalid("장소는 null일 수 없습니다.");
             }
-            if (place.placeId() <= 0 || !placeIds.add(place.placeId())) {
-                throw invalid("장소 ID는 양수이며 중복되지 않아야 합니다.");
+            if (place.googlePlaceId() == null
+                    || place.googlePlaceId().isBlank()
+                    || !googlePlaceIds.add(place.googlePlaceId())) {
+                throw invalid("Google 장소 ID는 필수이며 중복되지 않아야 합니다.");
             }
             if (!Double.isFinite(place.latitude())
                     || place.latitude() < -90
