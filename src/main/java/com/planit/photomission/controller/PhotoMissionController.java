@@ -1,18 +1,20 @@
 package com.planit.photomission.controller;
 
 import com.planit.global.response.ApiResponse;
-import com.planit.photomission.ai.PhotoMissionVerifyResponse;
 import com.planit.photomission.dto.PhotoMissionAlbumResponse;
 import com.planit.photomission.dto.PhotoMissionCompletionResponse;
 import com.planit.photomission.dto.PhotoMissionDetailResponse;
 import com.planit.photomission.dto.PhotoMissionListResponse;
 import com.planit.photomission.dto.PhotoMissionPhotoDetailResponse;
 import com.planit.photomission.dto.PhotoMissionPhotoUploadResponse;
+import com.planit.photomission.dto.PhotoMissionSubmissionAcceptedResponse;
 import com.planit.photomission.service.PhotoMissionManualCompletionService;
 import com.planit.photomission.service.PhotoMissionPhotoManagementService;
 import com.planit.photomission.service.PhotoMissionQueryService;
 import com.planit.photomission.service.PhotoMissionSubmissionService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -39,7 +41,7 @@ public class PhotoMissionController {
     private final PhotoMissionQueryService queryService;
 
     @PostMapping(path = "/photomissions/{missionId}/photos", consumes = "multipart/form-data")
-    public ApiResponse<PhotoMissionVerifyResponse> submitPhoto(
+    public ResponseEntity<ApiResponse<PhotoMissionSubmissionAcceptedResponse>> submitPhoto(
             Authentication authentication,
             @PathVariable Long missionId,
             @RequestHeader("Idempotency-Key") UUID idempotencyKey,
@@ -47,16 +49,20 @@ public class PhotoMissionController {
             @RequestParam(required = false) BigDecimal latitude,
             @RequestParam(required = false) BigDecimal longitude
     ) {
-        return ApiResponse.success(
-                "PHOTO_MISSION_VERIFIED",
-                "사진 판정이 완료되었습니다.",
-                submissionService.submitAndVerify(
+        PhotoMissionSubmissionAcceptedResponse response =
+                submissionService.submit(
                         authentication.getName(),
                         missionId,
                         idempotencyKey,
                         photo,
                         latitude,
                         longitude
+                );
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(
+                ApiResponse.success(
+                        "PHOTO_MISSION_VERIFICATION_ACCEPTED",
+                        "사진 판정 요청이 접수되었습니다.",
+                        response
                 )
         );
     }

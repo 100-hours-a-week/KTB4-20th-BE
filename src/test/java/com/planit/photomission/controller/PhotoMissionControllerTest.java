@@ -1,11 +1,12 @@
 package com.planit.photomission.controller;
 
-import com.planit.photomission.ai.PhotoMissionVerifyResponse;
+import com.planit.photomission.domain.PhotoEvaluationExecutionStatus;
 import com.planit.photomission.dto.PhotoMissionAlbumResponse;
 import com.planit.photomission.dto.PhotoMissionCompletionResponse;
 import com.planit.photomission.dto.PhotoMissionDetailResponse;
 import com.planit.photomission.dto.PhotoMissionListResponse;
 import com.planit.photomission.dto.PhotoMissionPhotoDetailResponse;
+import com.planit.photomission.dto.PhotoMissionSubmissionAcceptedResponse;
 import com.planit.photomission.service.PhotoMissionManualCompletionService;
 import com.planit.photomission.service.PhotoMissionPhotoManagementService;
 import com.planit.photomission.service.PhotoMissionQueryService;
@@ -63,18 +64,15 @@ class PhotoMissionControllerTest {
         ).build();
     }
 
-    @DisplayName("사진을 제출하고 동기 AI 판정 결과를 반환한다")
+    @DisplayName("사진 판정 요청을 접수하고 202와 QUEUED 상태를 반환한다")
     @Test
-    void submitsAndVerifiesPhoto() throws Exception {
-        when(submissionService.submitAndVerify(
+    void acceptsPhotoEvaluationRequest() throws Exception {
+        when(submissionService.submit(
                 any(), any(), any(), any(), any(), any()
-        )).thenReturn(new PhotoMissionVerifyResponse(
-                "retry",
-                null,
-                BigDecimal.valueOf(75),
-                List.of(),
-                BigDecimal.valueOf(92),
-                "한 발 옆으로 옮겨서 다시 찍어 보세요."
+        )).thenReturn(new PhotoMissionSubmissionAcceptedResponse(
+                41L,
+                51L,
+                PhotoEvaluationExecutionStatus.QUEUED
         ));
 
         mockMvc.perform(multipart("/api/photomissions/31/photos")
@@ -83,12 +81,12 @@ class PhotoMissionControllerTest {
                         .param("latitude", "35.8350")
                         .param("longitude", "129.2188")
                         .principal(authentication()))
-                .andExpect(status().isOk())
+                .andExpect(status().isAccepted())
                 .andExpect(jsonPath("$.code")
-                        .value("PHOTO_MISSION_VERIFIED"))
-                .andExpect(jsonPath("$.data.result").value("retry"))
-                .andExpect(jsonPath("$.data.retry_hint")
-                        .value("한 발 옆으로 옮겨서 다시 찍어 보세요."));
+                        .value("PHOTO_MISSION_VERIFICATION_ACCEPTED"))
+                .andExpect(jsonPath("$.data.photoId").value(41))
+                .andExpect(jsonPath("$.data.evaluationId").value(51))
+                .andExpect(jsonPath("$.data.status").value("QUEUED"));
     }
 
     @DisplayName("본인이 제출한 포토미션 사진을 삭제한다")

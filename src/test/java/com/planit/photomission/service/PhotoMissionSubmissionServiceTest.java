@@ -5,7 +5,8 @@ import com.planit.global.error.ErrorCode;
 import com.planit.image.config.ImageProperties;
 import com.planit.image.service.ImageValidator;
 import com.planit.image.storage.ImageStorage;
-import com.planit.photomission.ai.PhotoMissionVerifyResponse;
+import com.planit.photomission.domain.PhotoEvaluationExecutionStatus;
+import com.planit.photomission.dto.PhotoMissionSubmissionAcceptedResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -17,7 +18,6 @@ import org.springframework.mock.web.MockMultipartFile;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.time.Duration;
-import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -34,19 +34,16 @@ class PhotoMissionSubmissionServiceTest {
 
     private ImageStorage imageStorage;
     private PhotoMissionSubmissionTransactionService transactionService;
-    private PhotoMissionVerificationService verificationService;
     private PhotoMissionSubmissionService service;
 
     @BeforeEach
     void setUp() {
         imageStorage = mock(ImageStorage.class);
         transactionService = mock(PhotoMissionSubmissionTransactionService.class);
-        verificationService = mock(PhotoMissionVerificationService.class);
         service = new PhotoMissionSubmissionService(
                 new ImageValidator(),
                 imageStorage,
                 transactionService,
-                verificationService,
                 new ImageProperties(
                         URI.create("https://example.com/default.svg"),
                         "bucket",
@@ -60,18 +57,16 @@ class PhotoMissionSubmissionServiceTest {
         );
     }
 
-    @DisplayName("사진을 저장하고 같은 요청에서 AI 판정 결과를 반환한다")
+    @DisplayName("사진과 QUEUED 판정을 저장하고 접수 식별자를 반환한다")
     @Test
-    void submitsAndVerifiesPhoto() throws Exception {
+    void submitsPhotoEvaluationRequest() throws Exception {
         UUID idempotencyKey = UUID.randomUUID();
         MockMultipartFile file = jpegFile();
-        PhotoMissionVerifyResponse response = successResponse();
         when(transactionService.save(
                 any(), any(), any(), any(), any(), any(), anyInt(), any(), any()
-        )).thenReturn(41L);
-        when(verificationService.verify(41L)).thenReturn(response);
+        )).thenReturn(new QueuedSubmission(41L, 51L));
 
-        PhotoMissionVerifyResponse result = service.submitAndVerify(
+        PhotoMissionSubmissionAcceptedResponse result = service.submit(
                 "550e8400-e29b-41d4-a716-446655440000",
                 31L,
                 idempotencyKey,
@@ -80,7 +75,10 @@ class PhotoMissionSubmissionServiceTest {
                 BigDecimal.valueOf(129.2188)
         );
 
-        assertThat(result).isSameAs(response);
+        assertThat(result.photoId()).isEqualTo(41L);
+        assertThat(result.evaluationId()).isEqualTo(51L);
+        assertThat(result.status())
+                .isEqualTo(PhotoEvaluationExecutionStatus.QUEUED);
         ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
         verify(imageStorage).put(
                 keyCaptor.capture(),
@@ -90,7 +88,6 @@ class PhotoMissionSubmissionServiceTest {
         assertThat(keyCaptor.getValue())
                 .startsWith("missions/31/")
                 .endsWith(".jpg");
-        verify(verificationService).verify(41L);
     }
 
     @DisplayName("완료한 단체 미션의 추가 사진은 AI 판정 없이 저장한다")
@@ -110,7 +107,6 @@ class PhotoMissionSubmissionServiceTest {
         );
 
         assertThat(photoId).isEqualTo(43L);
-        verify(verificationService, never()).verify(any());
     }
 
     @DisplayName("S3 저장 후 DB 저장이 실패하면 업로드한 객체를 삭제한다")
@@ -121,7 +117,7 @@ class PhotoMissionSubmissionServiceTest {
                 any(), any(), any(), any(), any(), any(), anyInt(), any(), any()
         )).thenThrow(exception);
 
-        assertThatThrownBy(() -> service.submitAndVerify(
+        assertThatThrownBy(() -> service.submit(
                 "550e8400-e29b-41d4-a716-446655440000",
                 31L,
                 UUID.randomUUID(),
@@ -133,7 +129,6 @@ class PhotoMissionSubmissionServiceTest {
         ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
         verify(imageStorage).delete(keyCaptor.capture());
         assertThat(keyCaptor.getValue()).startsWith("missions/31/");
-        verify(verificationService, never()).verify(any());
     }
 
     @DisplayName("위도와 경도 중 하나만 전달되면 업로드하지 않는다")
@@ -142,7 +137,7 @@ class PhotoMissionSubmissionServiceTest {
         assertInvalidCoordinates(BigDecimal.valueOf(35.8350), null);
         assertInvalidCoordinates(null, BigDecimal.valueOf(129.2188));
 
-        verifyNoInteractions(imageStorage, transactionService, verificationService);
+        verifyNoInteractions(imageStorage, transactionService);
     }
 
     @DisplayName("허용 범위를 벗어난 좌표는 업로드하지 않는다")
@@ -162,14 +157,14 @@ class PhotoMissionSubmissionServiceTest {
                 new BigDecimal(longitude)
         );
 
-        verifyNoInteractions(imageStorage, transactionService, verificationService);
+        verifyNoInteractions(imageStorage, transactionService);
     }
 
     private void assertInvalidCoordinates(
             BigDecimal latitude,
             BigDecimal longitude
     ) {
-        assertThatThrownBy(() -> service.submitAndVerify(
+        assertThatThrownBy(() -> service.submit(
                 "550e8400-e29b-41d4-a716-446655440000",
                 31L,
                 UUID.randomUUID(),
@@ -192,14 +187,4 @@ class PhotoMissionSubmissionServiceTest {
         );
     }
 
-    private PhotoMissionVerifyResponse successResponse() {
-        return new PhotoMissionVerifyResponse(
-                "success",
-                null,
-                BigDecimal.valueOf(95),
-                List.of(),
-                BigDecimal.valueOf(95),
-                null
-        );
-    }
 }

@@ -5,7 +5,8 @@ import com.planit.global.error.ErrorCode;
 import com.planit.image.config.ImageProperties;
 import com.planit.image.service.ImageValidator;
 import com.planit.image.storage.ImageStorage;
-import com.planit.photomission.ai.PhotoMissionVerifyResponse;
+import com.planit.photomission.domain.PhotoEvaluationExecutionStatus;
+import com.planit.photomission.dto.PhotoMissionSubmissionAcceptedResponse;
 import io.sentry.Sentry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -27,24 +28,21 @@ public class PhotoMissionSubmissionService {
     private final ImageValidator imageValidator;
     private final ImageStorage imageStorage;
     private final PhotoMissionSubmissionTransactionService transactionService;
-    private final PhotoMissionVerificationService verificationService;
     private final ImageProperties imageProperties;
 
     public PhotoMissionSubmissionService(
             ImageValidator imageValidator,
             ImageStorage imageStorage,
             PhotoMissionSubmissionTransactionService transactionService,
-            PhotoMissionVerificationService verificationService,
             ImageProperties imageProperties
     ) {
         this.imageValidator = imageValidator;
         this.imageStorage = imageStorage;
         this.transactionService = transactionService;
-        this.verificationService = verificationService;
         this.imageProperties = imageProperties;
     }
 
-    public PhotoMissionVerifyResponse submitAndVerify(
+    public PhotoMissionSubmissionAcceptedResponse submit(
             String userPublicId,
             Long missionId,
             UUID idempotencyKey,
@@ -54,9 +52,9 @@ public class PhotoMissionSubmissionService {
     ) {
         StoredImage image = storeImage(missionId, file, latitude, longitude);
 
-        Long photoId;
+        QueuedSubmission submission;
         try {
-            photoId = transactionService.save(
+            submission = transactionService.save(
                     userPublicId,
                     missionId,
                     idempotencyKey,
@@ -72,7 +70,11 @@ public class PhotoMissionSubmissionService {
             throw exception;
         }
 
-        return verificationService.verify(photoId);
+        return new PhotoMissionSubmissionAcceptedResponse(
+                submission.photoId(),
+                submission.evaluationId(),
+                PhotoEvaluationExecutionStatus.QUEUED
+        );
     }
 
     public Long addGroupPhoto(

@@ -10,10 +10,12 @@ import com.planit.photomission.domain.MissionCompletionStatus;
 import com.planit.photomission.domain.MissionGroupState;
 import com.planit.photomission.domain.MissionParticipation;
 import com.planit.photomission.domain.MissionPhoto;
+import com.planit.photomission.domain.PhotoEvaluation;
 import com.planit.photomission.repository.MissionGroupStateRepository;
 import com.planit.photomission.repository.MissionParticipationRepository;
 import com.planit.photomission.repository.MissionPhotoRepository;
 import com.planit.photomission.repository.MissionRepository;
+import com.planit.photomission.repository.PhotoEvaluationRepository;
 import com.planit.repository.ImageFileRepository;
 import com.planit.repository.TripMemberRepository;
 import com.planit.repository.UserRepository;
@@ -29,10 +31,13 @@ import java.util.UUID;
 @Service
 public class PhotoMissionSubmissionTransactionService {
 
+    private static final long PROCESSING_DEADLINE_SECONDS = 960;
+
     private final MissionRepository missionRepository;
     private final MissionParticipationRepository participationRepository;
     private final MissionGroupStateRepository groupStateRepository;
     private final MissionPhotoRepository photoRepository;
+    private final PhotoEvaluationRepository evaluationRepository;
     private final UserRepository userRepository;
     private final TripMemberRepository tripMemberRepository;
     private final ImageFileRepository imageFileRepository;
@@ -43,6 +48,7 @@ public class PhotoMissionSubmissionTransactionService {
             MissionParticipationRepository participationRepository,
             MissionGroupStateRepository groupStateRepository,
             MissionPhotoRepository photoRepository,
+            PhotoEvaluationRepository evaluationRepository,
             UserRepository userRepository,
             TripMemberRepository tripMemberRepository,
             ImageFileRepository imageFileRepository,
@@ -52,6 +58,7 @@ public class PhotoMissionSubmissionTransactionService {
         this.participationRepository = participationRepository;
         this.groupStateRepository = groupStateRepository;
         this.photoRepository = photoRepository;
+        this.evaluationRepository = evaluationRepository;
         this.userRepository = userRepository;
         this.tripMemberRepository = tripMemberRepository;
         this.imageFileRepository = imageFileRepository;
@@ -59,7 +66,7 @@ public class PhotoMissionSubmissionTransactionService {
     }
 
     @Transactional
-    public Long save(
+    public QueuedSubmission save(
             String userPublicId,
             Long missionId,
             UUID idempotencyKey,
@@ -128,7 +135,17 @@ public class PhotoMissionSubmissionTransactionService {
                     now
             );
         }
-        return photoRepository.save(photo).getId();
+        MissionPhoto savedPhoto = photoRepository.save(photo);
+        LocalDateTime deadlineAt =
+                now.plusSeconds(PROCESSING_DEADLINE_SECONDS);
+        PhotoEvaluation evaluation = evaluationRepository.save(
+                PhotoEvaluation.queue(
+                        savedPhoto,
+                        now,
+                        deadlineAt
+                )
+        );
+        return new QueuedSubmission(savedPhoto.getId(), evaluation.getId());
     }
 
     @Transactional
