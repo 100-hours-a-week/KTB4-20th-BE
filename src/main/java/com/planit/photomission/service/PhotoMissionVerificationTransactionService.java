@@ -11,7 +11,6 @@ import com.planit.photomission.domain.MissionParticipation;
 import com.planit.photomission.domain.MissionPhoto;
 import com.planit.photomission.domain.PhotoEvaluation;
 import com.planit.photomission.domain.PhotoEvaluationExecutionStatus;
-import com.planit.photomission.domain.PhotoEvaluationResult;
 import com.planit.photomission.repository.MissionGroupStateRepository;
 import com.planit.photomission.repository.MissionPhotoRepository;
 import com.planit.photomission.repository.PhotoEvaluationRepository;
@@ -33,6 +32,7 @@ public class PhotoMissionVerificationTransactionService {
     private final ImageStorage imageStorage;
     private final PhotoMissionVerifyRequestFactory requestFactory;
     private final PhotoMissionEvaluationMapper evaluationMapper;
+    private final PhotoMissionResultApplier resultApplier;
     private final Clock clock;
 
     public PhotoMissionVerificationTransactionService(
@@ -42,6 +42,7 @@ public class PhotoMissionVerificationTransactionService {
             ImageStorage imageStorage,
             PhotoMissionVerifyRequestFactory requestFactory,
             PhotoMissionEvaluationMapper evaluationMapper,
+            PhotoMissionResultApplier resultApplier,
             @Qualifier("photoMissionClock") Clock clock
     ) {
         this.photoRepository = photoRepository;
@@ -50,6 +51,7 @@ public class PhotoMissionVerificationTransactionService {
         this.imageStorage = imageStorage;
         this.requestFactory = requestFactory;
         this.evaluationMapper = evaluationMapper;
+        this.resultApplier = resultApplier;
         this.clock = clock;
     }
 
@@ -128,12 +130,7 @@ public class PhotoMissionVerificationTransactionService {
         LocalDateTime evaluatedAt = LocalDateTime.now(clock);
         evaluationMapper.apply(evaluation, response, evaluatedAt);
 
-        MissionPhoto photo = evaluation.getMissionPhoto();
-        if (evaluation.getResult() == PhotoEvaluationResult.SUCCESS) {
-            completeMission(photo, evaluatedAt);
-            return;
-        }
-        recordUnsuccessfulEvaluation(photo, evaluatedAt);
+        resultApplier.apply(evaluation, evaluatedAt);
     }
 
     @Transactional
@@ -239,45 +236,6 @@ public class PhotoMissionVerificationTransactionService {
         }
     }
 
-    private void completeMission(
-            MissionPhoto photo,
-            LocalDateTime evaluatedAt
-    ) {
-        if (photo.getMission().isPersonal()) {
-            MissionParticipation participation = photo.getParticipation();
-            if (participation.getStatus()
-                    == MissionCompletionStatus.COMPLETED) {
-                replaceCompletedPersonalPhoto(photo, evaluatedAt);
-            } else {
-                participation.completeByAi(evaluatedAt);
-            }
-            return;
-        }
-
-        findGroupState(photo.getMission().getId())
-                .completeByAi(evaluatedAt);
-        photo.markRepresentative();
-    }
-
-    private void recordUnsuccessfulEvaluation(
-            MissionPhoto photo,
-            LocalDateTime evaluatedAt
-    ) {
-        if (photo.getMission().isPersonal()) {
-            if (photo.getParticipation().getStatus()
-                    == MissionCompletionStatus.COMPLETED) {
-                photo.replace(evaluatedAt);
-            } else {
-                photo.getParticipation()
-                        .recordUnsuccessfulEvaluation(evaluatedAt);
-            }
-            return;
-        }
-
-        findGroupState(photo.getMission().getId())
-                .recordUnsuccessfulEvaluation(evaluatedAt);
-    }
-
     private boolean canVerifyPersonalPhoto(
             MissionPhoto photo,
             MissionParticipation participation
@@ -290,19 +248,6 @@ public class PhotoMissionVerificationTransactionService {
         }
         return participation.getRetryCount()
                 < MissionParticipation.MAX_RETRY_COUNT;
-    }
-
-    private void replaceCompletedPersonalPhoto(
-            MissionPhoto candidate,
-            LocalDateTime evaluatedAt
-    ) {
-        MissionParticipation participation = candidate.getParticipation();
-        photoRepository.findActiveByParticipationId(participation.getId())
-                .ifPresent(activePhoto -> {
-                    activePhoto.replace(evaluatedAt);
-                    photoRepository.flush();
-                });
-        candidate.activate();
     }
 
     private MissionGroupState findGroupState(Long missionId) {

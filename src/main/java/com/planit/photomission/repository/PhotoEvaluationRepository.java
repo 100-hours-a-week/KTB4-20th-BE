@@ -2,16 +2,67 @@ package com.planit.photomission.repository;
 
 import com.planit.photomission.domain.PhotoEvaluation;
 import com.planit.photomission.domain.PhotoEvaluationExecutionStatus;
+import com.planit.photomission.domain.PhotoEvaluationReason;
+import com.planit.photomission.domain.PhotoEvaluationResult;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
 public interface PhotoEvaluationRepository
         extends JpaRepository<PhotoEvaluation, Long> {
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE PhotoEvaluation evaluation
+            SET evaluation.executionStatus =
+                    com.planit.photomission.domain.PhotoEvaluationExecutionStatus.SUCCEEDED,
+                evaluation.result = :result,
+                evaluation.reason = :reason,
+                evaluation.matchScore = :matchScore,
+                evaluation.detectedLabelsJson = :detectedLabelsJson,
+                evaluation.landmarkConfidence = :landmarkConfidence,
+                evaluation.retryHint = :retryHint,
+                evaluation.errorCode = NULL,
+                evaluation.evaluatedAt = :evaluatedAt,
+                evaluation.retryAfterAt = NULL
+            WHERE evaluation.id = :evaluationId
+              AND evaluation.executionStatus =
+                    com.planit.photomission.domain.PhotoEvaluationExecutionStatus.QUEUED
+            """)
+    int completeQueued(
+            @Param("evaluationId") Long evaluationId,
+            @Param("result") PhotoEvaluationResult result,
+            @Param("reason") PhotoEvaluationReason reason,
+            @Param("matchScore") BigDecimal matchScore,
+            @Param("detectedLabelsJson") String detectedLabelsJson,
+            @Param("landmarkConfidence") BigDecimal landmarkConfidence,
+            @Param("retryHint") String retryHint,
+            @Param("evaluatedAt") LocalDateTime evaluatedAt
+    );
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE PhotoEvaluation evaluation
+            SET evaluation.executionStatus =
+                    com.planit.photomission.domain.PhotoEvaluationExecutionStatus.FAILED,
+                evaluation.errorCode = :errorCode,
+                evaluation.evaluatedAt = :failedAt,
+                evaluation.retryAfterAt = NULL
+            WHERE evaluation.id = :evaluationId
+              AND evaluation.executionStatus =
+                    com.planit.photomission.domain.PhotoEvaluationExecutionStatus.QUEUED
+            """)
+    int failQueued(
+            @Param("evaluationId") Long evaluationId,
+            @Param("errorCode") String errorCode,
+            @Param("failedAt") LocalDateTime failedAt
+    );
 
     Optional<PhotoEvaluation> findTopByMissionPhotoIdOrderByAttemptNoDesc(
             Long missionPhotoId

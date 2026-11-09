@@ -74,6 +74,10 @@ class PhotoMissionVerificationTransactionServiceTest {
                 imageStorage,
                 new PhotoMissionVerifyRequestFactory(),
                 new PhotoMissionEvaluationMapper(JsonMapper.builder().build()),
+                new PhotoMissionResultApplier(
+                        photoRepository,
+                        groupStateRepository
+                ),
                 SEOUL_CLOCK
         );
     }
