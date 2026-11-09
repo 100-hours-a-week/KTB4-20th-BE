@@ -37,6 +37,7 @@ class PhotoMissionEnumContractTest {
     void definesPhotoEvaluationStatuses() {
         assertThat(PhotoEvaluationExecutionStatus.values())
                 .containsExactly(
+                        PhotoEvaluationExecutionStatus.QUEUED,
                         PhotoEvaluationExecutionStatus.RUNNING,
                         PhotoEvaluationExecutionStatus.SUCCEEDED,
                         PhotoEvaluationExecutionStatus.RETRY_PENDING,

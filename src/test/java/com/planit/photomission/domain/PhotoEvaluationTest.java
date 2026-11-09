@@ -12,6 +12,24 @@ import static org.mockito.Mockito.mock;
 
 class PhotoEvaluationTest {
 
+    @DisplayName("접수된 AI 판정은 고정된 deadline과 QUEUED 상태로 생성한다")
+    @Test
+    void queuesEvaluationWithAbsoluteDeadline() {
+        LocalDateTime requestedAt = now();
+        LocalDateTime deadlineAt = requestedAt.plusMinutes(16);
+
+        PhotoEvaluation evaluation = PhotoEvaluation.queue(
+                mock(MissionPhoto.class),
+                requestedAt,
+                deadlineAt
+        );
+
+        assertThat(evaluation.getExecutionStatus())
+                .isEqualTo(PhotoEvaluationExecutionStatus.QUEUED);
+        assertThat(evaluation.getDeadlineAt()).isEqualTo(deadlineAt);
+        assertThat(evaluation.getResult()).isNull();
+    }
+
     @DisplayName("AI 판정 시작 시 실행 상태만 기록하고 결과는 비워둔다")
     @Test
     void startsEvaluation() {
