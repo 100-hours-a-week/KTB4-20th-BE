@@ -29,7 +29,7 @@ class SchedulingConfigTest {
             );
 
             assertThat(scheduler.getScheduledThreadPoolExecutor()
-                    .getCorePoolSize()).isEqualTo(1);
+                    .getCorePoolSize()).isEqualTo(SchedulingConfig.POOL_SIZE);
             assertThat(scheduler.getThreadNamePrefix())
                     .isEqualTo("scheduled-task-");
         }
