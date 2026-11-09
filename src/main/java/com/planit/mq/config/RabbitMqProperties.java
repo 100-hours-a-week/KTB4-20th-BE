@@ -35,12 +35,26 @@ public record RabbitMqProperties(
      * @param backoffBase       재시도 시작 간격. 재시도할 때마다 두 배가 된다
      * @param nackMaxRetries    NACK 재시도 한도. 넘으면 실패 처리한다 (5s, 10s, 20s)
      * @param failureMaxRetries confirm 유실·연결 예외 재시도 한도. 넘으면 실패 처리한다 (5s, 10s, 20s, 40s)
+     * @param relay             Relay 설정
+     * @param failedRetention   발행에 실패한 Outbox 행을 지우지 않고 남겨 두는 기간
+     * @param cleanup           Outbox 정리 설정
      */
     public record Outbox(
             @NotNull Duration initialGrace,
             @NotNull Duration backoffBase,
             @Min(0) @Max(Byte.MAX_VALUE) int nackMaxRetries,
-            @Min(0) @Max(Byte.MAX_VALUE) int failureMaxRetries
+            @Min(0) @Max(Byte.MAX_VALUE) int failureMaxRetries,
+            @Valid @NotNull Relay relay,
+            @NotNull Duration failedRetention,
+            @Valid @NotNull Cleanup cleanup
     ) {
+    }
+
+    /** @param batchSize Relay가 한 번에 조회해 발행하는 최대 행 수 */
+    public record Relay(@Min(1) int batchSize) {
+    }
+
+    /** @param deleteBatchSize 정리할 때 DELETE 한 번에 지우는 최대 행 수 */
+    public record Cleanup(@Min(1) int deleteBatchSize) {
     }
 }
