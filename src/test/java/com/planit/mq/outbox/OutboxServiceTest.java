@@ -29,7 +29,8 @@ import static org.mockito.Mockito.verify;
 class OutboxServiceTest {
 
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
-    private static final LocalDateTime NOW = LocalDateTime.of(2026, 11, 9, 10, 0);
+    /** 커밋된 테스트 행을 백그라운드 Relay 스케줄러가 가져가지 않도록 미래 시각으로 둔다. */
+    private static final LocalDateTime NOW = LocalDateTime.of(2099, 1, 1, 10, 0);
 
     @TestBean(name = RabbitMqConfig.MQ_CLOCK, methodName = "fixedClock")
     private Clock clock;

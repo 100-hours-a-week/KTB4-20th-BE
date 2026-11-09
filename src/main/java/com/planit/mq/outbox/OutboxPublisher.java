@@ -18,6 +18,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -79,8 +80,11 @@ public class OutboxPublisher {
     /**
      * 메시지를 발행하고 confirm을 기다리지 않고 돌아온다.
      * confirm, 시간 초과, 발행 예외는 모두 {@link OutboxPublishResultHandler}가 Outbox에 반영한다.
+     *
+     * @return 발행 결과를 Outbox에 반영하고 나면 끝나는 Future. confirm 대기시간이 지나면 시간 초과로 반영하므로
+     * 그보다 오래 걸리지 않는다. 반영 중 예외는 로그만 남기고 Future는 정상으로 끝난다.
      */
-    public void publish(MessageOutbox outbox) {
+    public CompletableFuture<Void> publish(MessageOutbox outbox) {
         CorrelationData correlationData = new CorrelationData(String.valueOf(outbox.getId()));
         try {
             rabbitTemplate.send(
@@ -90,15 +94,26 @@ public class OutboxPublisher {
                     correlationData
             );
         } catch (RuntimeException e) {
-            resultHandler.handleSendFailure(outbox.getId(), e);
-            return;
+            handleSendFailure(outbox.getId(), e);
+            return CompletableFuture.completedFuture(null);
         }
-        correlationData.getFuture()
+        return correlationData.getFuture()
                 .orTimeout(properties.confirmTimeout().toMillis(), TimeUnit.MILLISECONDS)
-                .whenCompleteAsync(
-                        (confirm, error) -> handleConfirm(outbox.getId(), correlationData, confirm, error),
+                .handleAsync(
+                        (confirm, error) -> {
+                            handleConfirm(outbox.getId(), correlationData, confirm, error);
+                            return null;
+                        },
                         confirmExecutor
                 );
+    }
+
+    private void handleSendFailure(Long outboxId, RuntimeException error) {
+        try {
+            resultHandler.handleSendFailure(outboxId, error);
+        } catch (RuntimeException e) {
+            log.error("발행 예외 반영 실패, Relay가 다시 발행함 outboxId={}", outboxId, e);
+        }
     }
 
     private void handleConfirm(
