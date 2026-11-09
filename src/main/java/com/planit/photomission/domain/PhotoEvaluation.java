@@ -67,6 +67,9 @@ public class PhotoEvaluation {
     @Column(name = "requested_at", nullable = false)
     private LocalDateTime requestedAt;
 
+    @Column(name = "deadline_at")
+    private LocalDateTime deadlineAt;
+
     @Column(name = "evaluated_at")
     private LocalDateTime evaluatedAt;
 
@@ -74,6 +77,29 @@ public class PhotoEvaluation {
     private LocalDateTime retryAfterAt;
 
     protected PhotoEvaluation() {
+    }
+
+    public static PhotoEvaluation queue(
+            MissionPhoto missionPhoto,
+            LocalDateTime requestedAt,
+            LocalDateTime deadlineAt
+    ) {
+        if (requestedAt == null) {
+            throw new IllegalArgumentException("AI 판정 요청 시각은 필수입니다");
+        }
+        if (deadlineAt == null || !deadlineAt.isAfter(requestedAt)) {
+            throw new IllegalArgumentException(
+                    "AI 판정 마감 시각은 요청 시각 이후여야 합니다"
+            );
+        }
+
+        PhotoEvaluation evaluation = new PhotoEvaluation();
+        evaluation.missionPhoto = missionPhoto;
+        evaluation.attemptNo = 1;
+        evaluation.executionStatus = PhotoEvaluationExecutionStatus.QUEUED;
+        evaluation.requestedAt = requestedAt;
+        evaluation.deadlineAt = deadlineAt;
+        return evaluation;
     }
 
     public static PhotoEvaluation start(
@@ -282,6 +308,10 @@ public class PhotoEvaluation {
 
     public LocalDateTime getRequestedAt() {
         return requestedAt;
+    }
+
+    public LocalDateTime getDeadlineAt() {
+        return deadlineAt;
     }
 
     public LocalDateTime getEvaluatedAt() {
