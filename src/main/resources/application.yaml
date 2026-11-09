@@ -18,6 +18,21 @@ spring:
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
       timeout: 3s
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:planit-backend}
+    password: ${RABBITMQ_PASSWORD:}
+    virtual-host: ${RABBITMQ_VHOST:planit}
+    # 발행 결과를 confirm으로 받고, 라우팅할 큐가 없는 메시지는 return으로 돌려받는다
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+    listener:
+      simple:
+        acknowledge-mode: manual
+        default-requeue-rejected: false
   flyway:
     enabled: true
     locations: classpath:db/migration
@@ -37,6 +52,9 @@ planit:
     internal-token: ${AI_INTERNAL_API_KEY}
     connect-timeout: 3s
     read-timeout: 120s
+  mq:
+    # 발행 후 이 시간 안에 confirm이 오지 않으면 유실로 본다. 부하 테스트의 confirm 지연 max로 확정한다
+    confirm-timeout: 5s
   image:
     default-profile-url: ${DEFAULT_PROFILE_IMAGE_URL:http://localhost:8080/images/default-profile.svg}
     bucket: ${IMAGE_S3_BUCKET}
@@ -88,6 +106,9 @@ management:
   health:
     db:
       enabled: true
+    # RabbitMQ 장애 중에도 Outbox에 작업을 저장하며 동작하므로 서버 health에 포함하지 않는다
+    rabbit:
+      enabled: false
   metrics:
     distribution:
       percentiles-histogram:
