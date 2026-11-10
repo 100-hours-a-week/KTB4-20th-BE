@@ -197,7 +197,9 @@ class NotificationListServiceTest {
                 LocalDateTime.of(2026, 10, 18, 0, 0),
                 List.of(
                         NotificationType.TRIP_D1,
-                        NotificationType.TRIP_WEATHER_ALERT
+                        NotificationType.TRIP_WEATHER_ALERT,
+                        NotificationType.SCHEDULE_GENERATION_SUCCEEDED,
+                        NotificationType.SCHEDULE_GENERATION_FAILED
                 )
         )).thenReturn(List.of(notification));
 

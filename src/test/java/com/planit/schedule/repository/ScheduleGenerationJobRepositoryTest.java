@@ -133,6 +133,40 @@ class ScheduleGenerationJobRepositoryTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    @DisplayName("진행 중인 작업을 종료하면 active_slot을 비우고 종료 시각과 실패 원인을 남긴다")
+    @Test
+    void finishesQueuedJob() {
+        ScheduleGenerationJob saved = repository.saveAndFlush(queued(UUID.randomUUID()));
+        LocalDateTime finishedAt = NOW.plusMinutes(1);
+
+        assertThat(repository.finishQueued(
+                saved.getId(), ScheduleGenerationJobStatus.FAILED, "DELIVERY_LIMIT", finishedAt
+        )).isOne();
+
+        ScheduleGenerationJob found = repository.findById(saved.getId()).orElseThrow();
+        assertThat(found.getStatus()).isEqualTo(ScheduleGenerationJobStatus.FAILED);
+        assertThat(found.getActiveSlot()).isNull();
+        assertThat(found.getFinishedAt()).isEqualTo(finishedAt);
+        assertThat(found.getErrorCode()).isEqualTo("DELIVERY_LIMIT");
+    }
+
+    @DisplayName("이미 끝난 작업은 다시 종료하지 않는다")
+    @Test
+    void doesNotFinishTwice() {
+        ScheduleGenerationJob saved = repository.saveAndFlush(queued(UUID.randomUUID()));
+        LocalDateTime finishedAt = NOW.plusMinutes(1);
+        repository.finishQueued(saved.getId(), ScheduleGenerationJobStatus.SUCCEEDED, null, finishedAt);
+
+        assertThat(repository.finishQueued(
+                saved.getId(), ScheduleGenerationJobStatus.FAILED, "STALE", finishedAt.plusMinutes(30)
+        )).isZero();
+
+        ScheduleGenerationJob found = repository.findById(saved.getId()).orElseThrow();
+        assertThat(found.getStatus()).isEqualTo(ScheduleGenerationJobStatus.SUCCEEDED);
+        assertThat(found.getFinishedAt()).isEqualTo(finishedAt);
+        assertThat(found.getErrorCode()).isNull();
+    }
+
     private ScheduleGenerationJob queued(UUID idempotencyKey) {
         return ScheduleGenerationJob.queued(
                 trip, member, ScheduleGenerationMode.INITIAL, idempotencyKey, NOW
