@@ -7,6 +7,7 @@ import com.planit.domain.TripMember;
 import com.planit.domain.User;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
+import com.planit.mq.outbox.OutboxService;
 import com.planit.photomission.domain.Mission;
 import com.planit.photomission.domain.MissionGroupState;
 import com.planit.photomission.domain.MissionCompletionMethod;
@@ -32,6 +33,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -72,6 +74,7 @@ class PhotoMissionSubmissionTransactionServiceTest {
     private UserRepository userRepository;
     private TripMemberRepository tripMemberRepository;
     private ImageFileRepository imageFileRepository;
+    private OutboxService outboxService;
     private PhotoMissionSubmissionTransactionService service;
     private Clock clock;
 
@@ -85,6 +88,7 @@ class PhotoMissionSubmissionTransactionServiceTest {
         userRepository = mock(UserRepository.class);
         tripMemberRepository = mock(TripMemberRepository.class);
         imageFileRepository = mock(ImageFileRepository.class);
+        outboxService = mock(OutboxService.class);
         clock = SEOUL_CLOCK;
         service = new PhotoMissionSubmissionTransactionService(
                 missionRepository,
@@ -95,6 +99,8 @@ class PhotoMissionSubmissionTransactionServiceTest {
                 userRepository,
                 tripMemberRepository,
                 imageFileRepository,
+                outboxService,
+                JsonMapper.builder().findAndAddModules().build(),
                 clock
         );
         when(evaluationRepository.save(any(PhotoEvaluation.class)))
@@ -424,6 +430,8 @@ class PhotoMissionSubmissionTransactionServiceTest {
                 userRepository,
                 tripMemberRepository,
                 imageFileRepository,
+                outboxService,
+                JsonMapper.builder().findAndAddModules().build(),
                 fixedClock(LocalTime.of(0, 29, 59))
         );
         Fixture fixture = fixture(MissionScope.GROUP, TODAY);
@@ -459,6 +467,8 @@ class PhotoMissionSubmissionTransactionServiceTest {
                 userRepository,
                 tripMemberRepository,
                 imageFileRepository,
+                outboxService,
+                JsonMapper.builder().findAndAddModules().build(),
                 fixedClock(LocalTime.of(0, 30))
         );
         Fixture fixture = fixture(MissionScope.GROUP, TODAY);
