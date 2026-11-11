@@ -11,7 +11,6 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -46,12 +45,8 @@ class PhotoEvaluationResultTransactionServiceTest {
         when(evaluationRepository.findById(51L))
                 .thenReturn(Optional.of(evaluation));
 
-        PhotoEvaluationResultApplyOutcome outcome =
-                service.applyCompleted(result);
+        service.applyCompleted(result);
 
-        assertThat(outcome).isEqualTo(
-                PhotoEvaluationResultApplyOutcome.APPLIED
-        );
         verify(resultApplier).apply(evaluation, EVALUATED_AT);
     }
 
@@ -64,12 +59,8 @@ class PhotoEvaluationResultTransactionServiceTest {
         when(evaluationRepository.findById(51L))
                 .thenReturn(Optional.of(evaluation));
 
-        PhotoEvaluationResultApplyOutcome outcome =
-                service.applyCompleted(result);
+        service.applyCompleted(result);
 
-        assertThat(outcome).isEqualTo(
-                PhotoEvaluationResultApplyOutcome.DUPLICATE
-        );
         verify(resultApplier, never()).apply(evaluation, EVALUATED_AT);
     }
 
@@ -100,9 +91,7 @@ class PhotoEvaluationResultTransactionServiceTest {
                 EVALUATED_AT
         )).thenReturn(1);
 
-        assertThat(service.applyFailed(result)).isEqualTo(
-                PhotoEvaluationResultApplyOutcome.APPLIED
-        );
+        service.applyFailed(result);
 
         when(evaluationRepository.failQueued(
                 51L,
@@ -111,9 +100,7 @@ class PhotoEvaluationResultTransactionServiceTest {
         )).thenReturn(0);
         when(evaluationRepository.existsById(51L)).thenReturn(true);
 
-        assertThat(service.applyFailed(result)).isEqualTo(
-                PhotoEvaluationResultApplyOutcome.DUPLICATE
-        );
+        service.applyFailed(result);
     }
 
     @DisplayName("완료 결과에 판정 결과가 없으면 DB 갱신 전에 거부한다")

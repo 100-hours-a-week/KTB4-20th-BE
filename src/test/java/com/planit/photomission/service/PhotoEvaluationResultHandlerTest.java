@@ -8,10 +8,8 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 class PhotoEvaluationResultHandlerTest {
 
@@ -33,14 +31,8 @@ class PhotoEvaluationResultHandlerTest {
     @Test
     void handlesCompletedResult() {
         PhotoEvaluationCompletedResult result = completedResult();
-        when(transactionService.applyCompleted(result))
-                .thenReturn(PhotoEvaluationResultApplyOutcome.APPLIED);
+        handler.handle(result);
 
-        PhotoEvaluationResultApplyOutcome outcome = handler.handle(result);
-
-        assertThat(outcome).isEqualTo(
-                PhotoEvaluationResultApplyOutcome.APPLIED
-        );
         verify(transactionService).applyCompleted(result);
     }
 
@@ -52,14 +44,8 @@ class PhotoEvaluationResultHandlerTest {
                 "AI_ATTEMPT_EXHAUSTED",
                 EVALUATED_AT
         );
-        when(transactionService.applyFailed(result))
-                .thenReturn(PhotoEvaluationResultApplyOutcome.DUPLICATE);
+        handler.handle(result);
 
-        PhotoEvaluationResultApplyOutcome outcome = handler.handle(result);
-
-        assertThat(outcome).isEqualTo(
-                PhotoEvaluationResultApplyOutcome.DUPLICATE
-        );
         verify(transactionService).applyFailed(result);
     }
 

@@ -13,15 +13,15 @@ public class PhotoEvaluationResultHandler {
         this.transactionService = transactionService;
     }
 
-    public PhotoEvaluationResultApplyOutcome handle(
+    public void handle(
             PhotoEvaluationCompletedResult result
     ) {
-        return transactionService.applyCompleted(result);
+        transactionService.applyCompleted(result);
     }
 
-    public PhotoEvaluationResultApplyOutcome handle(
+    public void handle(
             PhotoEvaluationFailedResult result
     ) {
-        return transactionService.applyFailed(result);
+        transactionService.applyFailed(result);
     }
 }

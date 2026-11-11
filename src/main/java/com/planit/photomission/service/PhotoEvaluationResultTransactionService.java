@@ -22,7 +22,7 @@ public class PhotoEvaluationResultTransactionService {
     }
 
     @Transactional
-    public PhotoEvaluationResultApplyOutcome applyCompleted(
+    public void applyCompleted(
             PhotoEvaluationCompletedResult result
     ) {
         int updated = evaluationRepository.completeQueued(
@@ -41,15 +41,14 @@ public class PhotoEvaluationResultTransactionService {
             throw unknownEvaluation();
         }
         if (updated == 0) {
-            return PhotoEvaluationResultApplyOutcome.DUPLICATE;
+            return;
         }
 
         resultApplier.apply(evaluation.get(), result.evaluatedAt());
-        return PhotoEvaluationResultApplyOutcome.APPLIED;
     }
 
     @Transactional
-    public PhotoEvaluationResultApplyOutcome applyFailed(
+    public void applyFailed(
             PhotoEvaluationFailedResult result
     ) {
         int updated = evaluationRepository.failQueued(
@@ -58,12 +57,11 @@ public class PhotoEvaluationResultTransactionService {
                 result.failedAt()
         );
         if (updated == 1) {
-            return PhotoEvaluationResultApplyOutcome.APPLIED;
+            return;
         }
         if (!evaluationRepository.existsById(result.evaluationId())) {
             throw unknownEvaluation();
         }
-        return PhotoEvaluationResultApplyOutcome.DUPLICATE;
     }
 
     private IllegalArgumentException unknownEvaluation() {

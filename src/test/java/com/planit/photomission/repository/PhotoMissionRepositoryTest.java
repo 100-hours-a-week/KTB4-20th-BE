@@ -19,7 +19,6 @@ import com.planit.photomission.ai.PhotoMissionGenerateRequest;
 import com.planit.photomission.ai.PhotoMissionGenerateResponse;
 import com.planit.photomission.service.MissionGenerationAttempt;
 import com.planit.photomission.service.PhotoEvaluationCompletedResult;
-import com.planit.photomission.service.PhotoEvaluationResultApplyOutcome;
 import com.planit.photomission.service.PhotoEvaluationResultTransactionService;
 import com.planit.photomission.service.PhotoMissionGenerationTransactionService;
 import com.planit.repository.ImageFileRepository;
@@ -446,22 +445,14 @@ class PhotoMissionRepositoryTest {
                         NOW.plusSeconds(10)
                 );
 
-        PhotoEvaluationResultApplyOutcome first =
-                resultService.applyCompleted(result);
-        PhotoEvaluationResultApplyOutcome duplicate =
-                resultService.applyCompleted(result);
+        resultService.applyCompleted(result);
+        resultService.applyCompleted(result);
 
         MissionGroupState storedState = groupStateRepository
                 .findByMissionId(mission.getId())
                 .orElseThrow();
         MissionPhoto storedPhoto = photoRepository.findById(photo.getId())
                 .orElseThrow();
-        assertThat(first).isEqualTo(
-                PhotoEvaluationResultApplyOutcome.APPLIED
-        );
-        assertThat(duplicate).isEqualTo(
-                PhotoEvaluationResultApplyOutcome.DUPLICATE
-        );
         assertThat(storedState.getStatus())
                 .isEqualTo(MissionCompletionStatus.COMPLETED);
         assertThat(storedPhoto.getRepresentativeSlot()).isEqualTo((byte) 1);
@@ -505,10 +496,10 @@ class PhotoMissionRepositoryTest {
                 )
         );
 
-        PhotoEvaluationResultApplyOutcome first = resultService.applyCompleted(
+        resultService.applyCompleted(
                 completedResult(firstEvaluation.getId(), NOW.plusSeconds(10))
         );
-        PhotoEvaluationResultApplyOutcome second = resultService.applyCompleted(
+        resultService.applyCompleted(
                 completedResult(secondEvaluation.getId(), NOW.plusSeconds(11))
         );
 
@@ -518,8 +509,6 @@ class PhotoMissionRepositoryTest {
         MissionPhoto storedSecondPhoto = photoRepository
                 .findById(secondPhoto.getId())
                 .orElseThrow();
-        assertThat(first).isEqualTo(PhotoEvaluationResultApplyOutcome.APPLIED);
-        assertThat(second).isEqualTo(PhotoEvaluationResultApplyOutcome.APPLIED);
         assertThat(evaluationRepository.findById(firstEvaluation.getId())
                 .orElseThrow().getExecutionStatus())
                 .isEqualTo(PhotoEvaluationExecutionStatus.SUCCEEDED);
