@@ -1,5 +1,6 @@
 package com.planit.mq.outbox;
 
+import com.planit.mq.job.AiJobType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -65,4 +66,24 @@ public interface MessageOutboxRepository extends JpaRepository<MessageOutbox, Lo
               AND outbox.status = com.planit.mq.outbox.MessageOutboxStatus.PENDING
             """)
     int markFailed(@Param("id") Long id, @Param("lastError") String lastError);
+
+    /**
+     * Stale로 끝낸 작업의 Outbox가 아직 발행 대기 중이면 실패로 바꿔 Relay가 더 발행하지 않게 한다.
+     *
+     * @return 바꾼 행 수. 이미 발행했거나 실패한 Outbox면 0
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            UPDATE MessageOutbox outbox
+            SET outbox.status = com.planit.mq.outbox.MessageOutboxStatus.FAILED,
+                outbox.lastError = :lastError
+            WHERE outbox.jobType = :jobType
+              AND outbox.jobId = :jobId
+              AND outbox.status = com.planit.mq.outbox.MessageOutboxStatus.PENDING
+            """)
+    int markFailedPendingByJob(
+            @Param("jobType") AiJobType jobType,
+            @Param("jobId") Long jobId,
+            @Param("lastError") String lastError
+    );
 }

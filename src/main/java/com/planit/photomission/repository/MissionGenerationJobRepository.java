@@ -9,6 +9,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 public interface MissionGenerationJobRepository
@@ -46,4 +48,18 @@ public interface MissionGenerationJobRepository
             @Param("id") Long id,
             @Param("status") MissionGenerationStatus status
     );
+
+    /**
+     * Stale Job Checker가 실패 처리할 작업을 찾는다. 기준 시각 전에 접수했는데 아직 진행 중인 작업이다.
+     *
+     * @param attemptedBefore 지금 이전의 가장 최근 06:00
+     */
+    @Query("""
+            SELECT job.id
+            FROM MissionGenerationJob job
+            WHERE job.status = com.planit.photomission.domain.MissionGenerationStatus.QUEUED
+              AND job.lastAttemptedAt < :attemptedBefore
+            ORDER BY job.id
+            """)
+    List<Long> findQueuedIdsAttemptedBefore(@Param("attemptedBefore") LocalDateTime attemptedBefore);
 }

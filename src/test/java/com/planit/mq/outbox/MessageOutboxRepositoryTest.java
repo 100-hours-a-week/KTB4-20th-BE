@@ -142,6 +142,26 @@ class MessageOutboxRepositoryTest {
         assertThat(found.getLastError()).isEqualTo("RETURNED: NO_ROUTE");
     }
 
+    @DisplayName("작업의 발행 대기 Outbox만 실패로 바꾸고, 이미 발행한 Outbox와 다른 작업의 Outbox는 그대로 둔다")
+    @Test
+    void failsPendingOutboxOfJob() {
+        MessageOutbox pending = repository.saveAndFlush(outbox(1L));
+        MessageOutbox published = repository.saveAndFlush(outbox(1L));
+        repository.markPublished(published.getId(), CREATED_AT.plusSeconds(1));
+        MessageOutbox otherJob = repository.saveAndFlush(outbox(2L));
+
+        assertThat(repository.markFailedPendingByJob(AiJobType.PHOTO_MISSION_GENERATE, 1L, "STALE")).isOne();
+
+        MessageOutbox failed = repository.findById(pending.getId()).orElseThrow();
+        assertThat(failed.getStatus()).isEqualTo(MessageOutboxStatus.FAILED);
+        assertThat(failed.getLastError()).isEqualTo("STALE");
+        assertThat(repository.findById(published.getId()).orElseThrow().getStatus())
+                .isEqualTo(MessageOutboxStatus.PUBLISHED);
+        assertThat(repository.findById(otherJob.getId()).orElseThrow().getStatus())
+                .isEqualTo(MessageOutboxStatus.PENDING);
+        assertThat(repository.markFailedPendingByJob(AiJobType.SCHEDULE_GENERATE, 2L, "STALE")).isZero();
+    }
+
     private MessageOutbox outbox(Long jobId) {
         return MessageOutbox.pending(
                 AiJobType.PHOTO_MISSION_GENERATE,

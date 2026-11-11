@@ -167,6 +167,36 @@ class ScheduleGenerationJobRepositoryTest {
         assertThat(found.getErrorCode()).isNull();
     }
 
+    @DisplayName("기준 시각 전에 접수해 아직 진행 중인 작업만 Stale 대상으로 찾는다")
+    @Test
+    void findsQueuedJobsCreatedBefore() {
+        ScheduleGenerationJob stale = repository.saveAndFlush(queued(UUID.randomUUID()));
+        ScheduleGenerationJob finished = repository.saveAndFlush(otherTripJob(NOW));
+        repository.finishQueued(finished.getId(), ScheduleGenerationJobStatus.SUCCEEDED, null, NOW.plusMinutes(1));
+        ScheduleGenerationJob recent = repository.saveAndFlush(otherTripJob(NOW.plusMinutes(1)));
+
+        assertThat(repository.findQueuedIdsCreatedBefore(NOW.plusMinutes(1)))
+                .contains(stale.getId())
+                .doesNotContain(finished.getId(), recent.getId());
+    }
+
+    /** 같은 여행에는 진행 중인 작업이 하나뿐이므로 다른 여행에 작업을 만든다. */
+    private ScheduleGenerationJob otherTripJob(LocalDateTime requestedAt) {
+        Trip otherTrip = tripRepository.save(new Trip(
+                trip.getRegion(),
+                "다른 여행",
+                trip.getStartDate(),
+                trip.getEndDate(),
+                (byte) 4,
+                trip.getStartDate().minusDays(1).atTime(23, 59, 59)
+        ));
+        User user = userRepository.save(new User(null, UUID.randomUUID(), "다른사용자"));
+        TripMember otherMember = tripMemberRepository.save(TripMember.createMember(otherTrip, user));
+        return ScheduleGenerationJob.queued(
+                otherTrip, otherMember, ScheduleGenerationMode.INITIAL, UUID.randomUUID(), requestedAt
+        );
+    }
+
     private ScheduleGenerationJob queued(UUID idempotencyKey) {
         return ScheduleGenerationJob.queued(
                 trip, member, ScheduleGenerationMode.INITIAL, idempotencyKey, NOW

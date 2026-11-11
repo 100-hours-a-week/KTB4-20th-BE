@@ -77,6 +77,32 @@ class MissionGenerationJobRepositoryTest {
         assertThat(statusOf(job)).isEqualTo(MissionGenerationStatus.SUCCEEDED);
     }
 
+    @DisplayName("기준 시각 전에 접수해 아직 진행 중인 작업만 Stale 대상으로 찾는다")
+    @Test
+    void findsQueuedJobsAttemptedBefore() {
+        markQueued();
+        MissionGenerationJob running = repository.saveAndFlush(MissionGenerationJob.start(otherTrip(), NOW));
+        MissionGenerationJob recent = repository.saveAndFlush(MissionGenerationJob.start(otherTrip(), NOW.plusHours(6)));
+        jdbcTemplate.update("UPDATE mission_generation_jobs SET status = 'QUEUED' WHERE id = ?", recent.getId());
+
+        assertThat(repository.findQueuedIdsAttemptedBefore(NOW.plusHours(6)))
+                .contains(job.getId())
+                .doesNotContain(running.getId(), recent.getId());
+    }
+
+    private Trip otherTrip() {
+        Region region = regionRepository.findById(1L).orElseThrow();
+        LocalDate tripDate = LocalDate.of(2026, 12, 1);
+        return tripRepository.save(new Trip(
+                region,
+                "다른 포토미션 여행",
+                tripDate,
+                tripDate.plusDays(2),
+                (byte) 4,
+                tripDate.minusDays(1).atTime(23, 59, 59)
+        ));
+    }
+
     /** QUEUED로 접수하는 코드는 포토미션 생성 비동기 전환(#296)에서 추가한다. */
     private void markQueued() {
         jdbcTemplate.update("UPDATE mission_generation_jobs SET status = 'QUEUED' WHERE id = ?", job.getId());
