@@ -5,8 +5,11 @@ import com.planit.domain.TripMember;
 import com.planit.domain.User;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
+import com.planit.image.storage.ImageStorage;
 import com.planit.mq.job.AiJobType;
 import com.planit.mq.outbox.OutboxService;
+import com.planit.photomission.ai.PhotoMissionVerifyRequest;
+import com.planit.photomission.ai.PhotoMissionVerifyRequestFactory;
 import com.planit.photomission.domain.Mission;
 import com.planit.photomission.domain.MissionCompletionStatus;
 import com.planit.photomission.domain.MissionGroupState;
@@ -29,6 +32,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -47,6 +51,8 @@ public class PhotoMissionSubmissionTransactionService {
     private final ImageFileRepository imageFileRepository;
     private final OutboxService outboxService;
     private final ObjectMapper objectMapper;
+    private final ImageStorage imageStorage;
+    private final PhotoMissionVerifyRequestFactory requestFactory;
     private final Clock clock;
 
     public PhotoMissionSubmissionTransactionService(
@@ -60,6 +66,8 @@ public class PhotoMissionSubmissionTransactionService {
             ImageFileRepository imageFileRepository,
             OutboxService outboxService,
             ObjectMapper objectMapper,
+            ImageStorage imageStorage,
+            PhotoMissionVerifyRequestFactory requestFactory,
             @Qualifier("photoMissionClock") Clock clock
     ) {
         this.missionRepository = missionRepository;
@@ -72,6 +80,8 @@ public class PhotoMissionSubmissionTransactionService {
         this.imageFileRepository = imageFileRepository;
         this.outboxService = outboxService;
         this.objectMapper = objectMapper;
+        this.imageStorage = imageStorage;
+        this.requestFactory = requestFactory;
         this.clock = clock;
     }
 
@@ -155,11 +165,22 @@ public class PhotoMissionSubmissionTransactionService {
                         deadlineAt
                 )
         );
+        Duration imageUrlTtl = Duration.between(now, deadlineAt)
+                .plusSeconds(30);
+        String imageUrl = imageStorage.createReadUrl(
+                savedPhoto.getImageFile().getImageKey(),
+                imageUrlTtl
+        );
+        PhotoMissionVerifyRequest verifyRequest = requestFactory.create(
+                savedPhoto,
+                imageUrl
+        );
         PhotoEvaluationRequestedMessage message =
                 PhotoEvaluationRequestedMessage.create(
                         evaluation.getId(),
-                        savedPhoto.getId(),
-                        deadlineAt
+                        deadlineAt.atZone(clock.getZone()).toOffsetDateTime(),
+                        mission.getId(),
+                        verifyRequest
                 );
         outboxService.enqueue(
                 AiJobType.PHOTO_JUDGE,

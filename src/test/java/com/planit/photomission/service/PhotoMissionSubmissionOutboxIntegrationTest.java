@@ -96,12 +96,18 @@ class PhotoMissionSubmissionOutboxIntegrationTest {
 
             assertThat(outbox.getJobId()).isEqualTo(submission.evaluationId());
             assertThat(payload.schemaVersion()).isEqualTo(1);
-            assertThat(payload.evaluationId())
+            assertThat(payload.jobId())
                     .isEqualTo(submission.evaluationId());
-            assertThat(payload.missionPhotoId())
-                    .isEqualTo(submission.photoId());
+            assertThat(payload.jobType()).isEqualTo(AiJobType.PHOTO_JUDGE);
             assertThat(payload.deadlineAt())
-                    .isEqualTo(evaluation.getDeadlineAt());
+                    .isEqualTo(evaluation.getDeadlineAt()
+                            .atZone(photoMissionClock.getZone())
+                            .toOffsetDateTime());
+            assertThat(payload.request().missionId())
+                    .isEqualTo(fixture.missionId());
+            assertThat(payload.request().imageUrl()).isNotBlank();
+            assertThat(payload.request().missionDescription())
+                    .isEqualTo("유적지 전경 담기");
 
             status.setRollbackOnly();
         });

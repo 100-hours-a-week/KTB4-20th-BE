@@ -126,6 +126,34 @@ class S3ImageStorageTest {
                 .isEqualTo("profiles/user-id/profile.jpg");
     }
 
+    @DisplayName("요청한 만료시간으로 S3 조회 URL을 발급한다")
+    @Test
+    void createsReadUrlWithRequestedTtl() throws Exception {
+        Duration requestedTtl = Duration.ofSeconds(990);
+        PresignedGetObjectRequest presignedRequest =
+                mock(PresignedGetObjectRequest.class);
+        when(presignedRequest.url()).thenReturn(
+                URI.create("https://example.com/presigned-mission").toURL()
+        );
+        when(s3Presigner.presignGetObject(
+                any(GetObjectPresignRequest.class)
+        )).thenReturn(presignedRequest);
+
+        String result = imageStorage.createReadUrl(
+                "missions/31/photo.jpg",
+                requestedTtl
+        );
+
+        assertThat(result).isEqualTo(
+                "https://example.com/presigned-mission"
+        );
+        ArgumentCaptor<GetObjectPresignRequest> requestCaptor =
+                ArgumentCaptor.forClass(GetObjectPresignRequest.class);
+        verify(s3Presigner).presignGetObject(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().signatureDuration())
+                .isEqualTo(requestedTtl);
+    }
+
     @DisplayName("지정한 S3 객체를 삭제한다")
     @Test
     void deletesImageFromS3() {
