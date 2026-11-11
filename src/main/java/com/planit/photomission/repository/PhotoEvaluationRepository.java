@@ -64,6 +64,24 @@ public interface PhotoEvaluationRepository
             @Param("failedAt") LocalDateTime failedAt
     );
 
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            UPDATE PhotoEvaluation evaluation
+            SET evaluation.executionStatus =
+                    com.planit.photomission.domain.PhotoEvaluationExecutionStatus.FAILED,
+                evaluation.errorCode = :errorCode,
+                evaluation.evaluatedAt = :failedAt,
+                evaluation.retryAfterAt = NULL
+            WHERE evaluation.missionPhoto.id = :missionPhotoId
+              AND evaluation.executionStatus =
+                    com.planit.photomission.domain.PhotoEvaluationExecutionStatus.QUEUED
+            """)
+    int failQueuedByMissionPhotoId(
+            @Param("missionPhotoId") Long missionPhotoId,
+            @Param("errorCode") String errorCode,
+            @Param("failedAt") LocalDateTime failedAt
+    );
+
     Optional<PhotoEvaluation> findTopByMissionPhotoIdOrderByAttemptNoDesc(
             Long missionPhotoId
     );

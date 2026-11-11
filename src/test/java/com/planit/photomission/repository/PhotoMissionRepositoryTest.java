@@ -364,6 +364,55 @@ class PhotoMissionRepositoryTest {
         assertThat(stored.getErrorCode()).isEqualTo("PROCESSING_TIMEOUT");
     }
 
+    @DisplayName("삭제된 사진의 QUEUED 판정에는 늦은 성공 결과를 반영하지 않는다")
+    @Test
+    void rejectsLateSuccessAfterMissionPhotoDeleted() {
+        Fixture fixture = createFixture();
+        Mission mission = missionRepository.save(Mission.create(
+                fixture.visit(), 1, MissionScope.PERSONAL,
+                "유적지 전경 담기", "역사", NOW
+        ));
+        MissionParticipation participation = participationRepository.save(
+                MissionParticipation.create(mission, fixture.member(), NOW)
+        );
+        MissionPhoto photo = photoRepository.save(MissionPhoto.personal(
+                participation,
+                createImageFile(),
+                UUID.randomUUID(),
+                null,
+                null,
+                NOW
+        ));
+        PhotoEvaluation evaluation = evaluationRepository.saveAndFlush(
+                PhotoEvaluation.queue(photo, NOW, NOW.plusMinutes(16))
+        );
+
+        int failed = evaluationRepository.failQueuedByMissionPhotoId(
+                photo.getId(),
+                "PHOTO_DELETED",
+                NOW.plusSeconds(5)
+        );
+        int lateSuccess = evaluationRepository.completeQueued(
+                evaluation.getId(),
+                PhotoEvaluationResult.SUCCESS,
+                null,
+                BigDecimal.valueOf(95),
+                "[]",
+                null,
+                null,
+                NOW.plusSeconds(10)
+        );
+
+        PhotoEvaluation stored = evaluationRepository
+                .findById(evaluation.getId())
+                .orElseThrow();
+        assertThat(failed).isEqualTo(1);
+        assertThat(lateSuccess).isZero();
+        assertThat(stored.getExecutionStatus())
+                .isEqualTo(PhotoEvaluationExecutionStatus.FAILED);
+        assertThat(stored.getErrorCode()).isEqualTo("PHOTO_DELETED");
+    }
+
     @DisplayName("중복 결과가 도착해도 단체 미션 완료와 대표 사진은 한 번만 반영한다")
     @Test
     void appliesGroupMissionResultOnlyOnce() {
