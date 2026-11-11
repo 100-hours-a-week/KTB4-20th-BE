@@ -53,8 +53,13 @@ public class PhotoMissionResultApplier {
             return;
         }
 
-        findGroupState(photo.getMission().getId())
-                .completeByAi(evaluatedAt);
+        MissionGroupState state = findGroupStateForUpdate(
+                photo.getMission().getId()
+        );
+        if (state.getStatus() == MissionCompletionStatus.COMPLETED) {
+            return;
+        }
+        state.completeByAi(evaluatedAt);
         photo.markRepresentative();
     }
 
@@ -73,8 +78,13 @@ public class PhotoMissionResultApplier {
             return;
         }
 
-        findGroupState(photo.getMission().getId())
-                .recordUnsuccessfulEvaluation(evaluatedAt);
+        MissionGroupState state = findGroupStateForUpdate(
+                photo.getMission().getId()
+        );
+        if (state.getStatus() == MissionCompletionStatus.COMPLETED) {
+            return;
+        }
+        state.recordUnsuccessfulEvaluation(evaluatedAt);
     }
 
     private void replaceCompletedPersonalPhoto(
@@ -90,8 +100,8 @@ public class PhotoMissionResultApplier {
         candidate.activate();
     }
 
-    private MissionGroupState findGroupState(Long missionId) {
-        return groupStateRepository.findByMissionId(missionId)
+    private MissionGroupState findGroupStateForUpdate(Long missionId) {
+        return groupStateRepository.findByMissionIdForUpdate(missionId)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "단체 미션 상태를 찾을 수 없습니다"
                 ));

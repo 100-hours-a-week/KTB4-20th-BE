@@ -467,6 +467,85 @@ class PhotoMissionRepositoryTest {
         assertThat(storedPhoto.getRepresentativeSlot()).isEqualTo((byte) 1);
     }
 
+    @DisplayName("같은 단체 미션의 서로 다른 성공 결과는 모두 종료하고 최초 성공 사진만 대표로 지정한다")
+    @Test
+    void appliesDistinctGroupMissionResultsWithoutChangingRepresentative() {
+        Fixture fixture = createFixture();
+        Mission mission = missionRepository.save(Mission.create(
+                fixture.visit(), 1, MissionScope.GROUP,
+                "다 같이 사진 찍기", null, NOW
+        ));
+        groupStateRepository.save(MissionGroupState.create(mission, NOW));
+        MissionPhoto firstPhoto = photoRepository.save(MissionPhoto.group(
+                mission,
+                fixture.member(),
+                createImageFile(),
+                UUID.randomUUID(),
+                null,
+                null,
+                NOW
+        ));
+        MissionPhoto secondPhoto = photoRepository.save(MissionPhoto.group(
+                mission,
+                fixture.member(),
+                createImageFile(),
+                UUID.randomUUID(),
+                null,
+                null,
+                NOW.plusSeconds(1)
+        ));
+        PhotoEvaluation firstEvaluation = evaluationRepository.saveAndFlush(
+                PhotoEvaluation.queue(firstPhoto, NOW, NOW.plusMinutes(16))
+        );
+        PhotoEvaluation secondEvaluation = evaluationRepository.saveAndFlush(
+                PhotoEvaluation.queue(
+                        secondPhoto,
+                        NOW.plusSeconds(1),
+                        NOW.plusMinutes(16)
+                )
+        );
+
+        PhotoEvaluationResultApplyOutcome first = resultService.applyCompleted(
+                completedResult(firstEvaluation.getId(), NOW.plusSeconds(10))
+        );
+        PhotoEvaluationResultApplyOutcome second = resultService.applyCompleted(
+                completedResult(secondEvaluation.getId(), NOW.plusSeconds(11))
+        );
+
+        MissionPhoto storedFirstPhoto = photoRepository
+                .findById(firstPhoto.getId())
+                .orElseThrow();
+        MissionPhoto storedSecondPhoto = photoRepository
+                .findById(secondPhoto.getId())
+                .orElseThrow();
+        assertThat(first).isEqualTo(PhotoEvaluationResultApplyOutcome.APPLIED);
+        assertThat(second).isEqualTo(PhotoEvaluationResultApplyOutcome.APPLIED);
+        assertThat(evaluationRepository.findById(firstEvaluation.getId())
+                .orElseThrow().getExecutionStatus())
+                .isEqualTo(PhotoEvaluationExecutionStatus.SUCCEEDED);
+        assertThat(evaluationRepository.findById(secondEvaluation.getId())
+                .orElseThrow().getExecutionStatus())
+                .isEqualTo(PhotoEvaluationExecutionStatus.SUCCEEDED);
+        assertThat(storedFirstPhoto.getRepresentativeSlot()).isEqualTo((byte) 1);
+        assertThat(storedSecondPhoto.getRepresentativeSlot()).isNull();
+    }
+
+    private PhotoEvaluationCompletedResult completedResult(
+            Long evaluationId,
+            LocalDateTime evaluatedAt
+    ) {
+        return new PhotoEvaluationCompletedResult(
+                evaluationId,
+                PhotoEvaluationResult.SUCCESS,
+                null,
+                BigDecimal.valueOf(95),
+                "[\"landmark\"]",
+                BigDecimal.valueOf(92),
+                null,
+                evaluatedAt
+        );
+    }
+
     @DisplayName("성공했고 랜드마크가 인식된 사진 판정만 조회한다")
     @Test
     void findsRecognizedPhotoEvaluations() {

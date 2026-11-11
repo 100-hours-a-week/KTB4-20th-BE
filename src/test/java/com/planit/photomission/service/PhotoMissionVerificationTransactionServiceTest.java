@@ -124,7 +124,7 @@ class PhotoMissionVerificationTransactionServiceTest {
         PhotoEvaluation evaluation = evaluation(photo);
         when(evaluationRepository.findById(51L))
                 .thenReturn(Optional.of(evaluation));
-        when(groupStateRepository.findByMissionId(31L))
+        when(groupStateRepository.findByMissionIdForUpdate(31L))
                 .thenReturn(Optional.of(state));
 
         service.complete(51L, successResponse());
