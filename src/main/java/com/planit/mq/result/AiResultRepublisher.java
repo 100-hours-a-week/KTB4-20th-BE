@@ -84,9 +84,13 @@ public class AiResultRepublisher {
         return publish(AiExchange.DLX, AiResultQueue.DLQ_ROUTING_KEY, original, dlqProperties);
     }
 
-    /** 헤더가 없거나 숫자가 아니면 0으로 본다. */
     static int resultRetryCountOf(Message message) {
-        Object value = message.getMessageProperties().getHeaders().get(RESULT_RETRY_COUNT_HEADER);
+        return countHeaderOf(message, RESULT_RETRY_COUNT_HEADER);
+    }
+
+    /** 횟수를 담은 헤더를 읽는다. 헤더가 없거나 숫자가 아니면 0으로 본다. */
+    static int countHeaderOf(Message message, String name) {
+        Object value = message.getMessageProperties().getHeaders().get(name);
         if (value instanceof Number number) {
             return number.intValue();
         }
