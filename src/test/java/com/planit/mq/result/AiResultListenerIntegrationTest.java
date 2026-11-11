@@ -29,7 +29,8 @@ import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest
+/** 실제 일정 생성 Handler 대신 받은 결과를 기록하는 Handler를 같은 Bean 이름으로 끼운다. */
+@SpringBootTest(properties = "spring.main.allow-bean-definition-overriding=true")
 @Testcontainers
 class AiResultListenerIntegrationTest {
 
@@ -121,7 +122,7 @@ class AiResultListenerIntegrationTest {
     @TestConfiguration
     static class HandlerConfig {
 
-        @Bean
+        @Bean(name = "scheduleGenerationResultHandler")
         ScheduleResultRecorder scheduleResultRecorder() {
             return new ScheduleResultRecorder();
         }
