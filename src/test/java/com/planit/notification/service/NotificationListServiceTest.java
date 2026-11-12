@@ -199,7 +199,9 @@ class NotificationListServiceTest {
                         NotificationType.TRIP_D1,
                         NotificationType.TRIP_WEATHER_ALERT,
                         NotificationType.SCHEDULE_GENERATION_SUCCEEDED,
-                        NotificationType.SCHEDULE_GENERATION_FAILED
+                        NotificationType.SCHEDULE_GENERATION_FAILED,
+                        NotificationType.PHOTO_MISSION_EVALUATION_SUCCEEDED,
+                        NotificationType.PHOTO_MISSION_EVALUATION_FAILED
                 )
         )).thenReturn(List.of(notification));
 

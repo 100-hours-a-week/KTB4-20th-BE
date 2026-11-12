@@ -11,6 +11,7 @@ import com.planit.mq.result.AiResultEnvelope;
 import com.planit.mq.result.AiResultHandler;
 import com.planit.mq.topology.AiExchange;
 import com.planit.mq.topology.AiResultQueue;
+import com.planit.notification.repository.NotificationRepository;
 import com.planit.photomission.domain.Mission;
 import com.planit.photomission.domain.MissionCompletionStatus;
 import com.planit.photomission.domain.MissionGroupState;
@@ -146,6 +147,9 @@ class PhotoEvaluationResultRedeliveryIntegrationTest {
     @Autowired
     private ImageFileRepository imageFileRepository;
 
+    @Autowired
+    private NotificationRepository notificationRepository;
+
     @MockitoSpyBean
     private PhotoMissionResultApplier resultApplier;
 
@@ -190,6 +194,10 @@ class PhotoEvaluationResultRedeliveryIntegrationTest {
         assertThat(storedState.getStatus())
                 .isEqualTo(MissionCompletionStatus.COMPLETED);
         assertThat(storedPhoto.getRepresentativeSlot()).isEqualTo((byte) 1);
+        assertThat(notificationRepository
+                .countByRecipientPublicIdAndReadAtIsNullAndDeletedAtIsNull(
+                        fixture.recipientPublicId()
+                )).isEqualTo(1);
     }
 
     private EvaluationFixture createQueuedGroupEvaluation() {
@@ -262,7 +270,8 @@ class PhotoEvaluationResultRedeliveryIntegrationTest {
         return new EvaluationFixture(
                 evaluation.getId(),
                 mission.getId(),
-                photo.getId()
+                photo.getId(),
+                user.getPublicId()
         );
     }
 
@@ -287,7 +296,8 @@ class PhotoEvaluationResultRedeliveryIntegrationTest {
     private record EvaluationFixture(
             Long evaluationId,
             Long missionId,
-            Long photoId
+            Long photoId,
+            UUID recipientPublicId
     ) {
     }
 

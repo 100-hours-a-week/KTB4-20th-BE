@@ -19,15 +19,18 @@ public class PhotoEvaluationFailureService {
 
     private final PhotoEvaluationRepository evaluationRepository;
     private final MessageOutboxRepository outboxRepository;
+    private final PhotoEvaluationNotificationService notificationService;
     private final Clock clock;
 
     public PhotoEvaluationFailureService(
             PhotoEvaluationRepository evaluationRepository,
             MessageOutboxRepository outboxRepository,
+            PhotoEvaluationNotificationService notificationService,
             @Qualifier(RabbitMqConfig.MQ_CLOCK) Clock clock
     ) {
         this.evaluationRepository = evaluationRepository;
         this.outboxRepository = outboxRepository;
+        this.notificationService = notificationService;
         this.clock = clock;
     }
 
@@ -37,12 +40,21 @@ public class PhotoEvaluationFailureService {
             int executionAttemptCount,
             String errorCode
     ) {
-        return evaluationRepository.failQueued(
+        LocalDateTime failedAt = now();
+        int updated = evaluationRepository.failQueued(
                 evaluationId,
                 executionAttemptCount,
                 errorCode,
-                now()
-        ) == 1;
+                failedAt
+        );
+        if (updated == 0) {
+            return false;
+        }
+        notificationService.notifyFailed(
+                evaluationRepository.findById(evaluationId).orElseThrow(),
+                failedAt
+        );
+        return true;
     }
 
     @Transactional
@@ -64,11 +76,20 @@ public class PhotoEvaluationFailureService {
     }
 
     private boolean failPreservingAttempt(Long evaluationId, String errorCode) {
-        return evaluationRepository.failQueuedPreservingAttempt(
+        LocalDateTime failedAt = now();
+        int updated = evaluationRepository.failQueuedPreservingAttempt(
                 evaluationId,
                 errorCode,
-                now()
-        ) == 1;
+                failedAt
+        );
+        if (updated == 0) {
+            return false;
+        }
+        notificationService.notifyFailed(
+                evaluationRepository.findById(evaluationId).orElseThrow(),
+                failedAt
+        );
+        return true;
     }
 
     private LocalDateTime now() {

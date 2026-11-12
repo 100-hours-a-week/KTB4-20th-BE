@@ -12,13 +12,16 @@ public class PhotoEvaluationResultTransactionService {
 
     private final PhotoEvaluationRepository evaluationRepository;
     private final PhotoMissionResultApplier resultApplier;
+    private final PhotoEvaluationNotificationService notificationService;
 
     public PhotoEvaluationResultTransactionService(
             PhotoEvaluationRepository evaluationRepository,
-            PhotoMissionResultApplier resultApplier
+            PhotoMissionResultApplier resultApplier,
+            PhotoEvaluationNotificationService notificationService
     ) {
         this.evaluationRepository = evaluationRepository;
         this.resultApplier = resultApplier;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -46,6 +49,10 @@ public class PhotoEvaluationResultTransactionService {
         }
 
         resultApplier.apply(evaluation.get(), result.evaluatedAt());
+        notificationService.notifyCompleted(
+                evaluation.get(),
+                result.evaluatedAt()
+        );
     }
 
     @Transactional
@@ -58,11 +65,17 @@ public class PhotoEvaluationResultTransactionService {
                 result.errorCode(),
                 result.failedAt()
         );
-        if (updated == 1) {
-            return;
-        }
-        if (!evaluationRepository.existsById(result.evaluationId())) {
+        Optional<PhotoEvaluation> evaluation =
+                evaluationRepository.findById(result.evaluationId());
+        if (evaluation.isEmpty()) {
             throw unknownEvaluation();
+        }
+        if (updated == 1) {
+            notificationService.notifyFailed(
+                    evaluation.get(),
+                    result.failedAt()
+            );
+            return;
         }
     }
 
