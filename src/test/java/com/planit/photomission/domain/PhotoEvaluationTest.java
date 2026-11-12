@@ -28,6 +28,8 @@ class PhotoEvaluationTest {
                 .isEqualTo(PhotoEvaluationExecutionStatus.QUEUED);
         assertThat(evaluation.getDeadlineAt()).isEqualTo(deadlineAt);
         assertThat(evaluation.getResult()).isNull();
+        assertThat(evaluation.getActiveSlot()).isEqualTo((byte) 1);
+        assertThat(evaluation.getExecutionAttemptCount()).isZero();
     }
 
     @DisplayName("AI 판정 시작 시 실행 상태만 기록하고 결과는 비워둔다")
@@ -44,6 +46,7 @@ class PhotoEvaluationTest {
         assertThat(evaluation.getResult()).isNull();
         assertThat(evaluation.getErrorCode()).isNull();
         assertThat(evaluation.getEvaluatedAt()).isNull();
+        assertThat(evaluation.getActiveSlot()).isEqualTo((byte) 1);
     }
 
     @DisplayName("AI 실행 오류는 별도 이력이므로 네 번째 실행도 기록할 수 있다")
@@ -85,6 +88,7 @@ class PhotoEvaluationTest {
         assertThat(evaluation.getRetryHint())
                 .isEqualTo("탑이 사람에 가려졌어요.");
         assertThat(evaluation.getEvaluatedAt()).isEqualTo(evaluatedAt);
+        assertThat(evaluation.getActiveSlot()).isNull();
     }
 
     @DisplayName("위치 불일치는 FAIL 판정 사유로 기록한다")
@@ -160,6 +164,7 @@ class PhotoEvaluationTest {
 
         assertThat(evaluation.getExecutionStatus())
                 .isEqualTo(PhotoEvaluationExecutionStatus.FAILED);
+        assertThat(evaluation.getActiveSlot()).isNull();
         assertThat(evaluation.getResult()).isNull();
         assertThat(evaluation.getErrorCode()).isEqualTo("AI_TIMEOUT");
     }

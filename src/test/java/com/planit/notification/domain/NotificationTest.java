@@ -1,8 +1,10 @@
 package com.planit.notification.domain;
 
 import com.planit.domain.User;
+import com.planit.mq.job.AiJobType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -85,5 +87,57 @@ class NotificationTest {
         ))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessage("알림 수신자 공개 ID는 필수입니다");
+    }
+
+    @DisplayName("AI 작업 알림은 작업과 수신자 ID로 중복 방지 키를 만들고 여행을 대상으로 한다")
+    @Test
+    void createsAiJobTripNotification() {
+        User recipient = new User(null, UUID.randomUUID(), "알림테스트");
+        ReflectionTestUtils.setField(recipient, "id", 7L);
+        LocalDateTime createdAt = LocalDateTime.of(2026, 11, 10, 10, 0);
+
+        Notification notification = Notification.createAiJobTripNotification(
+                recipient,
+                AiJobType.SCHEDULE_GENERATE,
+                42L,
+                1001L,
+                NotificationType.SCHEDULE_GENERATION_SUCCEEDED,
+                "일정이 완성됐어요",
+                "부산 여행의 일정 3가지를 확인해 보세요.",
+                createdAt
+        );
+
+        assertThat(notification.getType())
+                .isEqualTo(NotificationType.SCHEDULE_GENERATION_SUCCEEDED);
+        assertThat(notification.getTargetType())
+                .isEqualTo(NotificationTargetType.TRIP);
+        assertThat(notification.getTargetId()).isEqualTo(1001L);
+        assertThat(notification.getTargetStatus())
+                .isEqualTo(NotificationTargetStatus.ACTIVE);
+        assertThat(notification.getWeatherCondition()).isNull();
+        assertThat(notification.getDedupeKey()).isEqualTo(
+                "AI_JOB:SCHEDULE_GENERATE:42:SCHEDULE_GENERATION_SUCCEEDED:7"
+        );
+        assertThat(notification.getCreatedAt()).isEqualTo(createdAt);
+        assertThat(notification.getDeliveredAt()).isNull();
+    }
+
+    @DisplayName("저장되지 않은 수신자에게는 AI 작업 알림을 만들 수 없다")
+    @Test
+    void requiresRecipientIdForAiJobNotification() {
+        User recipient = new User(null, UUID.randomUUID(), "알림테스트");
+
+        assertThatThrownBy(() -> Notification.createAiJobTripNotification(
+                recipient,
+                AiJobType.SCHEDULE_GENERATE,
+                42L,
+                1001L,
+                NotificationType.SCHEDULE_GENERATION_FAILED,
+                "일정을 만들지 못했어요",
+                "잠시 후 다시 시도해 주세요.",
+                LocalDateTime.of(2026, 11, 10, 10, 0)
+        ))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("알림 수신자 ID는 필수입니다");
     }
 }

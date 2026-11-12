@@ -23,6 +23,7 @@ import com.planit.repository.UserRepository;
 import com.planit.schedule.domain.ScheduleGenerationReason;
 import com.planit.schedule.dto.SchedulePlaceSelectionResponse;
 import com.planit.schedule.ai.AiRecommendedPlaceMapper;
+import com.planit.schedule.ai.ScheduleAiResultValidator;
 import com.planit.trip.service.TripMemberAccessService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
@@ -103,7 +104,9 @@ class ScheduleGenerationServiceTest {
                 aiTripClient,
                 recommendedPlaceMapper,
                 placePersistenceService,
-                schedulePersistenceService
+                schedulePersistenceService,
+                new ScheduleAiResultValidator(),
+                new ScheduleRoutePlanner()
         );
 
         user = mock(User.class);
