@@ -6,17 +6,21 @@ import com.planit.domain.Trip;
 import com.planit.domain.TripMember;
 import com.planit.domain.User;
 import com.planit.photomission.domain.Mission;
+import com.planit.photomission.domain.MissionCompletionStatus;
 import com.planit.photomission.domain.MissionGenerationJob;
 import com.planit.photomission.domain.MissionGroupState;
 import com.planit.photomission.domain.MissionParticipation;
 import com.planit.photomission.domain.MissionPhoto;
 import com.planit.photomission.domain.MissionScope;
 import com.planit.photomission.domain.PhotoEvaluation;
+import com.planit.photomission.domain.PhotoEvaluationExecutionStatus;
 import com.planit.photomission.domain.PhotoEvaluationResult;
 import com.planit.photomission.ai.PhotoMissionGenerateRequest;
 import com.planit.photomission.ai.PhotoMissionGenerateResponse;
-import com.planit.photomission.service.PhotoMissionGenerationTransactionService;
 import com.planit.photomission.service.MissionGenerationAttempt;
+import com.planit.photomission.service.PhotoEvaluationCompletedResult;
+import com.planit.photomission.service.PhotoEvaluationResultTransactionService;
+import com.planit.photomission.service.PhotoMissionGenerationTransactionService;
 import com.planit.repository.ImageFileRepository;
 import com.planit.repository.RegionRepository;
 import com.planit.repository.TripMemberRepository;
@@ -31,6 +35,8 @@ import com.planit.schedule.repository.PlaceRepository;
 import com.planit.schedule.repository.ScheduleDayRepository;
 import com.planit.schedule.repository.ScheduleRepository;
 import com.planit.schedule.repository.ScheduleVisitRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -69,11 +75,17 @@ class PhotoMissionRepositoryTest {
     @Autowired
     private PhotoEvaluationRepository evaluationRepository;
 
+    @PersistenceContext
+    private EntityManager entityManager;
+
     @Autowired
     private MissionGenerationJobRepository generationJobRepository;
 
     @Autowired
     private PhotoMissionGenerationTransactionService generationService;
+
+    @Autowired
+    private PhotoEvaluationResultTransactionService resultService;
 
     @Autowired
     private RegionRepository regionRepository;
@@ -240,7 +252,9 @@ class PhotoMissionRepositoryTest {
                 null,
                 NOW
         ));
-        evaluationRepository.save(PhotoEvaluation.start(photo, 1, NOW));
+        PhotoEvaluation previous = PhotoEvaluation.start(photo, 1, NOW);
+        previous.failExecution("PREVIOUS_ATTEMPT_FAILED", NOW.plusSeconds(1));
+        evaluationRepository.save(previous);
         PhotoEvaluation latest = evaluationRepository.save(
                 PhotoEvaluation.start(photo, 2, NOW.plusSeconds(1))
         );
@@ -248,6 +262,353 @@ class PhotoMissionRepositoryTest {
         assertThat(evaluationRepository
                 .findTopByMissionPhotoIdOrderByAttemptNoDesc(photo.getId()))
                 .contains(latest);
+    }
+
+    @DisplayName("QUEUED 판정 결과는 조건부 UPDATE로 최초 한 번만 완료한다")
+    @Test
+    void completesQueuedEvaluationOnlyOnce() {
+        Fixture fixture = createFixture();
+        Mission mission = missionRepository.save(Mission.create(
+                fixture.visit(), 1, MissionScope.PERSONAL,
+                "유적지 전경 담기", "역사", NOW
+        ));
+        MissionParticipation participation = participationRepository.save(
+                MissionParticipation.create(mission, fixture.member(), NOW)
+        );
+        MissionPhoto photo = photoRepository.save(MissionPhoto.personal(
+                participation,
+                createImageFile(),
+                UUID.randomUUID(),
+                null,
+                null,
+                NOW
+        ));
+        PhotoEvaluation evaluation = evaluationRepository.saveAndFlush(
+                PhotoEvaluation.queue(photo, NOW, NOW.plusMinutes(16))
+        );
+
+        int first = evaluationRepository.completeQueued(
+                evaluation.getId(),
+                2,
+                PhotoEvaluationResult.SUCCESS,
+                null,
+                BigDecimal.valueOf(95),
+                "[\"landmark\"]",
+                BigDecimal.valueOf(92),
+                null,
+                NOW.plusSeconds(10)
+        );
+        int duplicate = evaluationRepository.completeQueued(
+                evaluation.getId(),
+                3,
+                PhotoEvaluationResult.FAIL,
+                null,
+                BigDecimal.valueOf(10),
+                "[]",
+                null,
+                null,
+                NOW.plusSeconds(20)
+        );
+
+        PhotoEvaluation stored = evaluationRepository
+                .findById(evaluation.getId())
+                .orElseThrow();
+        assertThat(first).isEqualTo(1);
+        assertThat(duplicate).isZero();
+        assertThat(stored.getExecutionStatus())
+                .isEqualTo(PhotoEvaluationExecutionStatus.SUCCEEDED);
+        assertThat(stored.getResult())
+                .isEqualTo(PhotoEvaluationResult.SUCCESS);
+        assertThat(stored.getMatchScore())
+                .isEqualByComparingTo("95.00");
+        assertThat(stored.getExecutionAttemptCount()).isEqualTo(2);
+        assertThat(stored.getActiveSlot()).isNull();
+    }
+
+    @DisplayName("최종 실패한 QUEUED 판정에는 늦은 성공 결과를 반영하지 않는다")
+    @Test
+    void rejectsLateSuccessAfterQueuedEvaluationFailed() {
+        Fixture fixture = createFixture();
+        Mission mission = missionRepository.save(Mission.create(
+                fixture.visit(), 1, MissionScope.PERSONAL,
+                "유적지 전경 담기", "역사", NOW
+        ));
+        MissionParticipation participation = participationRepository.save(
+                MissionParticipation.create(mission, fixture.member(), NOW)
+        );
+        MissionPhoto photo = photoRepository.save(MissionPhoto.personal(
+                participation,
+                createImageFile(),
+                UUID.randomUUID(),
+                null,
+                null,
+                NOW
+        ));
+        PhotoEvaluation evaluation = evaluationRepository.saveAndFlush(
+                PhotoEvaluation.queue(photo, NOW, NOW.plusMinutes(16))
+        );
+
+        int failed = evaluationRepository.failQueued(
+                evaluation.getId(),
+                1,
+                "PROCESSING_TIMEOUT",
+                NOW.plusMinutes(16)
+        );
+        int lateSuccess = evaluationRepository.completeQueued(
+                evaluation.getId(),
+                2,
+                PhotoEvaluationResult.SUCCESS,
+                null,
+                BigDecimal.valueOf(95),
+                "[]",
+                null,
+                null,
+                NOW.plusMinutes(17)
+        );
+
+        PhotoEvaluation stored = evaluationRepository
+                .findById(evaluation.getId())
+                .orElseThrow();
+        assertThat(failed).isEqualTo(1);
+        assertThat(lateSuccess).isZero();
+        assertThat(stored.getExecutionStatus())
+                .isEqualTo(PhotoEvaluationExecutionStatus.FAILED);
+        assertThat(stored.getErrorCode()).isEqualTo("PROCESSING_TIMEOUT");
+        assertThat(stored.getExecutionAttemptCount()).isEqualTo(1);
+        assertThat(stored.getActiveSlot()).isNull();
+    }
+
+    @DisplayName("삭제된 사진의 QUEUED 판정에는 늦은 성공 결과를 반영하지 않는다")
+    @Test
+    void rejectsLateSuccessAfterMissionPhotoDeleted() {
+        Fixture fixture = createFixture();
+        Mission mission = missionRepository.save(Mission.create(
+                fixture.visit(), 1, MissionScope.PERSONAL,
+                "유적지 전경 담기", "역사", NOW
+        ));
+        MissionParticipation participation = participationRepository.save(
+                MissionParticipation.create(mission, fixture.member(), NOW)
+        );
+        MissionPhoto photo = photoRepository.save(MissionPhoto.personal(
+                participation,
+                createImageFile(),
+                UUID.randomUUID(),
+                null,
+                null,
+                NOW
+        ));
+        PhotoEvaluation evaluation = evaluationRepository.saveAndFlush(
+                PhotoEvaluation.queue(photo, NOW, NOW.plusMinutes(16))
+        );
+
+        int failed = evaluationRepository.failQueuedByMissionPhotoId(
+                photo.getId(),
+                "PHOTO_DELETED",
+                NOW.plusSeconds(5)
+        );
+        int lateSuccess = evaluationRepository.completeQueued(
+                evaluation.getId(),
+                1,
+                PhotoEvaluationResult.SUCCESS,
+                null,
+                BigDecimal.valueOf(95),
+                "[]",
+                null,
+                null,
+                NOW.plusSeconds(10)
+        );
+
+        PhotoEvaluation stored = evaluationRepository
+                .findById(evaluation.getId())
+                .orElseThrow();
+        assertThat(failed).isEqualTo(1);
+        assertThat(lateSuccess).isZero();
+        assertThat(stored.getExecutionStatus())
+                .isEqualTo(PhotoEvaluationExecutionStatus.FAILED);
+        assertThat(stored.getErrorCode()).isEqualTo("PHOTO_DELETED");
+    }
+
+    @DisplayName("여행 삭제 시 해당 여행의 모든 QUEUED 판정을 실패 처리한다")
+    @Test
+    void failsQueuedEvaluationsForDeletedTrip() {
+        Fixture fixture = createFixture();
+        Mission mission = missionRepository.save(Mission.create(
+                fixture.visit(), 1, MissionScope.GROUP,
+                "다 같이 사진 찍기", null, NOW
+        ));
+        MissionPhoto firstPhoto = photoRepository.save(MissionPhoto.group(
+                mission,
+                fixture.member(),
+                createImageFile(),
+                UUID.randomUUID(),
+                null,
+                null,
+                NOW
+        ));
+        MissionPhoto secondPhoto = photoRepository.save(MissionPhoto.group(
+                mission,
+                fixture.member(),
+                createImageFile(),
+                UUID.randomUUID(),
+                null,
+                null,
+                NOW.plusSeconds(1)
+        ));
+        PhotoEvaluation first = evaluationRepository.save(
+                PhotoEvaluation.queue(firstPhoto, NOW, NOW.plusMinutes(16))
+        );
+        PhotoEvaluation second = evaluationRepository.saveAndFlush(
+                PhotoEvaluation.queue(
+                        secondPhoto,
+                        NOW.plusSeconds(1),
+                        NOW.plusMinutes(16)
+                )
+        );
+
+        int failed = evaluationRepository.failQueuedByTripId(
+                fixture.member().getTrip().getId(),
+                "TRIP_DELETED",
+                NOW.plusSeconds(5)
+        );
+        entityManager.clear();
+
+        assertThat(failed).isEqualTo(2);
+        assertThat(List.of(first.getId(), second.getId()))
+                .allSatisfy(evaluationId -> {
+                    PhotoEvaluation stored = evaluationRepository
+                            .findById(evaluationId)
+                            .orElseThrow();
+                    assertThat(stored.getExecutionStatus())
+                            .isEqualTo(PhotoEvaluationExecutionStatus.FAILED);
+                    assertThat(stored.getErrorCode())
+                            .isEqualTo("TRIP_DELETED");
+                    assertThat(stored.getActiveSlot()).isNull();
+                });
+    }
+
+    @DisplayName("중복 결과가 도착해도 단체 미션 완료와 대표 사진은 한 번만 반영한다")
+    @Test
+    void appliesGroupMissionResultOnlyOnce() {
+        Fixture fixture = createFixture();
+        Mission mission = missionRepository.save(Mission.create(
+                fixture.visit(), 1, MissionScope.GROUP,
+                "다 같이 사진 찍기", null, NOW
+        ));
+        groupStateRepository.save(MissionGroupState.create(mission, NOW));
+        MissionPhoto photo = photoRepository.save(MissionPhoto.group(
+                mission,
+                fixture.member(),
+                createImageFile(),
+                UUID.randomUUID(),
+                null,
+                null,
+                NOW
+        ));
+        PhotoEvaluation evaluation = evaluationRepository.saveAndFlush(
+                PhotoEvaluation.queue(photo, NOW, NOW.plusMinutes(16))
+        );
+        PhotoEvaluationCompletedResult result =
+                new PhotoEvaluationCompletedResult(
+                        evaluation.getId(),
+                        1,
+                        PhotoEvaluationResult.SUCCESS,
+                        null,
+                        BigDecimal.valueOf(95),
+                        "[\"landmark\"]",
+                        BigDecimal.valueOf(92),
+                        null,
+                        NOW.plusSeconds(10)
+                );
+
+        resultService.applyCompleted(result);
+        resultService.applyCompleted(result);
+
+        MissionGroupState storedState = groupStateRepository
+                .findByMissionId(mission.getId())
+                .orElseThrow();
+        MissionPhoto storedPhoto = photoRepository.findById(photo.getId())
+                .orElseThrow();
+        assertThat(storedState.getStatus())
+                .isEqualTo(MissionCompletionStatus.COMPLETED);
+        assertThat(storedPhoto.getRepresentativeSlot()).isEqualTo((byte) 1);
+    }
+
+    @DisplayName("같은 단체 미션의 서로 다른 성공 결과는 모두 종료하고 최초 성공 사진만 대표로 지정한다")
+    @Test
+    void appliesDistinctGroupMissionResultsWithoutChangingRepresentative() {
+        Fixture fixture = createFixture();
+        Mission mission = missionRepository.save(Mission.create(
+                fixture.visit(), 1, MissionScope.GROUP,
+                "다 같이 사진 찍기", null, NOW
+        ));
+        groupStateRepository.save(MissionGroupState.create(mission, NOW));
+        MissionPhoto firstPhoto = photoRepository.save(MissionPhoto.group(
+                mission,
+                fixture.member(),
+                createImageFile(),
+                UUID.randomUUID(),
+                null,
+                null,
+                NOW
+        ));
+        MissionPhoto secondPhoto = photoRepository.save(MissionPhoto.group(
+                mission,
+                fixture.member(),
+                createImageFile(),
+                UUID.randomUUID(),
+                null,
+                null,
+                NOW.plusSeconds(1)
+        ));
+        PhotoEvaluation firstEvaluation = evaluationRepository.saveAndFlush(
+                PhotoEvaluation.queue(firstPhoto, NOW, NOW.plusMinutes(16))
+        );
+        PhotoEvaluation secondEvaluation = evaluationRepository.saveAndFlush(
+                PhotoEvaluation.queue(
+                        secondPhoto,
+                        NOW.plusSeconds(1),
+                        NOW.plusMinutes(16)
+                )
+        );
+
+        resultService.applyCompleted(
+                completedResult(firstEvaluation.getId(), NOW.plusSeconds(10))
+        );
+        resultService.applyCompleted(
+                completedResult(secondEvaluation.getId(), NOW.plusSeconds(11))
+        );
+
+        MissionPhoto storedFirstPhoto = photoRepository
+                .findById(firstPhoto.getId())
+                .orElseThrow();
+        MissionPhoto storedSecondPhoto = photoRepository
+                .findById(secondPhoto.getId())
+                .orElseThrow();
+        assertThat(evaluationRepository.findById(firstEvaluation.getId())
+                .orElseThrow().getExecutionStatus())
+                .isEqualTo(PhotoEvaluationExecutionStatus.SUCCEEDED);
+        assertThat(evaluationRepository.findById(secondEvaluation.getId())
+                .orElseThrow().getExecutionStatus())
+                .isEqualTo(PhotoEvaluationExecutionStatus.SUCCEEDED);
+        assertThat(storedFirstPhoto.getRepresentativeSlot()).isEqualTo((byte) 1);
+        assertThat(storedSecondPhoto.getRepresentativeSlot()).isNull();
+    }
+
+    private PhotoEvaluationCompletedResult completedResult(
+            Long evaluationId,
+            LocalDateTime evaluatedAt
+    ) {
+        return new PhotoEvaluationCompletedResult(
+                evaluationId,
+                1,
+                PhotoEvaluationResult.SUCCESS,
+                null,
+                BigDecimal.valueOf(95),
+                "[\"landmark\"]",
+                BigDecimal.valueOf(92),
+                null,
+                evaluatedAt
+        );
     }
 
     @DisplayName("성공했고 랜드마크가 인식된 사진 판정만 조회한다")
