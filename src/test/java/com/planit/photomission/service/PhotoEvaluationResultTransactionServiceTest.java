@@ -135,35 +135,35 @@ class PhotoEvaluationResultTransactionServiceTest {
                 .hasMessage("AI 실행 오류 코드는 필수입니다");
     }
 
-    @DisplayName("x-retry-count 4인 최종 결과는 다섯 번째 AI 실행으로 허용한다")
+    @DisplayName("x-retry-count 3인 최종 결과는 네 번째 AI 실행으로 허용한다")
     @Test
-    void acceptsFifthExecutionAttempt() {
+    void acceptsFourthExecutionAttempt() {
         new PhotoEvaluationFailedResult(
                 51L,
-                5,
+                4,
                 "AI_ATTEMPT_EXHAUSTED",
                 EVALUATED_AT
         );
     }
 
-    @DisplayName("FS 문서의 최대 실행 차수 5를 초과한 결과는 거부한다")
+    @DisplayName("일반 MQ 구조의 최대 실행 차수 4를 초과한 실패 결과는 거부한다")
     @Test
-    void rejectsExecutionAttemptAboveFive() {
+    void rejectsFailedExecutionAttemptAboveFour() {
         assertThatThrownBy(() -> new PhotoEvaluationFailedResult(
                 51L,
-                6,
+                5,
                 "AI_ATTEMPT_EXHAUSTED",
                 EVALUATED_AT
         )).isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("AI 판정 실행 차수는 1부터 5까지입니다");
+                .hasMessage("AI 판정 실행 차수는 1부터 4까지입니다");
     }
 
-    @DisplayName("성공 결과도 FS 문서의 최대 실행 차수 5를 초과하면 거부한다")
+    @DisplayName("성공 결과도 일반 MQ 구조의 최대 실행 차수 4를 초과하면 거부한다")
     @Test
-    void rejectsCompletedExecutionAttemptAboveFive() {
+    void rejectsCompletedExecutionAttemptAboveFour() {
         assertThatThrownBy(() -> new PhotoEvaluationCompletedResult(
                 51L,
-                6,
+                5,
                 PhotoEvaluationResult.SUCCESS,
                 null,
                 BigDecimal.valueOf(95),
@@ -172,7 +172,7 @@ class PhotoEvaluationResultTransactionServiceTest {
                 null,
                 EVALUATED_AT
         )).isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("AI 판정 실행 차수는 1부터 5까지입니다");
+                .hasMessage("AI 판정 실행 차수는 1부터 4까지입니다");
     }
 
     private PhotoEvaluationCompletedResult completedResult() {

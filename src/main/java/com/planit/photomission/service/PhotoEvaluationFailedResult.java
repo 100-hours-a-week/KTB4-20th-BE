@@ -9,7 +9,7 @@ public record PhotoEvaluationFailedResult(
         LocalDateTime failedAt
 ) {
 
-    private static final int MAX_EXECUTION_ATTEMPT_COUNT = 5;
+    private static final int MAX_EXECUTION_ATTEMPT_COUNT = 4;
 
     public PhotoEvaluationFailedResult {
         if (evaluationId == null) {
@@ -18,7 +18,7 @@ public record PhotoEvaluationFailedResult(
         if (executionAttemptCount < 1
                 || executionAttemptCount > MAX_EXECUTION_ATTEMPT_COUNT) {
             throw new IllegalArgumentException(
-                    "AI 판정 실행 차수는 1부터 5까지입니다"
+                    "AI 판정 실행 차수는 1부터 4까지입니다"
             );
         }
         if (errorCode == null || errorCode.isBlank()) {
