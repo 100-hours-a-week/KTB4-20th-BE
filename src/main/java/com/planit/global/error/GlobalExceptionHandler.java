@@ -3,11 +3,13 @@ package com.planit.global.error;
 import com.planit.global.response.ApiFieldError;
 import com.planit.global.response.ApiResponse;
 import com.planit.global.response.ValidationErrorReason;
+import com.planit.mq.intake.AiJobTemporarilyUnavailableException;
 import com.planit.trip.dto.TripConflictResponse;
 import com.planit.trip.exception.TripDateConflictException;
 import io.sentry.Sentry;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
@@ -41,6 +43,19 @@ public class GlobalExceptionHandler {
                         exception.getConflict(),
                         null
                 ));
+    }
+
+    /**
+     * 큐 차단으로 접수하지 않은 요청. 차단은 큐 감시가 켤 때 이미 경고하므로 요청마다 Sentry로 보내지 않는다.
+     */
+    @ExceptionHandler(AiJobTemporarilyUnavailableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAiJobTemporarilyUnavailable(
+            AiJobTemporarilyUnavailableException exception
+    ) {
+        ErrorCode errorCode = exception.getErrorCode();
+        return ResponseEntity.status(errorCode.getHttpStatus())
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(exception.getRetryAfter().toSeconds()))
+                .body(ApiResponse.error(errorCode.getCode(), errorCode.getMessage()));
     }
 
     @ExceptionHandler(BusinessException.class)
