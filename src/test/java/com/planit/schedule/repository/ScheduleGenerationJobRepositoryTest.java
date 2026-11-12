@@ -167,6 +167,18 @@ class ScheduleGenerationJobRepositoryTest {
         assertThat(found.getErrorCode()).isNull();
     }
 
+    @DisplayName("Idempotency-Key로 이미 접수한 작업을 찾는다")
+    @Test
+    void findsJobByIdempotencyKey() {
+        UUID idempotencyKey = UUID.randomUUID();
+        ScheduleGenerationJob saved = repository.saveAndFlush(queued(idempotencyKey));
+
+        assertThat(repository.findByIdempotencyKey(idempotencyKey))
+                .map(ScheduleGenerationJob::getId)
+                .contains(saved.getId());
+        assertThat(repository.findByIdempotencyKey(UUID.randomUUID())).isEmpty();
+    }
+
     private ScheduleGenerationJob queued(UUID idempotencyKey) {
         return ScheduleGenerationJob.queued(
                 trip, member, ScheduleGenerationMode.INITIAL, idempotencyKey, NOW

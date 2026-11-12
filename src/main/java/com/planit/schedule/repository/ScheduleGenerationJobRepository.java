@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
+import java.util.UUID;
 
 public interface ScheduleGenerationJobRepository extends JpaRepository<ScheduleGenerationJob, Long> {
 
@@ -35,4 +37,7 @@ public interface ScheduleGenerationJobRepository extends JpaRepository<ScheduleG
             @Param("errorCode") String errorCode,
             @Param("finishedAt") LocalDateTime finishedAt
     );
+
+    /** 같은 Idempotency-Key로 이미 접수한 작업. 재요청이면 그 작업의 접수 응답을 그대로 돌려준다. */
+    Optional<ScheduleGenerationJob> findByIdempotencyKey(UUID idempotencyKey);
 }
