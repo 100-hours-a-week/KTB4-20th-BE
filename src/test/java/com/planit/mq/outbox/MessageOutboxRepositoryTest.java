@@ -81,6 +81,87 @@ class MessageOutboxRepositoryTest {
         )).isInstanceOf(IllegalArgumentException.class);
     }
 
+    @DisplayName("PENDING 메시지를 발행 완료로 바꾸고, 이미 바뀐 메시지는 다시 바꾸지 않는다")
+    @Test
+    void marksPublishedOnlyOnce() {
+        MessageOutbox saved = repository.saveAndFlush(outbox(1L));
+        LocalDateTime publishedAt = CREATED_AT.plusSeconds(1);
+
+        assertThat(repository.markPublished(saved.getId(), publishedAt)).isOne();
+        assertThat(repository.markPublished(saved.getId(), publishedAt.plusSeconds(1))).isZero();
+
+        MessageOutbox found = repository.findById(saved.getId()).orElseThrow();
+        assertThat(found.getStatus()).isEqualTo(MessageOutboxStatus.PUBLISHED);
+        assertThat(found.getPublishedAt()).isEqualTo(publishedAt);
+    }
+
+    @DisplayName("NACK 재시도는 NACK 횟수만 올리고 다음 발행 시각과 실패 이유를 남긴다")
+    @Test
+    void schedulesNackRetry() {
+        MessageOutbox saved = repository.saveAndFlush(outbox(1L));
+        LocalDateTime nextAttemptAt = CREATED_AT.plusSeconds(20);
+
+        assertThat(repository.scheduleNackRetry(saved.getId(), nextAttemptAt, "NACK: reject-publish")).isOne();
+        assertThat(repository.scheduleNackRetry(saved.getId(), nextAttemptAt, "NACK: reject-publish")).isOne();
+
+        MessageOutbox found = repository.findById(saved.getId()).orElseThrow();
+        assertThat(found.getStatus()).isEqualTo(MessageOutboxStatus.PENDING);
+        assertThat(found.getNackAttemptCount()).isEqualTo(2);
+        assertThat(found.getFailureAttemptCount()).isZero();
+        assertThat(found.getNextAttemptAt()).isEqualTo(nextAttemptAt);
+        assertThat(found.getLastError()).isEqualTo("NACK: reject-publish");
+    }
+
+    @DisplayName("confirm 유실 재시도는 유실 횟수만 올린다")
+    @Test
+    void schedulesFailureRetry() {
+        MessageOutbox saved = repository.saveAndFlush(outbox(1L));
+
+        assertThat(repository.scheduleFailureRetry(
+                saved.getId(), CREATED_AT.plusSeconds(20), "TIMEOUT: confirm not received"
+        )).isOne();
+
+        MessageOutbox found = repository.findById(saved.getId()).orElseThrow();
+        assertThat(found.getFailureAttemptCount()).isOne();
+        assertThat(found.getNackAttemptCount()).isZero();
+    }
+
+    @DisplayName("실패 처리된 메시지는 발행 완료나 재시도로 바꾸지 않는다")
+    @Test
+    void ignoresUpdatesAfterFailed() {
+        MessageOutbox saved = repository.saveAndFlush(outbox(1L));
+
+        assertThat(repository.markFailed(saved.getId(), "RETURNED: NO_ROUTE")).isOne();
+        assertThat(repository.markPublished(saved.getId(), CREATED_AT)).isZero();
+        assertThat(repository.scheduleNackRetry(saved.getId(), CREATED_AT, "NACK")).isZero();
+        assertThat(repository.scheduleFailureRetry(saved.getId(), CREATED_AT, "TIMEOUT")).isZero();
+        assertThat(repository.markFailed(saved.getId(), "again")).isZero();
+
+        MessageOutbox found = repository.findById(saved.getId()).orElseThrow();
+        assertThat(found.getStatus()).isEqualTo(MessageOutboxStatus.FAILED);
+        assertThat(found.getLastError()).isEqualTo("RETURNED: NO_ROUTE");
+    }
+
+    @DisplayName("작업의 발행 대기 Outbox만 실패로 바꾸고, 이미 발행한 Outbox와 다른 작업의 Outbox는 그대로 둔다")
+    @Test
+    void failsPendingOutboxOfJob() {
+        MessageOutbox pending = repository.saveAndFlush(outbox(1L));
+        MessageOutbox published = repository.saveAndFlush(outbox(1L));
+        repository.markPublished(published.getId(), CREATED_AT.plusSeconds(1));
+        MessageOutbox otherJob = repository.saveAndFlush(outbox(2L));
+
+        assertThat(repository.markFailedPendingByJob(AiJobType.PHOTO_MISSION_GENERATE, 1L, "STALE")).isOne();
+
+        MessageOutbox failed = repository.findById(pending.getId()).orElseThrow();
+        assertThat(failed.getStatus()).isEqualTo(MessageOutboxStatus.FAILED);
+        assertThat(failed.getLastError()).isEqualTo("STALE");
+        assertThat(repository.findById(published.getId()).orElseThrow().getStatus())
+                .isEqualTo(MessageOutboxStatus.PUBLISHED);
+        assertThat(repository.findById(otherJob.getId()).orElseThrow().getStatus())
+                .isEqualTo(MessageOutboxStatus.PENDING);
+        assertThat(repository.markFailedPendingByJob(AiJobType.SCHEDULE_GENERATE, 2L, "STALE")).isZero();
+    }
+
     private MessageOutbox outbox(Long jobId) {
         return MessageOutbox.pending(
                 AiJobType.PHOTO_MISSION_GENERATE,

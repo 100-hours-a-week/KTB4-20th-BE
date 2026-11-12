@@ -1,6 +1,7 @@
 package com.planit.notification.domain;
 
 import com.planit.domain.User;
+import com.planit.mq.job.AiJobType;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -28,6 +29,8 @@ import java.util.Objects;
         )
 )
 public class Notification {
+
+    private static final String AI_JOB_DEDUPE_PREFIX = "AI_JOB";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -143,6 +146,51 @@ public class Notification {
         return notification;
     }
 
+    /**
+     * AI 작업 결과를 여행 대상으로 알린다.
+     * 같은 작업의 결과가 여러 번 반영돼도 한 번만 저장되도록 작업과 수신자로 중복 방지 키를 만든다.
+     */
+    public static Notification createAiJobTripNotification(
+            User recipient,
+            AiJobType jobType,
+            Long jobId,
+            Long tripId,
+            NotificationType type,
+            String title,
+            String body,
+            LocalDateTime createdAt
+    ) {
+        validateAiJobTripNotification(
+                recipient,
+                jobType,
+                jobId,
+                tripId,
+                type,
+                title,
+                body,
+                createdAt
+        );
+
+        Notification notification = new Notification();
+        notification.recipient = recipient;
+        notification.title = title;
+        notification.body = body;
+        notification.type = type;
+        notification.targetType = NotificationTargetType.TRIP;
+        notification.targetId = tripId;
+        notification.targetStatus = NotificationTargetStatus.ACTIVE;
+        notification.dedupeKey = String.join(
+                ":",
+                AI_JOB_DEDUPE_PREFIX,
+                jobType.name(),
+                jobId.toString(),
+                type.name(),
+                recipient.getId().toString()
+        );
+        notification.createdAt = createdAt;
+        return notification;
+    }
+
     private static void validateTripNotification(
             User recipient,
             Long tripId,
@@ -152,10 +200,38 @@ public class Notification {
             String body,
             LocalDateTime createdAt
     ) {
+        validateTripTarget(recipient, tripId, type, title, body, createdAt);
+        Objects.requireNonNull(tripStartDate, "알림 여행 시작일은 필수입니다");
+    }
+
+    private static void validateAiJobTripNotification(
+            User recipient,
+            AiJobType jobType,
+            Long jobId,
+            Long tripId,
+            NotificationType type,
+            String title,
+            String body,
+            LocalDateTime createdAt
+    ) {
+        validateTripTarget(recipient, tripId, type, title, body, createdAt);
+        Objects.requireNonNull(recipient.getId(), "알림 수신자 ID는 필수입니다");
+        Objects.requireNonNull(jobType, "AI 작업 종류는 필수입니다");
+        Objects.requireNonNull(jobId, "AI 작업 ID는 필수입니다");
+    }
+
+    /** 여행을 대상으로 하는 알림이 공통으로 가져야 하는 값을 검증한다. */
+    private static void validateTripTarget(
+            User recipient,
+            Long tripId,
+            NotificationType type,
+            String title,
+            String body,
+            LocalDateTime createdAt
+    ) {
         Objects.requireNonNull(recipient, "알림 수신자는 필수입니다");
         Objects.requireNonNull(recipient.getPublicId(), "알림 수신자 공개 ID는 필수입니다");
         Objects.requireNonNull(tripId, "알림 여행 ID는 필수입니다");
-        Objects.requireNonNull(tripStartDate, "알림 여행 시작일은 필수입니다");
         Objects.requireNonNull(type, "알림 유형은 필수입니다");
         Objects.requireNonNull(title, "알림 제목은 필수입니다");
         Objects.requireNonNull(body, "알림 본문은 필수입니다");
