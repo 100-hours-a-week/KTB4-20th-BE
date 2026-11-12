@@ -55,6 +55,15 @@ planit:
   mq:
     # 발행 후 이 시간 안에 confirm이 오지 않으면 유실로 본다. 부하 테스트의 confirm 지연 max로 확정한다
     confirm-timeout: 5s
+    outbox:
+      # 최초 재발행 시각 = 저장 시각 + confirm-timeout + initial-grace
+      initial-grace: 5s
+      # NACK, confirm 유실·연결 예외 공통 시작 간격. 재시도마다 두 배가 된다
+      backoff-base: 5s
+      # 5s, 10s, 20s 재시도 후 4번째 NACK에서 실패 처리
+      nack-max-retries: 3
+      # 5s, 10s, 20s, 40s 재시도 후 5번째 유실에서 실패 처리
+      failure-max-retries: 4
   image:
     default-profile-url: ${DEFAULT_PROFILE_IMAGE_URL:http://localhost:8080/images/default-profile.svg}
     bucket: ${IMAGE_S3_BUCKET}
