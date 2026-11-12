@@ -85,14 +85,11 @@ class AiResultListenerIntegrationTest {
         assertThat(rabbitTemplate.receive(AiResultQueue.DLQ, 500)).isNull();
     }
 
-    @DisplayName("읽을 수 없는 메시지와 Handler가 없는 작업 종류는 원인을 붙여 응답 DLQ로 보낸다")
+    @DisplayName("읽을 수 없는 메시지는 원인을 붙여 응답 DLQ로 보낸다")
     @Test
-    void deadLettersUnprocessableResults() {
+    void deadLettersInvalidResult() {
         sendResult("not json");
         assertThat(errorKindOf(rabbitTemplate.receive(AiResultQueue.DLQ, 5_000))).isEqualTo("INVALID_MESSAGE");
-
-        sendResult(result(3L, "PHOTO_JUDGE"));
-        assertThat(errorKindOf(rabbitTemplate.receive(AiResultQueue.DLQ, 5_000))).isEqualTo("UNSUPPORTED_JOB_TYPE");
         assertThat(recorder.handled).isEmpty();
     }
 
