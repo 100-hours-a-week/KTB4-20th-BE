@@ -27,6 +27,7 @@ import com.planit.schedule.domain.ScheduleVisit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.springframework.test.util.ReflectionTestUtils;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -43,6 +44,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -74,6 +76,10 @@ class PhotoMissionVerificationTransactionServiceTest {
                 imageStorage,
                 new PhotoMissionVerifyRequestFactory(),
                 new PhotoMissionEvaluationMapper(JsonMapper.builder().build()),
+                new PhotoMissionResultApplier(
+                        photoRepository,
+                        groupStateRepository
+                ),
                 SEOUL_CLOCK
         );
     }
@@ -120,7 +126,7 @@ class PhotoMissionVerificationTransactionServiceTest {
         PhotoEvaluation evaluation = evaluation(photo);
         when(evaluationRepository.findById(51L))
                 .thenReturn(Optional.of(evaluation));
-        when(groupStateRepository.findByMissionId(31L))
+        when(groupStateRepository.findByMissionIdForUpdate(31L))
                 .thenReturn(Optional.of(state));
 
         service.complete(51L, successResponse());
@@ -300,6 +306,10 @@ class PhotoMissionVerificationTransactionServiceTest {
         assertThat(result.evaluationId()).isEqualTo(52L);
         assertThat(result.request().imageUrl())
                 .isEqualTo("https://bucket.example/photo.jpg");
+        InOrder persistenceOrder = inOrder(evaluationRepository);
+        persistenceOrder.verify(evaluationRepository).flush();
+        persistenceOrder.verify(evaluationRepository)
+                .save(any(PhotoEvaluation.class));
     }
 
     @DisplayName("이미 완료된 미션의 대기 판정은 재시도 불가로 구분한다")
