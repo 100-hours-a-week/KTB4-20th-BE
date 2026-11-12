@@ -1,11 +1,16 @@
 package com.planit.mq.result;
 
 import com.planit.mq.job.AiJobType;
+import com.planit.mq.outbox.OutboxPublisher;
 import com.planit.mq.topology.AiExchange;
 import com.planit.mq.topology.AiResultQueue;
+import com.planit.photomission.domain.PhotoEvaluationResult;
+import com.planit.photomission.service.PhotoEvaluationCompletedResult;
+import com.planit.photomission.service.PhotoEvaluationResultTransactionService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -15,6 +20,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.rabbitmq.RabbitMQContainer;
@@ -28,6 +34,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.verify;
 
 /** 실제 일정 생성 Handler 대신 받은 결과를 기록하는 Handler를 같은 Bean 이름으로 끼운다. */
 @SpringBootTest(properties = "spring.main.allow-bean-definition-overriding=true")
@@ -57,6 +65,9 @@ class AiResultListenerIntegrationTest {
     @Autowired
     private ScheduleResultRecorder recorder;
 
+    @MockitoBean
+    private PhotoEvaluationResultTransactionService photoEvaluationResultTransactionService;
+
     @AfterEach
     void tearDown() {
         recorder.handled.clear();
@@ -72,6 +83,27 @@ class AiResultListenerIntegrationTest {
         assertThat(handled).isNotNull();
         assertThat(handled.jobId()).isEqualTo(1L);
         assertThat(taskQueueMessageCount()).isZero();
+    }
+
+    @DisplayName("PHOTO_JUDGE 결과를 포토미션 판정 Handler에 넘겨 반영한다")
+    @Test
+    void handlesPhotoEvaluationResult() {
+        MessageProperties properties = new MessageProperties();
+        properties.setContentType("application/json");
+        properties.setHeader(OutboxPublisher.RETRY_COUNT_HEADER, 1);
+        rabbitTemplate.send(AiExchange.RESULT, AiResultQueue.ROUTING_KEY,
+                new Message(photoEvaluationResult().getBytes(StandardCharsets.UTF_8), properties));
+
+        ArgumentCaptor<PhotoEvaluationCompletedResult> resultCaptor =
+                ArgumentCaptor.forClass(PhotoEvaluationCompletedResult.class);
+        verify(photoEvaluationResultTransactionService, timeout(5_000))
+                .applyCompleted(resultCaptor.capture());
+
+        PhotoEvaluationCompletedResult applied = resultCaptor.getValue();
+        assertThat(applied.evaluationId()).isEqualTo(51L);
+        assertThat(applied.executionAttemptCount()).isEqualTo(2);
+        assertThat(applied.result()).isEqualTo(PhotoEvaluationResult.SUCCESS);
+        assertThat(applied.matchScore()).isEqualByComparingTo("95.0");
     }
 
     @DisplayName("Handler에서 일시 오류가 나면 Result Retry Queue를 거쳐 다시 받아 반영한다")
@@ -114,6 +146,16 @@ class AiResultListenerIntegrationTest {
                 {"schemaVersion":1,"jobId":"%d","jobType":"%s","requestMessageId":"m-%d",
                  "status":"SUCCEEDED","errorKind":null,"result":{"status_code":200}}
                 """.formatted(jobId, jobType, jobId);
+    }
+
+    private static String photoEvaluationResult() {
+        return """
+                {"schemaVersion":1,"jobId":"51","jobType":"PHOTO_JUDGE",
+                 "requestMessageId":"photo-51","status":"SUCCEEDED","errorKind":null,
+                 "result":{"result":"success","reason":null,"match_score":95.0,
+                 "detected_labels":[{"name":"첨성대","matched":true}],
+                 "landmark_confidence":92.0,"retry_hint":null}}
+                """;
     }
 
     @TestConfiguration
