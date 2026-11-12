@@ -35,6 +35,8 @@ import com.planit.schedule.repository.PlaceRepository;
 import com.planit.schedule.repository.ScheduleDayRepository;
 import com.planit.schedule.repository.ScheduleRepository;
 import com.planit.schedule.repository.ScheduleVisitRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -72,6 +74,9 @@ class PhotoMissionRepositoryTest {
 
     @Autowired
     private PhotoEvaluationRepository evaluationRepository;
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     @Autowired
     private MissionGenerationJobRepository generationJobRepository;
@@ -465,6 +470,7 @@ class PhotoMissionRepositoryTest {
                 "TRIP_DELETED",
                 NOW.plusSeconds(5)
         );
+        entityManager.clear();
 
         assertThat(failed).isEqualTo(2);
         assertThat(List.of(first.getId(), second.getId()))

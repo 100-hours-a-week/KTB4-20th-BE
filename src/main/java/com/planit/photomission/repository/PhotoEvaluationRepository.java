@@ -89,7 +89,7 @@ public interface PhotoEvaluationRepository
             @Param("failedAt") LocalDateTime failedAt
     );
 
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Modifying(flushAutomatically = true)
     @Query("""
             UPDATE PhotoEvaluation evaluation
             SET evaluation.executionStatus =
