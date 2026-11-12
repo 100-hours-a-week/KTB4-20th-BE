@@ -29,6 +29,8 @@ public interface PhotoEvaluationRepository
                 evaluation.landmarkConfidence = :landmarkConfidence,
                 evaluation.retryHint = :retryHint,
                 evaluation.errorCode = NULL,
+                evaluation.executionAttemptCount = :executionAttemptCount,
+                evaluation.activeSlot = NULL,
                 evaluation.evaluatedAt = :evaluatedAt,
                 evaluation.retryAfterAt = NULL
             WHERE evaluation.id = :evaluationId
@@ -37,6 +39,7 @@ public interface PhotoEvaluationRepository
             """)
     int completeQueued(
             @Param("evaluationId") Long evaluationId,
+            @Param("executionAttemptCount") int executionAttemptCount,
             @Param("result") PhotoEvaluationResult result,
             @Param("reason") PhotoEvaluationReason reason,
             @Param("matchScore") BigDecimal matchScore,
@@ -52,6 +55,8 @@ public interface PhotoEvaluationRepository
             SET evaluation.executionStatus =
                     com.planit.photomission.domain.PhotoEvaluationExecutionStatus.FAILED,
                 evaluation.errorCode = :errorCode,
+                evaluation.executionAttemptCount = :executionAttemptCount,
+                evaluation.activeSlot = NULL,
                 evaluation.evaluatedAt = :failedAt,
                 evaluation.retryAfterAt = NULL
             WHERE evaluation.id = :evaluationId
@@ -60,6 +65,7 @@ public interface PhotoEvaluationRepository
             """)
     int failQueued(
             @Param("evaluationId") Long evaluationId,
+            @Param("executionAttemptCount") int executionAttemptCount,
             @Param("errorCode") String errorCode,
             @Param("failedAt") LocalDateTime failedAt
     );
@@ -70,6 +76,7 @@ public interface PhotoEvaluationRepository
             SET evaluation.executionStatus =
                     com.planit.photomission.domain.PhotoEvaluationExecutionStatus.FAILED,
                 evaluation.errorCode = :errorCode,
+                evaluation.activeSlot = NULL,
                 evaluation.evaluatedAt = :failedAt,
                 evaluation.retryAfterAt = NULL
             WHERE evaluation.missionPhoto.id = :missionPhotoId
@@ -78,6 +85,25 @@ public interface PhotoEvaluationRepository
             """)
     int failQueuedByMissionPhotoId(
             @Param("missionPhotoId") Long missionPhotoId,
+            @Param("errorCode") String errorCode,
+            @Param("failedAt") LocalDateTime failedAt
+    );
+
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            UPDATE PhotoEvaluation evaluation
+            SET evaluation.executionStatus =
+                    com.planit.photomission.domain.PhotoEvaluationExecutionStatus.FAILED,
+                evaluation.errorCode = :errorCode,
+                evaluation.activeSlot = NULL,
+                evaluation.evaluatedAt = :failedAt,
+                evaluation.retryAfterAt = NULL
+            WHERE evaluation.missionPhoto.mission.trip.id = :tripId
+              AND evaluation.executionStatus =
+                    com.planit.photomission.domain.PhotoEvaluationExecutionStatus.QUEUED
+            """)
+    int failQueuedByTripId(
+            @Param("tripId") Long tripId,
             @Param("errorCode") String errorCode,
             @Param("failedAt") LocalDateTime failedAt
     );

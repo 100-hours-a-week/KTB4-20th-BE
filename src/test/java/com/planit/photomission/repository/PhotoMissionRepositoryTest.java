@@ -247,7 +247,9 @@ class PhotoMissionRepositoryTest {
                 null,
                 NOW
         ));
-        evaluationRepository.save(PhotoEvaluation.start(photo, 1, NOW));
+        PhotoEvaluation previous = PhotoEvaluation.start(photo, 1, NOW);
+        previous.failExecution("PREVIOUS_ATTEMPT_FAILED", NOW.plusSeconds(1));
+        evaluationRepository.save(previous);
         PhotoEvaluation latest = evaluationRepository.save(
                 PhotoEvaluation.start(photo, 2, NOW.plusSeconds(1))
         );
@@ -282,6 +284,7 @@ class PhotoMissionRepositoryTest {
 
         int first = evaluationRepository.completeQueued(
                 evaluation.getId(),
+                2,
                 PhotoEvaluationResult.SUCCESS,
                 null,
                 BigDecimal.valueOf(95),
@@ -292,6 +295,7 @@ class PhotoMissionRepositoryTest {
         );
         int duplicate = evaluationRepository.completeQueued(
                 evaluation.getId(),
+                3,
                 PhotoEvaluationResult.FAIL,
                 null,
                 BigDecimal.valueOf(10),
@@ -312,6 +316,8 @@ class PhotoMissionRepositoryTest {
                 .isEqualTo(PhotoEvaluationResult.SUCCESS);
         assertThat(stored.getMatchScore())
                 .isEqualByComparingTo("95.00");
+        assertThat(stored.getExecutionAttemptCount()).isEqualTo(2);
+        assertThat(stored.getActiveSlot()).isNull();
     }
 
     @DisplayName("최종 실패한 QUEUED 판정에는 늦은 성공 결과를 반영하지 않는다")
@@ -339,11 +345,13 @@ class PhotoMissionRepositoryTest {
 
         int failed = evaluationRepository.failQueued(
                 evaluation.getId(),
+                1,
                 "PROCESSING_TIMEOUT",
                 NOW.plusMinutes(16)
         );
         int lateSuccess = evaluationRepository.completeQueued(
                 evaluation.getId(),
+                2,
                 PhotoEvaluationResult.SUCCESS,
                 null,
                 BigDecimal.valueOf(95),
@@ -361,6 +369,8 @@ class PhotoMissionRepositoryTest {
         assertThat(stored.getExecutionStatus())
                 .isEqualTo(PhotoEvaluationExecutionStatus.FAILED);
         assertThat(stored.getErrorCode()).isEqualTo("PROCESSING_TIMEOUT");
+        assertThat(stored.getExecutionAttemptCount()).isEqualTo(1);
+        assertThat(stored.getActiveSlot()).isNull();
     }
 
     @DisplayName("삭제된 사진의 QUEUED 판정에는 늦은 성공 결과를 반영하지 않는다")
@@ -393,6 +403,7 @@ class PhotoMissionRepositoryTest {
         );
         int lateSuccess = evaluationRepository.completeQueued(
                 evaluation.getId(),
+                1,
                 PhotoEvaluationResult.SUCCESS,
                 null,
                 BigDecimal.valueOf(95),
@@ -410,6 +421,63 @@ class PhotoMissionRepositoryTest {
         assertThat(stored.getExecutionStatus())
                 .isEqualTo(PhotoEvaluationExecutionStatus.FAILED);
         assertThat(stored.getErrorCode()).isEqualTo("PHOTO_DELETED");
+    }
+
+    @DisplayName("여행 삭제 시 해당 여행의 모든 QUEUED 판정을 실패 처리한다")
+    @Test
+    void failsQueuedEvaluationsForDeletedTrip() {
+        Fixture fixture = createFixture();
+        Mission mission = missionRepository.save(Mission.create(
+                fixture.visit(), 1, MissionScope.GROUP,
+                "다 같이 사진 찍기", null, NOW
+        ));
+        MissionPhoto firstPhoto = photoRepository.save(MissionPhoto.group(
+                mission,
+                fixture.member(),
+                createImageFile(),
+                UUID.randomUUID(),
+                null,
+                null,
+                NOW
+        ));
+        MissionPhoto secondPhoto = photoRepository.save(MissionPhoto.group(
+                mission,
+                fixture.member(),
+                createImageFile(),
+                UUID.randomUUID(),
+                null,
+                null,
+                NOW.plusSeconds(1)
+        ));
+        PhotoEvaluation first = evaluationRepository.save(
+                PhotoEvaluation.queue(firstPhoto, NOW, NOW.plusMinutes(16))
+        );
+        PhotoEvaluation second = evaluationRepository.saveAndFlush(
+                PhotoEvaluation.queue(
+                        secondPhoto,
+                        NOW.plusSeconds(1),
+                        NOW.plusMinutes(16)
+                )
+        );
+
+        int failed = evaluationRepository.failQueuedByTripId(
+                fixture.member().getTrip().getId(),
+                "TRIP_DELETED",
+                NOW.plusSeconds(5)
+        );
+
+        assertThat(failed).isEqualTo(2);
+        assertThat(List.of(first.getId(), second.getId()))
+                .allSatisfy(evaluationId -> {
+                    PhotoEvaluation stored = evaluationRepository
+                            .findById(evaluationId)
+                            .orElseThrow();
+                    assertThat(stored.getExecutionStatus())
+                            .isEqualTo(PhotoEvaluationExecutionStatus.FAILED);
+                    assertThat(stored.getErrorCode())
+                            .isEqualTo("TRIP_DELETED");
+                    assertThat(stored.getActiveSlot()).isNull();
+                });
     }
 
     @DisplayName("중복 결과가 도착해도 단체 미션 완료와 대표 사진은 한 번만 반영한다")
@@ -436,6 +504,7 @@ class PhotoMissionRepositoryTest {
         PhotoEvaluationCompletedResult result =
                 new PhotoEvaluationCompletedResult(
                         evaluation.getId(),
+                        1,
                         PhotoEvaluationResult.SUCCESS,
                         null,
                         BigDecimal.valueOf(95),
@@ -525,6 +594,7 @@ class PhotoMissionRepositoryTest {
     ) {
         return new PhotoEvaluationCompletedResult(
                 evaluationId,
+                1,
                 PhotoEvaluationResult.SUCCESS,
                 null,
                 BigDecimal.valueOf(95),

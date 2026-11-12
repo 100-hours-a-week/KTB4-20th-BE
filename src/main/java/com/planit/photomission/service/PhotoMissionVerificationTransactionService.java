@@ -95,6 +95,7 @@ public class PhotoMissionVerificationTransactionService {
             );
         }
         previous.markRetryStarted(retriedAt);
+        evaluationRepository.flush();
         return startVerification(
                 photo,
                 previous.getAttemptNo() + 1,

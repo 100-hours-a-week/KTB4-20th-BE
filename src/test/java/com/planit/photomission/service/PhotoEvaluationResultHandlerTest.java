@@ -41,6 +41,7 @@ class PhotoEvaluationResultHandlerTest {
     void handlesFailedResult() {
         PhotoEvaluationFailedResult result = new PhotoEvaluationFailedResult(
                 51L,
+                2,
                 "AI_ATTEMPT_EXHAUSTED",
                 EVALUATED_AT
         );
@@ -52,6 +53,7 @@ class PhotoEvaluationResultHandlerTest {
     private PhotoEvaluationCompletedResult completedResult() {
         return new PhotoEvaluationCompletedResult(
                 51L,
+                2,
                 PhotoEvaluationResult.SUCCESS,
                 null,
                 BigDecimal.valueOf(95),

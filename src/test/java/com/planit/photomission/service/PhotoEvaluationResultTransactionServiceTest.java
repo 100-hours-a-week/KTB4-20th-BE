@@ -82,11 +82,13 @@ class PhotoEvaluationResultTransactionServiceTest {
     void appliesFinalFailureOnce() {
         PhotoEvaluationFailedResult result = new PhotoEvaluationFailedResult(
                 51L,
+                2,
                 "AI_ATTEMPT_EXHAUSTED",
                 EVALUATED_AT
         );
         when(evaluationRepository.failQueued(
                 51L,
+                2,
                 "AI_ATTEMPT_EXHAUSTED",
                 EVALUATED_AT
         )).thenReturn(1);
@@ -95,6 +97,7 @@ class PhotoEvaluationResultTransactionServiceTest {
 
         when(evaluationRepository.failQueued(
                 51L,
+                2,
                 "AI_ATTEMPT_EXHAUSTED",
                 EVALUATED_AT
         )).thenReturn(0);
@@ -108,6 +111,7 @@ class PhotoEvaluationResultTransactionServiceTest {
     void rejectsCompletedResultWithoutDecision() {
         assertThatThrownBy(() -> new PhotoEvaluationCompletedResult(
                 51L,
+                2,
                 null,
                 null,
                 BigDecimal.valueOf(95),
@@ -124,15 +128,57 @@ class PhotoEvaluationResultTransactionServiceTest {
     void rejectsFailedResultWithoutErrorCode() {
         assertThatThrownBy(() -> new PhotoEvaluationFailedResult(
                 51L,
+                2,
                 " ",
                 EVALUATED_AT
         )).isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("AI 실행 오류 코드는 필수입니다");
     }
 
+    @DisplayName("x-retry-count 4인 최종 결과는 다섯 번째 AI 실행으로 허용한다")
+    @Test
+    void acceptsFifthExecutionAttempt() {
+        new PhotoEvaluationFailedResult(
+                51L,
+                5,
+                "AI_ATTEMPT_EXHAUSTED",
+                EVALUATED_AT
+        );
+    }
+
+    @DisplayName("FS 문서의 최대 실행 차수 5를 초과한 결과는 거부한다")
+    @Test
+    void rejectsExecutionAttemptAboveFive() {
+        assertThatThrownBy(() -> new PhotoEvaluationFailedResult(
+                51L,
+                6,
+                "AI_ATTEMPT_EXHAUSTED",
+                EVALUATED_AT
+        )).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("AI 판정 실행 차수는 1부터 5까지입니다");
+    }
+
+    @DisplayName("성공 결과도 FS 문서의 최대 실행 차수 5를 초과하면 거부한다")
+    @Test
+    void rejectsCompletedExecutionAttemptAboveFive() {
+        assertThatThrownBy(() -> new PhotoEvaluationCompletedResult(
+                51L,
+                6,
+                PhotoEvaluationResult.SUCCESS,
+                null,
+                BigDecimal.valueOf(95),
+                "[]",
+                null,
+                null,
+                EVALUATED_AT
+        )).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("AI 판정 실행 차수는 1부터 5까지입니다");
+    }
+
     private PhotoEvaluationCompletedResult completedResult() {
         return new PhotoEvaluationCompletedResult(
                 51L,
+                2,
                 PhotoEvaluationResult.SUCCESS,
                 null,
                 BigDecimal.valueOf(95),
@@ -149,6 +195,7 @@ class PhotoEvaluationResultTransactionServiceTest {
     ) {
         when(evaluationRepository.completeQueued(
                 result.evaluationId(),
+                result.executionAttemptCount(),
                 result.result(),
                 result.reason(),
                 result.matchScore(),

@@ -27,6 +27,7 @@ public class PhotoEvaluationResultTransactionService {
     ) {
         int updated = evaluationRepository.completeQueued(
                 result.evaluationId(),
+                result.executionAttemptCount(),
                 result.result(),
                 result.reason(),
                 result.matchScore(),
@@ -53,6 +54,7 @@ public class PhotoEvaluationResultTransactionService {
     ) {
         int updated = evaluationRepository.failQueued(
                 result.evaluationId(),
+                result.executionAttemptCount(),
                 result.errorCode(),
                 result.failedAt()
         );
