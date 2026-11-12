@@ -94,7 +94,7 @@ public class AiDlqListener {
     }
 
     /** `x-error-kind`가 있으면 그 값, 없고 마지막 dead-letter 사유가 재전달 한도 초과면 DELIVERY_LIMIT이다. */
-    static String errorCodeOf(MessageProperties properties) {
+    public static String errorCodeOf(MessageProperties properties) {
         Object errorKind = properties.getHeaders().get(ERROR_KIND_HEADER);
         if (errorKind != null && !errorKind.toString().isBlank()) {
             return truncate(errorKind.toString());

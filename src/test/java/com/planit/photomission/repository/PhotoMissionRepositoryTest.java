@@ -378,6 +378,72 @@ class PhotoMissionRepositoryTest {
         assertThat(stored.getActiveSlot()).isNull();
     }
 
+    @DisplayName("deadline이 지난 QUEUED 판정만 조회한다")
+    @Test
+    void findsQueuedEvaluationsPastDeadline() {
+        Fixture fixture = createFixture();
+        Mission mission = missionRepository.save(Mission.create(
+                fixture.visit(), 1, MissionScope.PERSONAL,
+                "유적지 전경 담기", "역사", NOW
+        ));
+        MissionParticipation participation = participationRepository.save(
+                MissionParticipation.create(mission, fixture.member(), NOW)
+        );
+        MissionPhoto photo = photoRepository.save(MissionPhoto.personal(
+                participation,
+                createImageFile(),
+                UUID.randomUUID(),
+                null,
+                null,
+                NOW
+        ));
+        PhotoEvaluation expired = evaluationRepository.saveAndFlush(
+                PhotoEvaluation.queue(photo, NOW, NOW.plusMinutes(16))
+        );
+
+        assertThat(evaluationRepository.findQueuedIdsDeadlineAtOrBefore(
+                NOW.plusMinutes(16)
+        )).contains(expired.getId());
+        assertThat(evaluationRepository.findQueuedIdsDeadlineAtOrBefore(
+                NOW.plusMinutes(16).minusNanos(1_000)
+        )).doesNotContain(expired.getId());
+    }
+
+    @DisplayName("deadline 실패는 기존 AI 실행 차수를 유지한다")
+    @Test
+    void failsQueuedEvaluationWithoutChangingAttemptCount() {
+        Fixture fixture = createFixture();
+        Mission mission = missionRepository.save(Mission.create(
+                fixture.visit(), 1, MissionScope.PERSONAL,
+                "유적지 전경 담기", "역사", NOW
+        ));
+        MissionParticipation participation = participationRepository.save(
+                MissionParticipation.create(mission, fixture.member(), NOW)
+        );
+        MissionPhoto photo = photoRepository.save(MissionPhoto.personal(
+                participation,
+                createImageFile(),
+                UUID.randomUUID(),
+                null,
+                null,
+                NOW
+        ));
+        PhotoEvaluation evaluation = evaluationRepository.saveAndFlush(
+                PhotoEvaluation.queue(photo, NOW, NOW.plusMinutes(16))
+        );
+
+        assertThat(evaluationRepository.failQueuedPreservingAttempt(
+                evaluation.getId(),
+                "PROCESSING_TIMEOUT",
+                NOW.plusMinutes(16)
+        )).isOne();
+
+        PhotoEvaluation stored = evaluationRepository.findById(evaluation.getId()).orElseThrow();
+        assertThat(stored.getExecutionStatus()).isEqualTo(PhotoEvaluationExecutionStatus.FAILED);
+        assertThat(stored.getExecutionAttemptCount()).isZero();
+        assertThat(stored.getErrorCode()).isEqualTo("PROCESSING_TIMEOUT");
+    }
+
     @DisplayName("삭제된 사진의 QUEUED 판정에는 늦은 성공 결과를 반영하지 않는다")
     @Test
     void rejectsLateSuccessAfterMissionPhotoDeleted() {
