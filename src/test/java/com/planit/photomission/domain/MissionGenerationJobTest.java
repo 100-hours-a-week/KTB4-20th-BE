@@ -97,6 +97,49 @@ class MissionGenerationJobTest {
                 .isEqualTo(MissionGenerationStatus.SUCCEEDED);
     }
 
+    @DisplayName("메시지 큐로 처음 접수한 작업은 QUEUED이고 첫 번째 접수 시각을 기록한다")
+    @Test
+    void queuesGeneration() {
+        MissionGenerationJob job = MissionGenerationJob.queued(mock(Trip.class), FIRST_ATTEMPT_AT);
+
+        assertThat(job.getStatus()).isEqualTo(MissionGenerationStatus.QUEUED);
+        assertThat(job.getAttemptCount()).isEqualTo(1);
+        assertThat(job.getLastAttemptedAt()).isEqualTo(FIRST_ATTEMPT_AT);
+    }
+
+    @DisplayName("실패한 작업과 5분 넘게 멈춘 동기 실행 작업은 다시 접수하며 횟수와 시각을 갱신한다")
+    @Test
+    void requeuesFailedOrStoppedGeneration() {
+        MissionGenerationJob failed = runningJob();
+        failed.fail();
+        failed.requeue(FIRST_ATTEMPT_AT.plusMinutes(1));
+
+        MissionGenerationJob stopped = runningJob();
+        stopped.requeue(FIRST_ATTEMPT_AT.plusMinutes(5));
+
+        assertThat(failed.getStatus()).isEqualTo(MissionGenerationStatus.QUEUED);
+        assertThat(failed.getAttemptCount()).isEqualTo(2);
+        assertThat(failed.getLastAttemptedAt()).isEqualTo(FIRST_ATTEMPT_AT.plusMinutes(1));
+        assertThat(stopped.getStatus()).isEqualTo(MissionGenerationStatus.QUEUED);
+        assertThat(stopped.getAttemptCount()).isEqualTo(2);
+    }
+
+    @DisplayName("아직 동기 실행 중이거나 이미 접수·성공한 작업은 다시 접수하지 않는다")
+    @Test
+    void rejectsRequeueOfActiveOrSucceededGeneration() {
+        MissionGenerationJob running = runningJob();
+        MissionGenerationJob queued = MissionGenerationJob.queued(mock(Trip.class), FIRST_ATTEMPT_AT);
+        MissionGenerationJob succeeded = runningJob();
+        succeeded.succeed();
+
+        assertThatThrownBy(() -> running.requeue(FIRST_ATTEMPT_AT.plusMinutes(4)))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> queued.requeue(FIRST_ATTEMPT_AT.plusMinutes(10)))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> succeeded.requeue(FIRST_ATTEMPT_AT.plusMinutes(10)))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
     private MissionGenerationJob runningJob() {
         return MissionGenerationJob.start(
                 mock(Trip.class),
