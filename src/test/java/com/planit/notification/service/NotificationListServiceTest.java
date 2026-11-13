@@ -7,6 +7,8 @@ import com.planit.notification.domain.NotificationTargetType;
 import com.planit.notification.domain.NotificationType;
 import com.planit.notification.pagination.NotificationListCursorCodec;
 import com.planit.notification.repository.NotificationRepository;
+import com.planit.photomission.domain.Mission;
+import com.planit.photomission.repository.MissionRepository;
 import com.planit.repository.TripRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -40,6 +42,7 @@ class NotificationListServiceTest {
         NotificationListService service = new NotificationListService(
                 notificationRepository,
                 mock(TripRepository.class),
+                mock(MissionRepository.class),
                 new NotificationListCursorCodec(),
                 CLOCK
         );
@@ -63,6 +66,7 @@ class NotificationListServiceTest {
         NotificationListService service = new NotificationListService(
                 notificationRepository,
                 mock(TripRepository.class),
+                mock(MissionRepository.class),
                 new NotificationListCursorCodec(),
                 CLOCK
         );
@@ -85,6 +89,7 @@ class NotificationListServiceTest {
         NotificationListService service = new NotificationListService(
                 notificationRepository,
                 tripRepository,
+                mock(MissionRepository.class),
                 cursorCodec,
                 CLOCK
         );
@@ -134,6 +139,57 @@ class NotificationListServiceTest {
         );
     }
 
+    @DisplayName("포토미션 알림은 미션이 속한 여행의 삭제 여부로 대상 상태를 판단한다")
+    @Test
+    void resolvesPhotoMissionTargetStatus() {
+        NotificationRepository notificationRepository =
+                mock(NotificationRepository.class);
+        MissionRepository missionRepository = mock(MissionRepository.class);
+        NotificationListService service = new NotificationListService(
+                notificationRepository,
+                mock(TripRepository.class),
+                missionRepository,
+                new NotificationListCursorCodec(),
+                CLOCK
+        );
+        UUID recipientPublicId = UUID.randomUUID();
+        Notification active = notification(
+                2L,
+                2001L,
+                LocalDateTime.of(2026, 10, 17, 10, 0),
+                NotificationTargetType.PHOTO_MISSION
+        );
+        Notification expired = notification(
+                1L,
+                2002L,
+                LocalDateTime.of(2026, 10, 17, 9, 0),
+                NotificationTargetType.PHOTO_MISSION
+        );
+        when(notificationRepository.findPageForRecipient(
+                recipientPublicId,
+                null,
+                null,
+                PageRequest.of(0, 21)
+        )).thenReturn(List.of(active, expired));
+        Mission activeMission = mock(Mission.class);
+        Trip activeTrip = mock(Trip.class);
+        when(activeMission.getId()).thenReturn(2001L);
+        when(activeMission.getTrip()).thenReturn(activeTrip);
+        when(activeTrip.getDeletedAt()).thenReturn(null);
+        when(missionRepository.findAllById(List.of(2001L, 2002L)))
+                .thenReturn(List.of(activeMission));
+
+        var response = service.getNotifications(
+                recipientPublicId.toString(),
+                null
+        );
+
+        assertThat(response.items().get(0).target().status())
+                .isEqualTo(NotificationTargetStatus.ACTIVE);
+        assertThat(response.items().get(1).target().status())
+                .isEqualTo(NotificationTargetStatus.EXPIRED);
+    }
+
     @DisplayName("커서 이후 페이지는 10개를 조회하고 빈 페이지 규약을 지킨다")
     @Test
     void returnsEmptyNextPage() {
@@ -145,6 +201,7 @@ class NotificationListServiceTest {
         NotificationListService service = new NotificationListService(
                 notificationRepository,
                 tripRepository,
+                mock(MissionRepository.class),
                 cursorCodec,
                 CLOCK
         );
@@ -182,6 +239,7 @@ class NotificationListServiceTest {
         NotificationListService service = new NotificationListService(
                 notificationRepository,
                 mock(TripRepository.class),
+                mock(MissionRepository.class),
                 new NotificationListCursorCodec(),
                 CLOCK
         );
@@ -197,7 +255,11 @@ class NotificationListServiceTest {
                 LocalDateTime.of(2026, 10, 18, 0, 0),
                 List.of(
                         NotificationType.TRIP_D1,
-                        NotificationType.TRIP_WEATHER_ALERT
+                        NotificationType.TRIP_WEATHER_ALERT,
+                        NotificationType.SCHEDULE_GENERATION_SUCCEEDED,
+                        NotificationType.SCHEDULE_GENERATION_FAILED,
+                        NotificationType.PHOTO_MISSION_EVALUATION_SUCCEEDED,
+                        NotificationType.PHOTO_MISSION_EVALUATION_FAILED
                 )
         )).thenReturn(List.of(notification));
 
@@ -219,13 +281,27 @@ class NotificationListServiceTest {
             Long targetId,
             LocalDateTime createdAt
     ) {
+        return notification(
+                id,
+                targetId,
+                createdAt,
+                NotificationTargetType.TRIP
+        );
+    }
+
+    private Notification notification(
+            Long id,
+            Long targetId,
+            LocalDateTime createdAt,
+            NotificationTargetType targetType
+    ) {
         Notification notification = mock(Notification.class);
         when(notification.getId()).thenReturn(id);
         when(notification.getType()).thenReturn(NotificationType.TRIP_D1);
         when(notification.getTitle()).thenReturn("알림 제목");
         when(notification.getBody()).thenReturn("알림 본문");
         when(notification.getTargetType())
-                .thenReturn(NotificationTargetType.TRIP);
+                .thenReturn(targetType);
         when(notification.getTargetId()).thenReturn(targetId);
         when(notification.getTargetStatus())
                 .thenReturn(NotificationTargetStatus.ACTIVE);

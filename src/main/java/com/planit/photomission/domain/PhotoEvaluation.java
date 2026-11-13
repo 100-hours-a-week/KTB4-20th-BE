@@ -19,10 +19,16 @@ import java.time.LocalDateTime;
 @Entity
 @Table(
         name = "photo_evaluations",
-        uniqueConstraints = @UniqueConstraint(
-                name = "uk_photo_evaluations_photo_attempt",
-                columnNames = {"mission_photo_id", "attempt_no"}
-        )
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_photo_evaluations_photo_attempt",
+                        columnNames = {"mission_photo_id", "attempt_no"}
+                ),
+                @UniqueConstraint(
+                        name = "uk_photo_evaluations_active",
+                        columnNames = {"mission_photo_id", "active_slot"}
+                )
+        }
 )
 public class PhotoEvaluation {
 
@@ -37,9 +43,15 @@ public class PhotoEvaluation {
     @Column(name = "attempt_no", nullable = false)
     private byte attemptNo;
 
+    @Column(name = "execution_attempt_count", nullable = false)
+    private byte executionAttemptCount;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "execution_status", nullable = false, length = 20)
     private PhotoEvaluationExecutionStatus executionStatus;
+
+    @Column(name = "active_slot")
+    private Byte activeSlot;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "result", length = 20)
@@ -96,7 +108,9 @@ public class PhotoEvaluation {
         PhotoEvaluation evaluation = new PhotoEvaluation();
         evaluation.missionPhoto = missionPhoto;
         evaluation.attemptNo = 1;
+        evaluation.executionAttemptCount = 0;
         evaluation.executionStatus = PhotoEvaluationExecutionStatus.QUEUED;
+        evaluation.activeSlot = (byte) 1;
         evaluation.requestedAt = requestedAt;
         evaluation.deadlineAt = deadlineAt;
         return evaluation;
@@ -116,8 +130,10 @@ public class PhotoEvaluation {
         PhotoEvaluation evaluation = new PhotoEvaluation();
         evaluation.missionPhoto = missionPhoto;
         evaluation.attemptNo = (byte) attemptNo;
+        evaluation.executionAttemptCount = (byte) attemptNo;
         evaluation.executionStatus =
                 PhotoEvaluationExecutionStatus.RUNNING;
+        evaluation.activeSlot = (byte) 1;
         evaluation.requestedAt = requestedAt;
         return evaluation;
     }
@@ -140,6 +156,7 @@ public class PhotoEvaluation {
         validateRetryHint(result, retryHint);
 
         executionStatus = PhotoEvaluationExecutionStatus.SUCCEEDED;
+        activeSlot = null;
         this.result = result;
         this.reason = reason;
         this.matchScore = matchScore;
@@ -159,6 +176,7 @@ public class PhotoEvaluation {
         }
 
         executionStatus = PhotoEvaluationExecutionStatus.FAILED;
+        activeSlot = null;
         this.errorCode = errorCode;
         evaluatedAt = failedAt;
     }
@@ -190,6 +208,7 @@ public class PhotoEvaluation {
             throw new IllegalArgumentException("AI 재시도 시각은 필수입니다");
         }
         executionStatus = PhotoEvaluationExecutionStatus.FAILED;
+        activeSlot = null;
         evaluatedAt = retriedAt;
         retryAfterAt = null;
     }
@@ -274,8 +293,16 @@ public class PhotoEvaluation {
         return attemptNo;
     }
 
+    public int getExecutionAttemptCount() {
+        return executionAttemptCount;
+    }
+
     public PhotoEvaluationExecutionStatus getExecutionStatus() {
         return executionStatus;
+    }
+
+    public Byte getActiveSlot() {
+        return activeSlot;
     }
 
     public PhotoEvaluationResult getResult() {
