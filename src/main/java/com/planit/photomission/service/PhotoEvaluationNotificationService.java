@@ -1,6 +1,5 @@
 package com.planit.photomission.service;
 
-import com.planit.domain.Trip;
 import com.planit.domain.User;
 import com.planit.mq.job.AiJobType;
 import com.planit.notification.aijob.AiJobNotificationService;
@@ -73,14 +72,14 @@ public class PhotoEvaluationNotificationService {
         User recipient = evaluation.getMissionPhoto()
                 .getSubmittedBy()
                 .getUser();
-        Trip trip = evaluation.getMissionPhoto()
+        Long missionId = evaluation.getMissionPhoto()
                 .getMission()
-                .getTrip();
-        Notification notification = Notification.createAiJobTripNotification(
+                .getId();
+        Notification notification = Notification.createAiJobPhotoMissionNotification(
                 recipient,
                 AiJobType.PHOTO_JUDGE,
                 evaluation.getId(),
-                trip.getId(),
+                missionId,
                 type,
                 title,
                 body,

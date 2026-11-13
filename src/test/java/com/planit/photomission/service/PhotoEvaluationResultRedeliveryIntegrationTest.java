@@ -11,6 +11,7 @@ import com.planit.mq.result.AiResultEnvelope;
 import com.planit.mq.result.AiResultHandler;
 import com.planit.mq.topology.AiExchange;
 import com.planit.mq.topology.AiResultQueue;
+import com.planit.notification.domain.NotificationTargetType;
 import com.planit.notification.repository.NotificationRepository;
 import com.planit.photomission.domain.Mission;
 import com.planit.photomission.domain.MissionCompletionStatus;
@@ -41,6 +42,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
@@ -198,6 +200,15 @@ class PhotoEvaluationResultRedeliveryIntegrationTest {
                 .countByRecipientPublicIdAndReadAtIsNullAndDeletedAtIsNull(
                         fixture.recipientPublicId()
                 )).isEqualTo(1);
+        var notification = notificationRepository.findPageForRecipient(
+                fixture.recipientPublicId(),
+                null,
+                null,
+                PageRequest.of(0, 1)
+        ).getFirst();
+        assertThat(notification.getTargetType())
+                .isEqualTo(NotificationTargetType.PHOTO_MISSION);
+        assertThat(notification.getTargetId()).isEqualTo(fixture.missionId());
     }
 
     private EvaluationFixture createQueuedGroupEvaluation() {

@@ -160,11 +160,61 @@ public class Notification {
             String body,
             LocalDateTime createdAt
     ) {
-        validateAiJobTripNotification(
+        Objects.requireNonNull(tripId, "알림 여행 ID는 필수입니다");
+        return createAiJobNotification(
                 recipient,
                 jobType,
                 jobId,
+                NotificationTargetType.TRIP,
                 tripId,
+                type,
+                title,
+                body,
+                createdAt
+        );
+    }
+
+    public static Notification createAiJobPhotoMissionNotification(
+            User recipient,
+            AiJobType jobType,
+            Long jobId,
+            Long missionId,
+            NotificationType type,
+            String title,
+            String body,
+            LocalDateTime createdAt
+    ) {
+        Objects.requireNonNull(missionId, "알림 포토미션 ID는 필수입니다");
+        return createAiJobNotification(
+                recipient,
+                jobType,
+                jobId,
+                NotificationTargetType.PHOTO_MISSION,
+                missionId,
+                type,
+                title,
+                body,
+                createdAt
+        );
+    }
+
+    private static Notification createAiJobNotification(
+            User recipient,
+            AiJobType jobType,
+            Long jobId,
+            NotificationTargetType targetType,
+            Long targetId,
+            NotificationType type,
+            String title,
+            String body,
+            LocalDateTime createdAt
+    ) {
+        validateAiJobNotification(
+                recipient,
+                jobType,
+                jobId,
+                targetType,
+                targetId,
                 type,
                 title,
                 body,
@@ -176,8 +226,8 @@ public class Notification {
         notification.title = title;
         notification.body = body;
         notification.type = type;
-        notification.targetType = NotificationTargetType.TRIP;
-        notification.targetId = tripId;
+        notification.targetType = targetType;
+        notification.targetId = targetId;
         notification.targetStatus = NotificationTargetStatus.ACTIVE;
         notification.dedupeKey = String.join(
                 ":",
@@ -204,20 +254,22 @@ public class Notification {
         Objects.requireNonNull(tripStartDate, "알림 여행 시작일은 필수입니다");
     }
 
-    private static void validateAiJobTripNotification(
+    private static void validateAiJobNotification(
             User recipient,
             AiJobType jobType,
             Long jobId,
-            Long tripId,
+            NotificationTargetType targetType,
+            Long targetId,
             NotificationType type,
             String title,
             String body,
             LocalDateTime createdAt
     ) {
-        validateTripTarget(recipient, tripId, type, title, body, createdAt);
+        validateTarget(recipient, targetId, type, title, body, createdAt);
         Objects.requireNonNull(recipient.getId(), "알림 수신자 ID는 필수입니다");
         Objects.requireNonNull(jobType, "AI 작업 종류는 필수입니다");
         Objects.requireNonNull(jobId, "AI 작업 ID는 필수입니다");
+        Objects.requireNonNull(targetType, "알림 대상 종류는 필수입니다");
     }
 
     /** 여행을 대상으로 하는 알림이 공통으로 가져야 하는 값을 검증한다. */
@@ -229,9 +281,21 @@ public class Notification {
             String body,
             LocalDateTime createdAt
     ) {
+        Objects.requireNonNull(tripId, "알림 여행 ID는 필수입니다");
+        validateTarget(recipient, tripId, type, title, body, createdAt);
+    }
+
+    private static void validateTarget(
+            User recipient,
+            Long targetId,
+            NotificationType type,
+            String title,
+            String body,
+            LocalDateTime createdAt
+    ) {
         Objects.requireNonNull(recipient, "알림 수신자는 필수입니다");
         Objects.requireNonNull(recipient.getPublicId(), "알림 수신자 공개 ID는 필수입니다");
-        Objects.requireNonNull(tripId, "알림 여행 ID는 필수입니다");
+        Objects.requireNonNull(targetId, "알림 대상 ID는 필수입니다");
         Objects.requireNonNull(type, "알림 유형은 필수입니다");
         Objects.requireNonNull(title, "알림 제목은 필수입니다");
         Objects.requireNonNull(body, "알림 본문은 필수입니다");
