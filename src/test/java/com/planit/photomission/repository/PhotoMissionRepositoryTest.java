@@ -378,6 +378,53 @@ class PhotoMissionRepositoryTest {
         assertThat(stored.getActiveSlot()).isNull();
     }
 
+    @DisplayName("deadline이 지난 QUEUED 판정에는 성공 결과를 반영하지 않는다")
+    @Test
+    void rejectsSuccessReceivedAfterDeadlineWhileStillQueued() {
+        Fixture fixture = createFixture();
+        Mission mission = missionRepository.save(Mission.create(
+                fixture.visit(), 1, MissionScope.PERSONAL,
+                "유적지 전경 담기", "역사", NOW
+        ));
+        MissionParticipation participation = participationRepository.save(
+                MissionParticipation.create(mission, fixture.member(), NOW)
+        );
+        MissionPhoto photo = photoRepository.save(MissionPhoto.personal(
+                participation,
+                createImageFile(),
+                UUID.randomUUID(),
+                null,
+                null,
+                NOW
+        ));
+        LocalDateTime deadlineAt = NOW.plusMinutes(16);
+        PhotoEvaluation evaluation = evaluationRepository.saveAndFlush(
+                PhotoEvaluation.queue(photo, NOW, deadlineAt)
+        );
+
+        int lateSuccess = evaluationRepository.completeQueued(
+                evaluation.getId(),
+                1,
+                PhotoEvaluationResult.SUCCESS,
+                null,
+                BigDecimal.valueOf(95),
+                "[]",
+                null,
+                null,
+                deadlineAt.plusNanos(1_000)
+        );
+
+        entityManager.clear();
+        PhotoEvaluation stored = evaluationRepository
+                .findById(evaluation.getId())
+                .orElseThrow();
+        assertThat(lateSuccess).isZero();
+        assertThat(stored.getExecutionStatus())
+                .isEqualTo(PhotoEvaluationExecutionStatus.QUEUED);
+        assertThat(stored.getResult()).isNull();
+        assertThat(stored.getEvaluatedAt()).isNull();
+    }
+
     @DisplayName("deadline이 지난 QUEUED 판정만 조회한다")
     @Test
     void findsQueuedEvaluationsPastDeadline() {

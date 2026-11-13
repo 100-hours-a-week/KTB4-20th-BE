@@ -152,6 +152,10 @@ class PhotoEvaluationResultRedeliveryIntegrationTest {
     @Autowired
     private NotificationRepository notificationRepository;
 
+    @Autowired
+    @Qualifier("photoMissionClock")
+    private Clock clock;
+
     @MockitoSpyBean
     private PhotoMissionResultApplier resultApplier;
 
@@ -276,7 +280,11 @@ class PhotoEvaluationResultRedeliveryIntegrationTest {
                 NOW
         ));
         PhotoEvaluation evaluation = evaluationRepository.saveAndFlush(
-                PhotoEvaluation.queue(photo, NOW, NOW.plusMinutes(16))
+                PhotoEvaluation.queue(
+                        photo,
+                        NOW,
+                        LocalDateTime.now(clock).plusMinutes(16)
+                )
         );
         return new EvaluationFixture(
                 evaluation.getId(),

@@ -36,6 +36,7 @@ public interface PhotoEvaluationRepository
             WHERE evaluation.id = :evaluationId
               AND evaluation.executionStatus =
                     com.planit.photomission.domain.PhotoEvaluationExecutionStatus.QUEUED
+              AND evaluation.deadlineAt > :evaluatedAt
             """)
     int completeQueued(
             @Param("evaluationId") Long evaluationId,
