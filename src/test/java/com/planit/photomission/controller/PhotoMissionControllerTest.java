@@ -321,7 +321,6 @@ class PhotoMissionControllerTest {
                         5,
                         0,
                         9,
-                        2,
                         true,
                         false,
                         true,
@@ -343,7 +342,7 @@ class PhotoMissionControllerTest {
                 .andExpect(jsonPath("$.data.scope").value("DAY"))
                 .andExpect(jsonPath("$.data.completedMissionCount").value(5))
                 .andExpect(jsonPath("$.data.totalPhotoCount").value(9))
-                .andExpect(jsonPath("$.data.landmarkCount").value(2))
+                .andExpect(jsonPath("$.data.landmarkCount").doesNotExist())
                 .andExpect(jsonPath("$.data.previewPhotos[0].photoId")
                         .value(31));
     }

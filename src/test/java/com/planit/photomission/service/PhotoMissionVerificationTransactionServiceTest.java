@@ -516,7 +516,6 @@ class PhotoMissionVerificationTransactionServiceTest {
                         "석탑",
                         true
                 )),
-                BigDecimal.valueOf(95),
                 null
         );
     }
@@ -530,7 +529,6 @@ class PhotoMissionVerificationTransactionServiceTest {
                         "사람",
                         false
                 )),
-                BigDecimal.valueOf(92),
                 "탑이 사람에 가려졌어요."
         );
     }

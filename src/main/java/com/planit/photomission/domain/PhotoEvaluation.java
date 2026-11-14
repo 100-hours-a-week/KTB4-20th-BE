@@ -67,9 +67,6 @@ public class PhotoEvaluation {
     @Column(name = "detected_labels_json", columnDefinition = "json")
     private String detectedLabelsJson;
 
-    @Column(name = "landmark_confidence", precision = 5, scale = 2)
-    private BigDecimal landmarkConfidence;
-
     @Column(name = "retry_hint", length = 1000)
     private String retryHint;
 
@@ -143,7 +140,6 @@ public class PhotoEvaluation {
             PhotoEvaluationReason reason,
             BigDecimal matchScore,
             String detectedLabelsJson,
-            BigDecimal landmarkConfidence,
             String retryHint,
             LocalDateTime evaluatedAt
     ) {
@@ -152,7 +148,6 @@ public class PhotoEvaluation {
         validateScore(matchScore);
         validateDetectedLabels(detectedLabelsJson);
         validateReason(result, reason);
-        validateLandmarkConfidence(landmarkConfidence);
         validateRetryHint(result, retryHint);
 
         executionStatus = PhotoEvaluationExecutionStatus.SUCCEEDED;
@@ -161,7 +156,6 @@ public class PhotoEvaluation {
         this.reason = reason;
         this.matchScore = matchScore;
         this.detectedLabelsJson = detectedLabelsJson;
-        this.landmarkConfidence = landmarkConfidence;
         this.retryHint = retryHint;
         this.evaluatedAt = evaluatedAt;
     }
@@ -246,18 +240,6 @@ public class PhotoEvaluation {
         }
     }
 
-    private void validateLandmarkConfidence(BigDecimal confidence) {
-        if (confidence == null) {
-            return;
-        }
-        if (confidence.compareTo(BigDecimal.ZERO) < 0
-                || confidence.compareTo(BigDecimal.valueOf(100)) > 0) {
-            throw new IllegalArgumentException(
-                    "랜드마크 신뢰도는 0부터 100까지입니다"
-            );
-        }
-    }
-
     private void validateRetryHint(
             PhotoEvaluationResult result,
             String retryHint
@@ -319,10 +301,6 @@ public class PhotoEvaluation {
 
     public String getDetectedLabelsJson() {
         return detectedLabelsJson;
-    }
-
-    public BigDecimal getLandmarkConfidence() {
-        return landmarkConfidence;
     }
 
     public String getRetryHint() {

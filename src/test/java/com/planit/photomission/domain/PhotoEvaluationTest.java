@@ -74,7 +74,6 @@ class PhotoEvaluationTest {
                 null,
                 new BigDecimal("75.00"),
                 "[{\"name\":\"석탑\",\"matched\":true}]",
-                new BigDecimal("92.00"),
                 "탑이 사람에 가려졌어요.",
                 evaluatedAt
         );
@@ -102,7 +101,6 @@ class PhotoEvaluationTest {
                 BigDecimal.ZERO,
                 "[]",
                 null,
-                null,
                 now().plusSeconds(1)
         );
 
@@ -110,49 +108,6 @@ class PhotoEvaluationTest {
                 .isEqualTo(PhotoEvaluationResult.FAIL);
         assertThat(evaluation.getReason())
                 .isEqualTo(PhotoEvaluationReason.LOCATION_MISMATCH);
-    }
-
-    @DisplayName("AI가 반환한 랜드마크 신뢰도를 임계값 재판정 없이 저장한다")
-    @Test
-    void preservesLandmarkConfidenceFromAi() {
-        PhotoEvaluation evaluation = runningEvaluation();
-
-        evaluation.succeed(
-                PhotoEvaluationResult.SUCCESS,
-                null,
-                new BigDecimal("95.00"),
-                "[]",
-                new BigDecimal("59.00"),
-                null,
-                now().plusSeconds(1)
-        );
-
-        assertThat(evaluation.getLandmarkConfidence())
-                .isEqualByComparingTo("59.00");
-    }
-
-    @DisplayName("랜드마크 신뢰도는 0부터 100까지만 허용한다")
-    @Test
-    void validatesLandmarkConfidenceRange() {
-        assertThatThrownBy(() -> runningEvaluation().succeed(
-                PhotoEvaluationResult.SUCCESS,
-                null,
-                new BigDecimal("95.00"),
-                "[]",
-                new BigDecimal("-0.01"),
-                null,
-                now()
-        )).isInstanceOf(IllegalArgumentException.class);
-
-        assertThatThrownBy(() -> runningEvaluation().succeed(
-                PhotoEvaluationResult.SUCCESS,
-                null,
-                new BigDecimal("95.00"),
-                "[]",
-                new BigDecimal("100.01"),
-                null,
-                now()
-        )).isInstanceOf(IllegalArgumentException.class);
     }
 
     @DisplayName("AI 호출 오류는 판정 결과 없이 실행 실패로 기록한다")
@@ -212,7 +167,6 @@ class PhotoEvaluationTest {
                 BigDecimal.ZERO,
                 "[]",
                 null,
-                null,
                 now()
         ))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -231,7 +185,6 @@ class PhotoEvaluationTest {
                 new BigDecimal("75.00"),
                 "[]",
                 null,
-                null,
                 now()
         )).isInstanceOf(IllegalArgumentException.class);
 
@@ -240,7 +193,6 @@ class PhotoEvaluationTest {
                 null,
                 new BigDecimal("95.00"),
                 "[]",
-                null,
                 "다시 찍어주세요.",
                 now()
         )).isInstanceOf(IllegalArgumentException.class);

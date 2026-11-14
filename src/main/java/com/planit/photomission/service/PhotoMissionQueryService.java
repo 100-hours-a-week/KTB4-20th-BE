@@ -12,7 +12,6 @@ import com.planit.photomission.domain.MissionCompletionStatus;
 import com.planit.photomission.domain.MissionGroupState;
 import com.planit.photomission.domain.MissionParticipation;
 import com.planit.photomission.domain.MissionPhoto;
-import com.planit.photomission.domain.PhotoEvaluation;
 import com.planit.photomission.dto.PhotoMissionAlbumResponse;
 import com.planit.photomission.dto.PhotoMissionCompletionResponse;
 import com.planit.photomission.dto.PhotoMissionDetailResponse;
@@ -464,7 +463,6 @@ public class PhotoMissionQueryService {
         }
         completedPhotos.sort(completionPhotoOrder());
 
-        int landmarkCount = recognizedLandmarkCount(completedPhotos);
         int totalMissionCount = missions.size();
         List<PhotoMissionCompletionResponse.PreviewPhoto> previews =
                 completedPhotos.stream()
@@ -484,7 +482,6 @@ public class PhotoMissionQueryService {
                 totalMissionCount,
                 totalMissionCount - completedMissionCount,
                 completedPhotos.size(),
-                landmarkCount,
                 totalMissionCount > 0
                         && completedMissionCount == totalMissionCount,
                 now.toLocalDate().isAfter(trip.getEndDate()),
@@ -510,33 +507,11 @@ public class PhotoMissionQueryService {
                 0,
                 0,
                 0,
-                0,
                 false,
                 now.toLocalDate().isAfter(trip.getEndDate()),
                 day != null && day < tripDays(trip),
                 List.of()
         );
-    }
-
-    private int recognizedLandmarkCount(List<MissionPhoto> photos) {
-        if (photos.isEmpty()) {
-            return 0;
-        }
-        Map<Long, MissionPhoto> photoById = photos.stream().collect(
-                Collectors.toMap(MissionPhoto::getId, Function.identity())
-        );
-        return (int) evaluationRepository
-                .findRecognizedByMissionPhotoIdIn(
-                        photoById.keySet().stream().sorted().toList()
-                )
-                .stream()
-                .map(PhotoEvaluation::getMissionPhoto)
-                .map(MissionPhoto::getId)
-                .map(photoById::get)
-                .map(photo -> photo.getMission().getScheduleVisit()
-                        .getPlace().getGooglePlaceId())
-                .distinct()
-                .count();
     }
 
     private PhotoMissionAlbumResponse emptyAlbum(Trip trip) {
