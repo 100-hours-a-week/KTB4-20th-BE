@@ -30,6 +30,7 @@ import java.util.UUID;
 import java.net.URI;
 import java.time.Duration;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -162,6 +163,29 @@ class SecurityConfigTest {
                 .andExpect(header().string(
                         HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS,
                         "true"
+                ));
+    }
+
+    @DisplayName("프론트엔드의 멱등키가 포함된 사진 제출 CORS 요청을 허용한다")
+    @Test
+    void allowsIdempotencyKeyForPhotoSubmission() throws Exception {
+        mockMvc.perform(options("/api/photomissions/19/photos")
+                        .header(
+                                HttpHeaders.ORIGIN,
+                                "http://localhost:5173"
+                        )
+                        .header(
+                                HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD,
+                                HttpMethod.POST.name()
+                        )
+                        .header(
+                                HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS,
+                                "authorization,content-type,idempotency-key"
+                        ))
+                .andExpect(status().isOk())
+                .andExpect(header().string(
+                        HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS,
+                        containsString("idempotency-key")
                 ));
     }
 
