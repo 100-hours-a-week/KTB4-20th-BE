@@ -286,7 +286,6 @@ class PhotoMissionVerificationServiceTest {
                 null,
                 BigDecimal.valueOf(95),
                 List.of(),
-                BigDecimal.valueOf(95),
                 null
         );
     }

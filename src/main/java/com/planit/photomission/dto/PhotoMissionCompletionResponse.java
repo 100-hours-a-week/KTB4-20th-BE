@@ -15,7 +15,6 @@ public record PhotoMissionCompletionResponse(
         int totalMissionCount,
         int incompleteMissionCount,
         int totalPhotoCount,
-        int landmarkCount,
         boolean completed,
         boolean tripEnded,
         boolean nextDayExists,
