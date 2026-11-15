@@ -8,7 +8,7 @@ import java.time.OffsetDateTime;
 
 public record PhotoEvaluationRequestedMessage(
         int schemaVersion,
-        Long jobId,
+        String jobId,
         AiJobType jobType,
         OffsetDateTime deadlineAt,
         PhotoJudgeRequest request
@@ -24,7 +24,7 @@ public record PhotoEvaluationRequestedMessage(
     ) {
         return new PhotoEvaluationRequestedMessage(
                 CURRENT_SCHEMA_VERSION,
-                jobId,
+                String.valueOf(jobId),
                 AiJobType.PHOTO_JUDGE,
                 deadlineAt,
                 PhotoJudgeRequest.from(missionId, request)
