@@ -4,6 +4,7 @@ import com.planit.domain.Region;
 import com.planit.domain.Trip;
 import com.planit.domain.TripMember;
 import com.planit.domain.User;
+import com.planit.image.storage.ImageStorage;
 import com.planit.mq.job.AiJobType;
 import com.planit.mq.outbox.MessageOutbox;
 import com.planit.mq.outbox.MessageOutboxRepository;
@@ -21,17 +22,20 @@ import com.planit.schedule.domain.Schedule;
 import com.planit.schedule.domain.ScheduleDay;
 import com.planit.schedule.domain.ScheduleVisit;
 import jakarta.persistence.EntityManager;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -39,7 +43,9 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.when;
 
 @SpringBootTest
 class PhotoMissionSubmissionOutboxIntegrationTest {
@@ -49,6 +55,9 @@ class PhotoMissionSubmissionOutboxIntegrationTest {
 
     @MockitoSpyBean
     private MessageOutboxRepository outboxRepository;
+
+    @MockitoBean
+    private ImageStorage imageStorage;
 
     @Autowired
     private MissionPhotoRepository photoRepository;
@@ -71,6 +80,14 @@ class PhotoMissionSubmissionOutboxIntegrationTest {
     @Autowired
     @Qualifier("photoMissionClock")
     private Clock photoMissionClock;
+
+    @BeforeEach
+    void setUp() {
+        when(imageStorage.createReadUrl(
+                anyString(),
+                any(Duration.class)
+        )).thenReturn("https://example.com/photo.jpg");
+    }
 
     @DisplayName("포토미션 판정을 접수하면 PHOTO_JUDGE Outbox를 같은 트랜잭션에 저장한다")
     @Test
