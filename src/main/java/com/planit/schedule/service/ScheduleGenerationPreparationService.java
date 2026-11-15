@@ -79,7 +79,8 @@ public class ScheduleGenerationPreparationService {
                 request,
                 mode,
                 trip.getRegion().getId(),
-                tripDayCount
+                tripDayCount,
+                host.getId()
         );
     }
 
