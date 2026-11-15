@@ -155,6 +155,7 @@ class PhotoEvaluationResultHandlerTest {
                           "detected_labels": [
                             {"name": "첨성대", "matched": true}
                           ],
+                          "landmark_confidence": 96.0,
                           "retry_hint": null
                         }
                         """)
