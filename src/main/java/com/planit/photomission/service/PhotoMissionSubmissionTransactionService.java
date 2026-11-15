@@ -109,6 +109,11 @@ public class PhotoMissionSubmissionTransactionService {
                                 participation.getId()
                         )
                         .ifPresent(activePhoto -> {
+                            evaluationRepository.failQueuedByMissionPhotoId(
+                                    activePhoto.getId(),
+                                    "PHOTO_REPLACED",
+                                    now
+                            );
                             activePhoto.replace(now);
                             photoRepository.flush();
                         });
