@@ -278,6 +278,7 @@ class PhotoMissionSubmissionTransactionServiceTest {
                 null,
                 LocalDateTime.now().minusMinutes(1)
         );
+        ReflectionTestUtils.setField(previous, "id", 41L);
         stubCommon(fixture);
         when(participationRepository.findByMissionIdAndTripMemberId(31L, 21L))
                 .thenReturn(Optional.of(participation));
@@ -306,6 +307,11 @@ class PhotoMissionSubmissionTransactionServiceTest {
 
         assertThat(submission.photoId()).isEqualTo(42L);
         assertThat(previous.getReplacedAt()).isNotNull();
+        verify(evaluationRepository).failQueuedByMissionPhotoId(
+                41L,
+                "PHOTO_REPLACED",
+                SEOUL_NOW
+        );
         verify(photoRepository).flush();
     }
 

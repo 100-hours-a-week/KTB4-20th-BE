@@ -4,6 +4,7 @@ import com.planit.domain.Trip;
 import com.planit.domain.TripMember;
 import com.planit.repository.TripMemberRepository;
 import com.planit.repository.TripRepository;
+import com.planit.photomission.repository.PhotoEvaluationRepository;
 import com.planit.schedule.repository.ScheduleRepository;
 import com.planit.schedule.service.SchedulePersistenceService;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,6 +35,7 @@ class UnconfirmedTripDeletionServiceTest {
     private TripMemberRepository tripMemberRepository;
     private ScheduleRepository scheduleRepository;
     private SchedulePersistenceService schedulePersistenceService;
+    private PhotoEvaluationRepository photoEvaluationRepository;
     private UnconfirmedTripDeletionService service;
 
     @BeforeEach
@@ -42,11 +44,15 @@ class UnconfirmedTripDeletionServiceTest {
         tripMemberRepository = mock(TripMemberRepository.class);
         scheduleRepository = mock(ScheduleRepository.class);
         schedulePersistenceService = mock(SchedulePersistenceService.class);
+        photoEvaluationRepository = mock(PhotoEvaluationRepository.class);
         service = new UnconfirmedTripDeletionService(
                 tripRepository,
                 tripMemberRepository,
                 scheduleRepository,
-                new TripRoomDeleter(schedulePersistenceService)
+                new TripRoomDeleter(
+                        schedulePersistenceService,
+                        photoEvaluationRepository
+                )
         );
     }
 
@@ -98,6 +104,11 @@ class UnconfirmedTripDeletionServiceTest {
             assertThat(value.getHostSlot()).isNull();
         });
         verify(schedulePersistenceService).deleteAllForTrip(10L);
+        verify(photoEvaluationRepository).failQueuedByTripId(
+                10L,
+                "TRIP_DELETED",
+                DELETED_AT
+        );
     }
 
     @DisplayName("잠금 후 다시 확인했을 때 확정 일정이 생겼으면 삭제하지 않는다")

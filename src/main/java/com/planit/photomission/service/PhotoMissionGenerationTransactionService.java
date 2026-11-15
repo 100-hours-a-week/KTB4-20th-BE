@@ -89,12 +89,27 @@ public class PhotoMissionGenerationTransactionService {
         MissionGenerationJob job = findJobForUpdate(attempt.jobId());
         requireCurrentAttempt(job, attempt);
         requireRunning(job);
-        Schedule schedule = findActiveSchedule(job.getTrip().getId());
+        createMissions(job.getTrip().getId(), response, completedAt);
+        job.succeed();
+    }
+
+    /**
+     * 확정 일정의 방문 장소마다 AI가 만든 미션과 참여 상태를 저장한다. 작업 상태는 호출한 쪽이 바꾼다.
+     *
+     * @throws PhotoMissionGenerationRejectedException AI 결과가 방문 장소와 맞지 않거나 확정 일정이 없으면
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void createMissions(
+            Long tripId,
+            PhotoMissionGenerateResponse response,
+            LocalDateTime completedAt
+    ) {
+        Schedule schedule = findActiveSchedule(tripId);
         List<ScheduleVisit> visits = findActiveVisits(schedule.getId());
         Map<String, PhotoMissionGenerateResponse.Mission> missionsByPlace =
                 validateAndIndex(response, visits);
         List<TripMember> members = tripMemberRepository
-                .findActiveMembersByTrip(job.getTrip());
+                .findActiveMembersByTrip(tripRepository.getReferenceById(tripId));
 
         for (ScheduleVisit visit : visits) {
             PhotoMissionGenerateResponse.Mission generated =
@@ -102,14 +117,13 @@ public class PhotoMissionGenerationTransactionService {
             Mission mission = missionRepository.save(Mission.create(
                     visit,
                     visit.getVisitOrder(),
-                    MissionScope.valueOf(generated.scope()),
+                    scopeOf(generated),
                     generated.description(),
                     generated.primaryCategory(),
                     completedAt
             ));
             createState(mission, members, completedAt);
         }
-        job.succeed();
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -150,7 +164,8 @@ public class PhotoMissionGenerationTransactionService {
     private Schedule findActiveSchedule(Long tripId) {
         return scheduleRepository
                 .findByTripIdAndActiveConfirmedSlot(tripId, (byte) 1)
-                .orElseThrow(() -> new IllegalStateException(
+                .orElseThrow(() -> new PhotoMissionGenerationRejectedException(
+                        PhotoMissionGenerationRejectedException.MISSION_TARGET_NOT_FOUND,
                         "확정된 여행 일정이 없습니다"
                 ));
     }
@@ -162,7 +177,10 @@ public class PhotoMissionGenerationTransactionService {
                         "ACTIVE"
                 );
         if (visits.isEmpty()) {
-            throw new IllegalStateException("포토미션 생성 대상 장소가 없습니다");
+            throw new PhotoMissionGenerationRejectedException(
+                    PhotoMissionGenerationRejectedException.MISSION_TARGET_NOT_FOUND,
+                    "포토미션 생성 대상 장소가 없습니다"
+            );
         }
         return visits;
     }
@@ -200,9 +218,7 @@ public class PhotoMissionGenerationTransactionService {
     ) {
         if (response == null || response.missions() == null
                 || response.missions().size() != visits.size()) {
-            throw new IllegalArgumentException(
-                    "AI 포토미션 생성 결과가 일정 장소와 일치하지 않습니다"
-            );
+            throw invalidResult("AI 포토미션 생성 결과가 일정 장소와 일치하지 않습니다", null);
         }
         Map<String, PhotoMissionGenerateResponse.Mission> indexed;
         try {
@@ -211,20 +227,34 @@ public class PhotoMissionGenerationTransactionService {
                     Function.identity()
             ));
         } catch (RuntimeException exception) {
-            throw new IllegalArgumentException(
-                    "AI 포토미션 생성 결과의 장소가 중복되었습니다",
-                    exception
-            );
+            throw invalidResult("AI 포토미션 생성 결과의 장소가 중복되었습니다", exception);
         }
         boolean coversEveryVisit = visits.stream().allMatch(visit ->
                 indexed.containsKey(visit.getPlace().getGooglePlaceId())
         );
         if (!coversEveryVisit) {
-            throw new IllegalArgumentException(
-                    "AI 포토미션 생성 결과가 일정 장소와 일치하지 않습니다"
-            );
+            throw invalidResult("AI 포토미션 생성 결과가 일정 장소와 일치하지 않습니다", null);
         }
         return indexed;
+    }
+
+    private static MissionScope scopeOf(PhotoMissionGenerateResponse.Mission mission) {
+        try {
+            return MissionScope.valueOf(mission.scope());
+        } catch (IllegalArgumentException | NullPointerException exception) {
+            throw invalidResult("AI 포토미션 생성 결과의 미션 범위가 올바르지 않습니다", exception);
+        }
+    }
+
+    private static PhotoMissionGenerationRejectedException invalidResult(
+            String message,
+            Throwable cause
+    ) {
+        return new PhotoMissionGenerationRejectedException(
+                PhotoMissionGenerationRejectedException.INVALID_AI_RESULT,
+                message,
+                cause
+        );
     }
 
     private void createState(
