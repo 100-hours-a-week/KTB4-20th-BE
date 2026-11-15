@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 public interface ScheduleGenerationJobRepository extends JpaRepository<ScheduleGenerationJob, Long> {
 
@@ -35,4 +36,18 @@ public interface ScheduleGenerationJobRepository extends JpaRepository<ScheduleG
             @Param("errorCode") String errorCode,
             @Param("finishedAt") LocalDateTime finishedAt
     );
+
+    /**
+     * Stale Job Checker가 실패 처리할 작업을 찾는다. 기준 시각 전에 접수했는데 아직 진행 중인 작업이다.
+     *
+     * @param createdBefore 지금으로부터 일정 생성 기준 시간(28분) 전
+     */
+    @Query("""
+            SELECT job.id
+            FROM ScheduleGenerationJob job
+            WHERE job.status = com.planit.schedule.domain.ScheduleGenerationJobStatus.QUEUED
+              AND job.createdAt < :createdBefore
+            ORDER BY job.id
+            """)
+    List<Long> findQueuedIdsCreatedBefore(@Param("createdBefore") LocalDateTime createdBefore);
 }
