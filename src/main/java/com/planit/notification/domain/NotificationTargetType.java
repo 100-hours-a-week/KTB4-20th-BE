@@ -1,5 +1,6 @@
 package com.planit.notification.domain;
 
 public enum NotificationTargetType {
-    TRIP
+    TRIP,
+    PHOTO_MISSION
 }

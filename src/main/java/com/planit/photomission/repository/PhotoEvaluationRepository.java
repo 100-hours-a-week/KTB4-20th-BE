@@ -36,6 +36,7 @@ public interface PhotoEvaluationRepository
             WHERE evaluation.id = :evaluationId
               AND evaluation.executionStatus =
                     com.planit.photomission.domain.PhotoEvaluationExecutionStatus.QUEUED
+              AND evaluation.deadlineAt > :evaluatedAt
             """)
     int completeQueued(
             @Param("evaluationId") Long evaluationId,
@@ -68,6 +69,37 @@ public interface PhotoEvaluationRepository
             @Param("executionAttemptCount") int executionAttemptCount,
             @Param("errorCode") String errorCode,
             @Param("failedAt") LocalDateTime failedAt
+    );
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE PhotoEvaluation evaluation
+            SET evaluation.executionStatus =
+                    com.planit.photomission.domain.PhotoEvaluationExecutionStatus.FAILED,
+                evaluation.errorCode = :errorCode,
+                evaluation.activeSlot = NULL,
+                evaluation.evaluatedAt = :failedAt,
+                evaluation.retryAfterAt = NULL
+            WHERE evaluation.id = :evaluationId
+              AND evaluation.executionStatus =
+                    com.planit.photomission.domain.PhotoEvaluationExecutionStatus.QUEUED
+            """)
+    int failQueuedPreservingAttempt(
+            @Param("evaluationId") Long evaluationId,
+            @Param("errorCode") String errorCode,
+            @Param("failedAt") LocalDateTime failedAt
+    );
+
+    @Query("""
+            SELECT evaluation.id
+            FROM PhotoEvaluation evaluation
+            WHERE evaluation.executionStatus =
+                    com.planit.photomission.domain.PhotoEvaluationExecutionStatus.QUEUED
+              AND evaluation.deadlineAt <= :deadline
+            ORDER BY evaluation.id
+            """)
+    List<Long> findQueuedIdsDeadlineAtOrBefore(
+            @Param("deadline") LocalDateTime deadline
     );
 
     @Modifying(flushAutomatically = true)

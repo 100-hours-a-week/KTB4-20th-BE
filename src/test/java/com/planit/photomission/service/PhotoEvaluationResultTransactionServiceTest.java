@@ -24,15 +24,18 @@ class PhotoEvaluationResultTransactionServiceTest {
 
     private PhotoEvaluationRepository evaluationRepository;
     private PhotoMissionResultApplier resultApplier;
+    private PhotoEvaluationNotificationService notificationService;
     private PhotoEvaluationResultTransactionService service;
 
     @BeforeEach
     void setUp() {
         evaluationRepository = mock(PhotoEvaluationRepository.class);
         resultApplier = mock(PhotoMissionResultApplier.class);
+        notificationService = mock(PhotoEvaluationNotificationService.class);
         service = new PhotoEvaluationResultTransactionService(
                 evaluationRepository,
-                resultApplier
+                resultApplier,
+                notificationService
         );
     }
 
@@ -48,6 +51,7 @@ class PhotoEvaluationResultTransactionServiceTest {
         service.applyCompleted(result);
 
         verify(resultApplier).apply(evaluation, EVALUATED_AT);
+        verify(notificationService).notifyCompleted(evaluation, EVALUATED_AT);
     }
 
     @DisplayName("이미 종료된 결과를 다시 받으면 미션 상태를 중복 반영하지 않는다")
@@ -62,6 +66,8 @@ class PhotoEvaluationResultTransactionServiceTest {
         service.applyCompleted(result);
 
         verify(resultApplier, never()).apply(evaluation, EVALUATED_AT);
+        verify(notificationService, never())
+                .notifyCompleted(evaluation, EVALUATED_AT);
     }
 
     @DisplayName("존재하지 않는 판정 결과는 중복 메시지로 숨기지 않는다")
@@ -92,8 +98,13 @@ class PhotoEvaluationResultTransactionServiceTest {
                 "AI_ATTEMPT_EXHAUSTED",
                 EVALUATED_AT
         )).thenReturn(1);
+        PhotoEvaluation evaluation = mock(PhotoEvaluation.class);
+        when(evaluationRepository.findById(51L))
+                .thenReturn(Optional.of(evaluation));
 
         service.applyFailed(result);
+
+        verify(notificationService).notifyFailed(evaluation, EVALUATED_AT);
 
         when(evaluationRepository.failQueued(
                 51L,
@@ -101,9 +112,9 @@ class PhotoEvaluationResultTransactionServiceTest {
                 "AI_ATTEMPT_EXHAUSTED",
                 EVALUATED_AT
         )).thenReturn(0);
-        when(evaluationRepository.existsById(51L)).thenReturn(true);
-
         service.applyFailed(result);
+
+        verify(notificationService).notifyFailed(evaluation, EVALUATED_AT);
     }
 
     @DisplayName("완료 결과에 판정 결과가 없으면 DB 갱신 전에 거부한다")

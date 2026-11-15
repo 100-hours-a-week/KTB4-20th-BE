@@ -5,7 +5,10 @@ import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
 import com.planit.notification.domain.Notification;
 import com.planit.notification.domain.NotificationTargetStatus;
+import com.planit.notification.domain.NotificationTargetType;
 import com.planit.notification.repository.NotificationRepository;
+import com.planit.photomission.domain.Mission;
+import com.planit.photomission.repository.MissionRepository;
 import com.planit.repository.TripRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -38,6 +41,7 @@ class NotificationReadServiceTest {
         NotificationReadService service = new NotificationReadService(
                 notificationRepository,
                 mock(TripRepository.class),
+                mock(MissionRepository.class),
                 CLOCK
         );
         UUID recipientPublicId = UUID.randomUUID();
@@ -71,6 +75,7 @@ class NotificationReadServiceTest {
         NotificationReadService service = new NotificationReadService(
                 notificationRepository,
                 mock(TripRepository.class),
+                mock(MissionRepository.class),
                 CLOCK
         );
         UUID recipientPublicId = UUID.randomUUID();
@@ -90,6 +95,7 @@ class NotificationReadServiceTest {
         NotificationReadService service = new NotificationReadService(
                 notificationRepository,
                 tripRepository,
+                mock(MissionRepository.class),
                 CLOCK
         );
         UUID recipientPublicId = UUID.randomUUID();
@@ -101,6 +107,7 @@ class NotificationReadServiceTest {
         )).thenReturn(Optional.of(notification));
         when(notification.getId()).thenReturn(16001L);
         when(notification.getTargetId()).thenReturn(1001L);
+        when(notification.getTargetType()).thenReturn(NotificationTargetType.TRIP);
         when(notification.getTargetStatus())
                 .thenReturn(NotificationTargetStatus.ACTIVE);
         when(notification.getReadAt()).thenReturn(
@@ -134,6 +141,7 @@ class NotificationReadServiceTest {
         NotificationReadService service = new NotificationReadService(
                 notificationRepository,
                 tripRepository,
+                mock(MissionRepository.class),
                 CLOCK
         );
         UUID recipientPublicId = UUID.randomUUID();
@@ -144,12 +152,58 @@ class NotificationReadServiceTest {
         )).thenReturn(Optional.of(notification));
         when(notification.getId()).thenReturn(16001L);
         when(notification.getTargetId()).thenReturn(1001L);
+        when(notification.getTargetType()).thenReturn(NotificationTargetType.TRIP);
         when(notification.getTargetStatus())
                 .thenReturn(NotificationTargetStatus.ACTIVE);
         when(notification.getReadAt()).thenReturn(
                 LocalDateTime.of(2026, 10, 17, 11, 0)
         );
         when(tripRepository.findById(1001L)).thenReturn(Optional.empty());
+
+        var response = service.markAsRead(
+                recipientPublicId.toString(),
+                16001L
+        );
+
+        assertThat(response.targetStatus())
+                .isEqualTo(NotificationTargetStatus.EXPIRED);
+        assertThat(response.navigable()).isFalse();
+    }
+
+    @DisplayName("포토미션이 속한 여행이 삭제되면 이동할 수 없다고 반환한다")
+    @Test
+    void returnsExpiredPhotoMissionTargetWhenTripDeleted() {
+        NotificationRepository notificationRepository =
+                mock(NotificationRepository.class);
+        MissionRepository missionRepository = mock(MissionRepository.class);
+        NotificationReadService service = new NotificationReadService(
+                notificationRepository,
+                mock(TripRepository.class),
+                missionRepository,
+                CLOCK
+        );
+        UUID recipientPublicId = UUID.randomUUID();
+        Notification notification = mock(Notification.class);
+        Mission mission = mock(Mission.class);
+        Trip deletedTrip = mock(Trip.class);
+        when(notificationRepository.findOwnedActiveById(
+                16001L,
+                recipientPublicId
+        )).thenReturn(Optional.of(notification));
+        when(notification.getId()).thenReturn(16001L);
+        when(notification.getTargetType())
+                .thenReturn(NotificationTargetType.PHOTO_MISSION);
+        when(notification.getTargetId()).thenReturn(2001L);
+        when(notification.getTargetStatus())
+                .thenReturn(NotificationTargetStatus.ACTIVE);
+        when(notification.getReadAt()).thenReturn(
+                LocalDateTime.of(2026, 10, 17, 11, 0)
+        );
+        when(missionRepository.findById(2001L)).thenReturn(Optional.of(mission));
+        when(mission.getTrip()).thenReturn(deletedTrip);
+        when(deletedTrip.getDeletedAt()).thenReturn(
+                LocalDateTime.of(2026, 10, 17, 10, 0)
+        );
 
         var response = service.markAsRead(
                 recipientPublicId.toString(),
@@ -169,6 +223,7 @@ class NotificationReadServiceTest {
         NotificationReadService service = new NotificationReadService(
                 notificationRepository,
                 mock(TripRepository.class),
+                mock(MissionRepository.class),
                 CLOCK
         );
         UUID recipientPublicId = UUID.randomUUID();

@@ -1,0 +1,7 @@
+# 테스트에서만 적용되는 설정. main의 application.yaml 위에 덮어쓴다.
+spring:
+  datasource:
+    hikari:
+      # Spring 테스트는 Bean 구성이 다른 Context를 캐시에 남겨 두고, Context마다 커넥션 풀을 따로 연다.
+      # 기본값 10이면 Context 17개에서 MySQL 기본 max_connections(151)를 넘으므로 줄인다.
+      maximum-pool-size: 5
