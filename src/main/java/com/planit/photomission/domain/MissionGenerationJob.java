@@ -62,6 +62,33 @@ public class MissionGenerationJob {
         return job;
     }
 
+    /** 메시지 큐로 처음 접수한 작업. 결과는 Result Worker가 조건부 UPDATE로 반영한다. */
+    public static MissionGenerationJob queued(
+            Trip trip,
+            LocalDateTime attemptedAt
+    ) {
+        MissionGenerationJob job = start(trip, attemptedAt);
+        job.status = MissionGenerationStatus.QUEUED;
+        return job;
+    }
+
+    /**
+     * 실패했거나 기존 동기 방식에서 5분 넘게 멈춘 작업을 메시지 큐로 다시 접수한다.
+     * 접수 횟수를 1 올리고 접수 시각을 지금으로 바꾼다.
+     */
+    public void requeue(LocalDateTime attemptedAt) {
+        boolean stoppedRunning = status == MissionGenerationStatus.RUNNING
+                && !lastAttemptedAt.isAfter(staleBefore(attemptedAt));
+        if (status != MissionGenerationStatus.FAILED && !stoppedRunning) {
+            throw new IllegalStateException(
+                    "실패했거나 멈춘 포토미션 생성 작업만 다시 접수할 수 있습니다"
+            );
+        }
+        attemptCount++;
+        lastAttemptedAt = attemptedAt;
+        status = MissionGenerationStatus.QUEUED;
+    }
+
     public void fail() {
         requireRunning();
         status = MissionGenerationStatus.FAILED;

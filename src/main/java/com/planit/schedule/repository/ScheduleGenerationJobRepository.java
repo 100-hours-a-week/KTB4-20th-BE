@@ -9,6 +9,8 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 public interface ScheduleGenerationJobRepository extends JpaRepository<ScheduleGenerationJob, Long> {
 
@@ -36,6 +38,9 @@ public interface ScheduleGenerationJobRepository extends JpaRepository<ScheduleG
             @Param("errorCode") String errorCode,
             @Param("finishedAt") LocalDateTime finishedAt
     );
+
+    /** 같은 Idempotency-Key로 이미 접수한 작업. 재요청이면 그 작업의 접수 응답을 그대로 돌려준다. */
+    Optional<ScheduleGenerationJob> findByIdempotencyKey(UUID idempotencyKey);
 
     /**
      * Stale Job Checker가 실패 처리할 작업을 찾는다. 기준 시각 전에 접수했는데 아직 진행 중인 작업이다.
