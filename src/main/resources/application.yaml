@@ -64,6 +64,14 @@ planit:
       nack-max-retries: 3
       # 5s, 10s, 20s, 40s 재시도 후 5번째 유실에서 실패 처리
       failure-max-retries: 4
+      relay:
+        # 한 번에 메모리에 올려 발행하는 최대 행 수
+        batch-size: 500
+      # 발행 실패 행은 원인 확인을 위해 이 기간 동안 남긴다
+      failed-retention: 30d
+      cleanup:
+        # DELETE 한 번에 지우는 행 수. 한 번의 삭제가 오래 락을 잡지 않도록 나눠 지운다
+        delete-batch-size: 1000
   image:
     default-profile-url: ${DEFAULT_PROFILE_IMAGE_URL:http://localhost:8080/images/default-profile.svg}
     bucket: ${IMAGE_S3_BUCKET}

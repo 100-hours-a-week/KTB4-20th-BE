@@ -6,10 +6,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Limit;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -140,6 +142,90 @@ class MessageOutboxRepositoryTest {
         MessageOutbox found = repository.findById(saved.getId()).orElseThrow();
         assertThat(found.getStatus()).isEqualTo(MessageOutboxStatus.FAILED);
         assertThat(found.getLastError()).isEqualTo("RETURNED: NO_ROUTE");
+    }
+
+    @DisplayName("Relay는 발행 시각이 지난 PENDING 메시지만 오래된 순으로 최대 건수만큼 조회한다")
+    @Test
+    void findsRelayTargets() {
+        MessageOutbox first = repository.saveAndFlush(outbox(1L));
+        MessageOutbox second = repository.saveAndFlush(outbox(2L));
+        MessageOutbox third = repository.saveAndFlush(outbox(3L));
+        MessageOutbox notYet = repository.saveAndFlush(outbox(4L));
+        MessageOutbox published = repository.saveAndFlush(outbox(5L));
+        repository.scheduleFailureRetry(notYet.getId(), CREATED_AT.plusSeconds(60), "TIMEOUT");
+        repository.markPublished(published.getId(), CREATED_AT);
+        LocalDateTime now = CREATED_AT.plusSeconds(10);
+
+        assertThat(repository.findRelayTargetIds(now, Limit.of(500)))
+                .containsExactly(first.getId(), second.getId(), third.getId());
+        assertThat(repository.findRelayTargetIds(now, Limit.of(2)))
+                .containsExactly(first.getId(), second.getId());
+        assertThat(repository.findRelayTargetIds(now.minusNanos(1_000), Limit.of(500))).isEmpty();
+    }
+
+    @DisplayName("선점하면 다음 발행 시각이 미뤄져 다시 조회되지 않고, 그 사이 처리된 메시지는 선점하지 않는다")
+    @Test
+    void claimsRelayTargets() {
+        MessageOutbox claimable = repository.saveAndFlush(outbox(1L));
+        MessageOutbox publishedMeanwhile = repository.saveAndFlush(outbox(2L));
+        MessageOutbox rescheduledMeanwhile = repository.saveAndFlush(outbox(3L));
+        LocalDateTime now = CREATED_AT.plusSeconds(10);
+        LocalDateTime leaseUntil = now.plusSeconds(10);
+        List<Long> ids = repository.findRelayTargetIds(now, Limit.of(500));
+        repository.markPublished(publishedMeanwhile.getId(), now);
+        repository.scheduleNackRetry(rescheduledMeanwhile.getId(), now.plusSeconds(5), "NACK");
+
+        assertThat(repository.claim(ids, now, leaseUntil)).isOne();
+
+        assertThat(repository.findClaimed(ids, leaseUntil))
+                .extracting(MessageOutbox::getId)
+                .containsExactly(claimable.getId());
+        assertThat(repository.findRelayTargetIds(now, Limit.of(500))).isEmpty();
+        assertThat(repository.findRelayTargetIds(leaseUntil, Limit.of(500))).contains(claimable.getId());
+    }
+
+    @DisplayName("발행 완료 메시지는 최대 건수씩 지우고 PENDING, FAILED 메시지는 남긴다")
+    @Test
+    void deletesPublishedInBatches() {
+        for (long jobId = 1; jobId <= 3; jobId++) {
+            MessageOutbox saved = repository.saveAndFlush(outbox(jobId));
+            repository.markPublished(saved.getId(), CREATED_AT);
+        }
+        MessageOutbox pending = repository.saveAndFlush(outbox(4L));
+        MessageOutbox failed = repository.saveAndFlush(outbox(5L));
+        repository.markFailed(failed.getId(), "RETURNED");
+
+        assertThat(repository.deletePublished(2)).isEqualTo(2);
+        assertThat(repository.deletePublished(2)).isOne();
+        assertThat(repository.deletePublished(2)).isZero();
+
+        assertThat(repository.findAll())
+                .extracting(MessageOutbox::getId)
+                .containsExactlyInAnyOrder(pending.getId(), failed.getId());
+    }
+
+    @DisplayName("발행 실패 메시지는 기준 시각 전에 만든 것만 지운다")
+    @Test
+    void deletesOldFailedOnly() {
+        MessageOutbox oldFailed = repository.saveAndFlush(outbox(1L));
+        MessageOutbox recentFailed = repository.saveAndFlush(MessageOutbox.pending(
+                AiJobType.PHOTO_MISSION_GENERATE,
+                2L,
+                "ai.request",
+                "ai-photomission-generation",
+                "{}",
+                CREATED_AT.plusDays(1),
+                CREATED_AT.plusDays(1)
+        ));
+        MessageOutbox oldPending = repository.saveAndFlush(outbox(3L));
+        repository.markFailed(oldFailed.getId(), "RETURNED");
+        repository.markFailed(recentFailed.getId(), "RETURNED");
+
+        assertThat(repository.deleteFailedCreatedBefore(CREATED_AT.plusDays(1), 1000)).isOne();
+
+        assertThat(repository.findAll())
+                .extracting(MessageOutbox::getId)
+                .containsExactlyInAnyOrder(recentFailed.getId(), oldPending.getId());
     }
 
     private MessageOutbox outbox(Long jobId) {
