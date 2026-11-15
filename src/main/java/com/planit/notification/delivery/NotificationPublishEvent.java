@@ -29,10 +29,16 @@ public record NotificationPublishEvent(
 
     public static NotificationPublishEvent from(Notification notification) {
         Objects.requireNonNull(notification, "발행할 알림은 필수입니다");
+        return from(notification, notification.getId());
+    }
+
+    /** 저장은 JDBC로 해서 엔티티의 id 필드는 비어 있으므로, saveIdempotently가 돌려준 ID로 발행할 때 쓴다 */
+    public static NotificationPublishEvent from(Notification notification, Long notificationId) {
+        Objects.requireNonNull(notification, "발행할 알림은 필수입니다");
 
         return new NotificationPublishEvent(
                 notification.getRecipient().getPublicId(),
-                notification.getId(),
+                notificationId,
                 notification.getType(),
                 notification.getWeatherCondition(),
                 notification.getTitle(),
