@@ -11,6 +11,8 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
+import java.time.Duration;
+
 @Component
 @RequiredArgsConstructor
 public class S3ImageStorage implements ImageStorage {
@@ -40,6 +42,14 @@ public class S3ImageStorage implements ImageStorage {
 
     @Override
     public String createReadUrl(String key) {
+        return createReadUrl(key, imageProperties.readUrlTtl());
+    }
+
+    @Override
+    public String createReadUrl(
+            String key,
+            Duration signatureDuration
+    ) {
         GetObjectRequest getObjectRequest =
                 GetObjectRequest.builder()
                         .bucket(imageProperties.bucket())
@@ -49,7 +59,7 @@ public class S3ImageStorage implements ImageStorage {
         GetObjectPresignRequest presignRequest =
                 GetObjectPresignRequest.builder()
                         .signatureDuration(
-                                imageProperties.readUrlTtl()
+                                signatureDuration
                         )
                         .getObjectRequest(getObjectRequest)
                         .build();

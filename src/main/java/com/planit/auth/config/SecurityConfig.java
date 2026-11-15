@@ -83,7 +83,8 @@ public class SecurityConfig {
         ));
         configuration.setAllowedHeaders(List.of(
                 "Authorization",
-                "Content-Type"
+                "Content-Type",
+                "Idempotency-Key"
         ));
         configuration.setAllowCredentials(true);
 
