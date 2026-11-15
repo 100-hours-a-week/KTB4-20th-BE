@@ -11,7 +11,6 @@ import org.springframework.stereotype.Component;
 @Component
 public class MessageQueueMonitorStore {
 
-    private static final String BLOCK_KEY_FORMAT = "planit:mq:block:%s:%s";
     private static final String RESULT_DLQ_ALERTED_KEY = "planit:mq:alert:resultdlq";
     private static final String FLAG_VALUE = "1";
 
@@ -23,12 +22,12 @@ public class MessageQueueMonitorStore {
 
     /** @return 이번 호출로 차단 플래그를 새로 켰으면 true */
     public boolean block(QueueBlockType type, AiJobType jobType) {
-        return Boolean.TRUE.equals(redisTemplate.opsForValue().setIfAbsent(blockKey(type, jobType), FLAG_VALUE));
+        return Boolean.TRUE.equals(redisTemplate.opsForValue().setIfAbsent(type.key(jobType), FLAG_VALUE));
     }
 
     /** @return 이번 호출로 차단 플래그를 껐으면 true */
     public boolean unblock(QueueBlockType type, AiJobType jobType) {
-        return Boolean.TRUE.equals(redisTemplate.delete(blockKey(type, jobType)));
+        return Boolean.TRUE.equals(redisTemplate.delete(type.key(jobType)));
     }
 
     /** @return 응답 DLQ가 비어 있다가 이번에 메시지가 생긴 것이면 true */
@@ -38,9 +37,5 @@ public class MessageQueueMonitorStore {
 
     public void markResultDlqEmpty() {
         redisTemplate.delete(RESULT_DLQ_ALERTED_KEY);
-    }
-
-    static String blockKey(QueueBlockType type, AiJobType jobType) {
-        return BLOCK_KEY_FORMAT.formatted(type.keySegment(), jobType.name());
     }
 }

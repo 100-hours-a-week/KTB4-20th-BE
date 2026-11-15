@@ -55,6 +55,8 @@ planit:
   mq:
     # 발행 후 이 시간 안에 confirm이 오지 않으면 유실로 본다. 부하 테스트의 confirm 지연 max로 확정한다
     confirm-timeout: 5s
+    # 큐 차단으로 접수하지 않을 때 503 응답의 Retry-After
+    retry-after: 60s
     monitor:
       management-base-url: ${RABBITMQ_MANAGEMENT_URL:http://localhost:15672}
       virtual-host: ${spring.rabbitmq.virtual-host}
