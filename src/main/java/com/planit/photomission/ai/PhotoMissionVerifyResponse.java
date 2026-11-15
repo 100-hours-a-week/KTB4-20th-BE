@@ -12,8 +12,6 @@ public record PhotoMissionVerifyResponse(
         BigDecimal matchScore,
         @JsonProperty("detected_labels")
         List<DetectedLabel> detectedLabels,
-        @JsonProperty("landmark_confidence")
-        BigDecimal landmarkConfidence,
         @JsonProperty("retry_hint")
         String retryHint
 ) {

@@ -69,7 +69,6 @@ class PhotoEvaluationResultHandlerTest {
         assertThat(result.matchScore()).isEqualByComparingTo("95.0");
         assertThat(objectMapper.readTree(result.detectedLabelsJson()))
                 .isEqualTo(objectMapper.readTree("[{\"name\":\"첨성대\",\"matched\":true}]"));
-        assertThat(result.landmarkConfidence()).isEqualByComparingTo("92.0");
         assertThat(result.retryHint()).isNull();
         assertThat(result.evaluatedAt()).isEqualTo(EVALUATED_AT);
         verifyNoMoreInteractions(transactionService);
@@ -156,7 +155,6 @@ class PhotoEvaluationResultHandlerTest {
                           "detected_labels": [
                             {"name": "첨성대", "matched": true}
                           ],
-                          "landmark_confidence": 92.0,
                           "retry_hint": null
                         }
                         """)

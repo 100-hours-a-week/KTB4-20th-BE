@@ -300,7 +300,7 @@ class PhotoEvaluationResultRedeliveryIntegrationTest {
                  "requestMessageId":"photo-%d","status":"SUCCEEDED","errorKind":null,
                  "result":{"result":"success","reason":null,"match_score":95.0,
                  "detected_labels":[{"name":"첨성대","matched":true}],
-                 "landmark_confidence":92.0,"retry_hint":null}}
+                 "retry_hint":null}}
                 """.formatted(evaluationId, evaluationId);
         MessageProperties properties = new MessageProperties();
         properties.setContentType("application/json");

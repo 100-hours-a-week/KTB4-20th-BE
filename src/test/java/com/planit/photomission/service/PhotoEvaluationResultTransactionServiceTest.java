@@ -128,7 +128,6 @@ class PhotoEvaluationResultTransactionServiceTest {
                 BigDecimal.valueOf(95),
                 "[]",
                 null,
-                null,
                 EVALUATED_AT
         )).isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("AI 판정 결과는 필수입니다");
@@ -180,7 +179,6 @@ class PhotoEvaluationResultTransactionServiceTest {
                 BigDecimal.valueOf(95),
                 "[]",
                 null,
-                null,
                 EVALUATED_AT
         )).isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("AI 판정 실행 차수는 1부터 4까지입니다");
@@ -194,7 +192,6 @@ class PhotoEvaluationResultTransactionServiceTest {
                 null,
                 BigDecimal.valueOf(95),
                 "[\"landmark\"]",
-                BigDecimal.valueOf(92),
                 null,
                 EVALUATED_AT
         );
@@ -211,7 +208,6 @@ class PhotoEvaluationResultTransactionServiceTest {
                 result.reason(),
                 result.matchScore(),
                 result.detectedLabelsJson(),
-                result.landmarkConfidence(),
                 result.retryHint(),
                 result.evaluatedAt()
         )).thenReturn(updated);

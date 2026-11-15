@@ -13,7 +13,6 @@ public record PhotoEvaluationCompletedResult(
         PhotoEvaluationReason reason,
         BigDecimal matchScore,
         String detectedLabelsJson,
-        BigDecimal landmarkConfidence,
         String retryHint,
         LocalDateTime evaluatedAt
 ) {
@@ -41,9 +40,6 @@ public record PhotoEvaluationCompletedResult(
             throw new IllegalArgumentException(
                     "실패 판정에만 실패 사유를 저장할 수 있습니다"
             );
-        }
-        if (landmarkConfidence != null) {
-            validateScore(landmarkConfidence, "랜드마크 신뢰도");
         }
         if (result == PhotoEvaluationResult.RETRY
                 && (retryHint == null || retryHint.isBlank())) {

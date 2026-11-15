@@ -26,7 +26,6 @@ public interface PhotoEvaluationRepository
                 evaluation.reason = :reason,
                 evaluation.matchScore = :matchScore,
                 evaluation.detectedLabelsJson = :detectedLabelsJson,
-                evaluation.landmarkConfidence = :landmarkConfidence,
                 evaluation.retryHint = :retryHint,
                 evaluation.errorCode = NULL,
                 evaluation.executionAttemptCount = :executionAttemptCount,
@@ -45,7 +44,6 @@ public interface PhotoEvaluationRepository
             @Param("reason") PhotoEvaluationReason reason,
             @Param("matchScore") BigDecimal matchScore,
             @Param("detectedLabelsJson") String detectedLabelsJson,
-            @Param("landmarkConfidence") BigDecimal landmarkConfidence,
             @Param("retryHint") String retryHint,
             @Param("evaluatedAt") LocalDateTime evaluatedAt
     );
@@ -154,21 +152,6 @@ public interface PhotoEvaluationRepository
                   com.planit.photomission.domain.PhotoEvaluationResult.SUCCESS
             """)
     List<Long> findSuccessfulMissionPhotoIds(
-            @Param("missionPhotoIds") List<Long> missionPhotoIds
-    );
-
-    @Query("""
-            SELECT evaluation
-            FROM PhotoEvaluation evaluation
-            JOIN FETCH evaluation.missionPhoto photo
-            WHERE photo.id IN :missionPhotoIds
-              AND evaluation.executionStatus =
-                  com.planit.photomission.domain.PhotoEvaluationExecutionStatus.SUCCEEDED
-              AND evaluation.result =
-                  com.planit.photomission.domain.PhotoEvaluationResult.SUCCESS
-              AND evaluation.landmarkConfidence IS NOT NULL
-            """)
-    List<PhotoEvaluation> findRecognizedByMissionPhotoIdIn(
             @Param("missionPhotoIds") List<Long> missionPhotoIds
     );
 

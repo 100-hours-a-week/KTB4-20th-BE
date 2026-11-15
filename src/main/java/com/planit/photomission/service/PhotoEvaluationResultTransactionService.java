@@ -35,7 +35,6 @@ public class PhotoEvaluationResultTransactionService {
                 result.reason(),
                 result.matchScore(),
                 result.detectedLabelsJson(),
-                result.landmarkConfidence(),
                 result.retryHint(),
                 result.evaluatedAt()
         );
