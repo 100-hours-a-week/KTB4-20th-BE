@@ -19,6 +19,7 @@ import com.planit.repository.TripMemberRepository;
 import com.planit.repository.TripRepository;
 import com.planit.repository.UserRepository;
 import com.planit.schedule.service.SchedulePersistenceService;
+import com.planit.photomission.repository.PhotoEvaluationRepository;
 import com.planit.trip.dto.TripCreateRequest;
 import com.planit.trip.dto.TripCreateResponse;
 import com.planit.trip.dto.TripConflictResponse;
@@ -73,6 +74,7 @@ class TripServiceImplTest {
     private TripListCursorCodec tripListCursorCodec;
     private ImageStorage imageStorage;
     private SchedulePersistenceService schedulePersistenceService;
+    private PhotoEvaluationRepository photoEvaluationRepository;
     private TripServiceImpl tripService;
     private User user;
     private Region region;
@@ -92,6 +94,7 @@ class TripServiceImplTest {
         tripListCursorCodec = new TripListCursorCodec();
         imageStorage = mock(ImageStorage.class);
         schedulePersistenceService = mock(SchedulePersistenceService.class);
+        photoEvaluationRepository = mock(PhotoEvaluationRepository.class);
         tripService = new TripServiceImpl(
                 authProperties,
                 userRepository,
@@ -103,7 +106,10 @@ class TripServiceImplTest {
                 tokenHasher,
                 tripListCursorCodec,
                 imageStorage,
-                new TripRoomDeleter(schedulePersistenceService)
+                new TripRoomDeleter(
+                        schedulePersistenceService,
+                        photoEvaluationRepository
+                )
         );
 
         user = mock(User.class);

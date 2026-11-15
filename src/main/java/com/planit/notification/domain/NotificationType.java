@@ -2,5 +2,7 @@ package com.planit.notification.domain;
 
 public enum NotificationType {
     TRIP_D1,
-    TRIP_WEATHER_ALERT
+    TRIP_WEATHER_ALERT,
+    SCHEDULE_GENERATION_SUCCEEDED,
+    SCHEDULE_GENERATION_FAILED
 }
