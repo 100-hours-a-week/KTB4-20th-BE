@@ -46,7 +46,18 @@ class PhotoMissionGenerationDlqReprocessorTest {
     private final PhotoMissionGenerationDlqReprocessor reprocessor = new PhotoMissionGenerationDlqReprocessor(
             rabbitTemplate,
             new PhotoMissionGenerationDlqMessages(JsonMapper.builder().build()),
-            new RabbitMqProperties(Duration.ofMillis(100)),
+            new RabbitMqProperties(
+                    Duration.ofMillis(100),
+                    new RabbitMqProperties.Outbox(
+                            Duration.ofSeconds(5),
+                            Duration.ofSeconds(5),
+                            3,
+                            4,
+                            new RabbitMqProperties.Relay(500),
+                            Duration.ofDays(30),
+                            new RabbitMqProperties.Cleanup(1000)
+                    )
+            ),
             Clock.fixed(FIVE_AM.toInstant(), SEOUL)
     );
 
