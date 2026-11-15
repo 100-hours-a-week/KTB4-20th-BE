@@ -193,7 +193,8 @@ class PhotoMissionSubmissionTransactionServiceTest {
         );
         JsonNode payload = objectMapper.readTree(payloadCaptor.getValue());
         assertThat(payload.get("schemaVersion").asInt()).isEqualTo(1);
-        assertThat(payload.get("jobId").asLong()).isEqualTo(51L);
+        assertThat(payload.get("jobId").isString()).isTrue();
+        assertThat(payload.get("jobId").asText()).isEqualTo("51");
         assertThat(payload.get("jobType").asText()).isEqualTo("PHOTO_JUDGE");
         assertThat(payload.get("deadlineAt").asText())
                 .isEqualTo("2026-10-18T10:16:00+09:00");
