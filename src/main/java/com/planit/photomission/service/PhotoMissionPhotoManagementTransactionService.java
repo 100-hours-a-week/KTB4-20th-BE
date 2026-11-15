@@ -9,6 +9,7 @@ import com.planit.photomission.domain.MissionCompletionMethod;
 import com.planit.photomission.domain.MissionPhoto;
 import com.planit.photomission.repository.MissionGroupStateRepository;
 import com.planit.photomission.repository.MissionPhotoRepository;
+import com.planit.photomission.repository.PhotoEvaluationRepository;
 import com.planit.repository.TripMemberRepository;
 import com.planit.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -23,7 +24,10 @@ import java.util.UUID;
 @Service
 public class PhotoMissionPhotoManagementTransactionService {
 
+    private static final String PHOTO_DELETED = "PHOTO_DELETED";
+
     private final MissionPhotoRepository photoRepository;
+    private final PhotoEvaluationRepository evaluationRepository;
     private final MissionGroupStateRepository groupStateRepository;
     private final UserRepository userRepository;
     private final TripMemberRepository tripMemberRepository;
@@ -31,12 +35,14 @@ public class PhotoMissionPhotoManagementTransactionService {
 
     public PhotoMissionPhotoManagementTransactionService(
             MissionPhotoRepository photoRepository,
+            PhotoEvaluationRepository evaluationRepository,
             MissionGroupStateRepository groupStateRepository,
             UserRepository userRepository,
             TripMemberRepository tripMemberRepository,
             @Qualifier("photoMissionClock") Clock clock
     ) {
         this.photoRepository = photoRepository;
+        this.evaluationRepository = evaluationRepository;
         this.groupStateRepository = groupStateRepository;
         this.userRepository = userRepository;
         this.tripMemberRepository = tripMemberRepository;
@@ -83,6 +89,11 @@ public class PhotoMissionPhotoManagementTransactionService {
         }
 
         boolean representative = photo.getRepresentativeSlot() != null;
+        evaluationRepository.failQueuedByMissionPhotoId(
+                photo.getId(),
+                PHOTO_DELETED,
+                now
+        );
         photo.delete(now);
         if (photo.getMission().isPersonal()) {
             photo.getParticipation().reflectPhotoDeletion(false, now);

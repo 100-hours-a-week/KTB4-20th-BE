@@ -14,6 +14,7 @@ import com.planit.photomission.domain.MissionPhoto;
 import com.planit.photomission.domain.MissionScope;
 import com.planit.photomission.repository.MissionGroupStateRepository;
 import com.planit.photomission.repository.MissionPhotoRepository;
+import com.planit.photomission.repository.PhotoEvaluationRepository;
 import com.planit.repository.TripMemberRepository;
 import com.planit.repository.UserRepository;
 import com.planit.schedule.domain.Schedule;
@@ -36,6 +37,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class PhotoMissionPhotoManagementTransactionServiceTest {
@@ -50,6 +52,7 @@ class PhotoMissionPhotoManagementTransactionServiceTest {
     );
 
     private MissionPhotoRepository photoRepository;
+    private PhotoEvaluationRepository evaluationRepository;
     private MissionGroupStateRepository groupStateRepository;
     private UserRepository userRepository;
     private TripMemberRepository tripMemberRepository;
@@ -58,16 +61,42 @@ class PhotoMissionPhotoManagementTransactionServiceTest {
     @BeforeEach
     void setUp() {
         photoRepository = mock(MissionPhotoRepository.class);
+        evaluationRepository = mock(PhotoEvaluationRepository.class);
         groupStateRepository = mock(MissionGroupStateRepository.class);
         userRepository = mock(UserRepository.class);
         tripMemberRepository = mock(TripMemberRepository.class);
         service = new PhotoMissionPhotoManagementTransactionService(
                 photoRepository,
+                evaluationRepository,
                 groupStateRepository,
                 userRepository,
                 tripMemberRepository,
                 SEOUL_CLOCK
         );
+    }
+
+    @DisplayName("판정 중인 사진을 삭제하면 QUEUED 판정을 최종 실패 처리한다")
+    @Test
+    void failsQueuedEvaluationWhenDeletingPhoto() {
+        Fixture fixture = fixture(MissionScope.PERSONAL, USER_PUBLIC_ID);
+        MissionParticipation participation = MissionParticipation.create(
+                fixture.mission(), fixture.member(), now().minusHours(1)
+        );
+        MissionPhoto photo = personalPhoto(participation, 41L, "queued.jpg");
+        stubAccess(fixture, photo);
+
+        service.delete(
+                USER_PUBLIC_ID.toString(),
+                fixture.mission().getId(),
+                photo.getId()
+        );
+
+        verify(evaluationRepository).failQueuedByMissionPhotoId(
+                photo.getId(),
+                "PHOTO_DELETED",
+                SEOUL_NOW
+        );
+        assertThat(photo.getDeletedAt()).isEqualTo(SEOUL_NOW);
     }
 
     @DisplayName("개인 성공 사진을 삭제하면 미션을 미완료로 되돌린다")
