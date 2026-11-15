@@ -114,7 +114,7 @@ class PhotoMissionSubmissionOutboxIntegrationTest {
             assertThat(outbox.getJobId()).isEqualTo(submission.evaluationId());
             assertThat(payload.schemaVersion()).isEqualTo(1);
             assertThat(payload.jobId())
-                    .isEqualTo(submission.evaluationId());
+                    .isEqualTo(String.valueOf(submission.evaluationId()));
             assertThat(payload.jobType()).isEqualTo(AiJobType.PHOTO_JUDGE);
             assertThat(payload.deadlineAt())
                     .isEqualTo(evaluation.getDeadlineAt()
