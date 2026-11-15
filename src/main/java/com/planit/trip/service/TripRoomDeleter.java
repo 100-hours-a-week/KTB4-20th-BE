@@ -2,6 +2,7 @@ package com.planit.trip.service;
 
 import com.planit.domain.Trip;
 import com.planit.domain.TripMember;
+import com.planit.photomission.repository.PhotoEvaluationRepository;
 import com.planit.schedule.service.SchedulePersistenceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -18,7 +19,10 @@ import java.util.List;
 @RequiredArgsConstructor
 public class TripRoomDeleter {
 
+    private static final String TRIP_DELETED = "TRIP_DELETED";
+
     private final SchedulePersistenceService schedulePersistenceService;
+    private final PhotoEvaluationRepository photoEvaluationRepository;
 
     /**
      * 남은 활성 멤버십을 같은 시각으로 종료하고 여행방을 소프트 삭제한 뒤,
@@ -30,6 +34,11 @@ public class TripRoomDeleter {
             LocalDateTime deletedAt
     ) {
         activeMembers.forEach(member -> member.leave(deletedAt));
+        photoEvaluationRepository.failQueuedByTripId(
+                trip.getId(),
+                TRIP_DELETED,
+                deletedAt
+        );
         trip.delete(deletedAt);
         schedulePersistenceService.deleteAllForTrip(trip.getId());
     }

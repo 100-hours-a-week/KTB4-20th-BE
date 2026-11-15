@@ -16,7 +16,15 @@ class OutboxRetryPolicyTest {
 
     private static final RabbitMqProperties PROPERTIES = new RabbitMqProperties(
             Duration.ofSeconds(5),
-            new RabbitMqProperties.Outbox(Duration.ofSeconds(5), Duration.ofSeconds(5), 3, 4)
+            new RabbitMqProperties.Outbox(
+                    Duration.ofSeconds(5),
+                    Duration.ofSeconds(5),
+                    3,
+                    4,
+                    new RabbitMqProperties.Relay(500),
+                    Duration.ofDays(30),
+                    new RabbitMqProperties.Cleanup(1000)
+            )
     );
 
     @DisplayName("jitter가 0이면 간격은 5s부터 두 배씩 늘어난다")
