@@ -29,7 +29,15 @@ class AiResultRepublisherTest {
             rabbitTemplate,
             new RabbitMqProperties(
                     Duration.ofMillis(100),
-                    new RabbitMqProperties.Outbox(Duration.ofSeconds(5), Duration.ofSeconds(5), 3, 4)
+                    new RabbitMqProperties.Outbox(
+                            Duration.ofSeconds(5),
+                            Duration.ofSeconds(5),
+                            3,
+                            4,
+                            new RabbitMqProperties.Relay(500),
+                            Duration.ofDays(30),
+                            new RabbitMqProperties.Cleanup(1000)
+                    )
             ),
             Clock.system(ZoneId.of("Asia/Seoul"))
     );
