@@ -5,6 +5,7 @@ import com.planit.global.error.ErrorCode;
 import com.planit.image.config.ImageProperties;
 import com.planit.image.service.ImageValidator;
 import com.planit.image.storage.ImageStorage;
+import com.planit.photomission.ai.PhotoMissionVerifyResponse;
 import com.planit.photomission.domain.PhotoEvaluationExecutionStatus;
 import com.planit.photomission.dto.PhotoMissionSubmissionAcceptedResponse;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,6 +19,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.time.Duration;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -34,12 +36,14 @@ class PhotoMissionSubmissionServiceTest {
 
     private ImageStorage imageStorage;
     private PhotoMissionSubmissionTransactionService transactionService;
+    private PhotoMissionVerificationService verificationService;
     private PhotoMissionSubmissionService service;
 
     @BeforeEach
     void setUp() {
         imageStorage = mock(ImageStorage.class);
         transactionService = mock(PhotoMissionSubmissionTransactionService.class);
+        verificationService = mock(PhotoMissionVerificationService.class);
         service = new PhotoMissionSubmissionService(
                 new ImageValidator(),
                 imageStorage,
@@ -53,7 +57,8 @@ class PhotoMissionSubmissionServiceTest {
                         5 * 1024 * 1024,
                         Duration.ofSeconds(3),
                         Duration.ofSeconds(5)
-                )
+                ),
+                verificationService
         );
     }
 
@@ -88,6 +93,60 @@ class PhotoMissionSubmissionServiceTest {
         assertThat(keyCaptor.getValue())
                 .startsWith("missions/31/")
                 .endsWith(".jpg");
+    }
+
+    @DisplayName("동기 경로는 사진만 저장한 뒤 AI 판정 결과를 바로 반환한다")
+    @Test
+    void submitsAndVerifiesPhotoSynchronously() {
+        PhotoMissionVerifyResponse verified = new PhotoMissionVerifyResponse(
+                "success",
+                null,
+                BigDecimal.valueOf(91),
+                List.of(),
+                null
+        );
+        when(transactionService.saveForVerification(
+                any(), any(), any(), any(), any(), any(), anyInt(), any(), any()
+        )).thenReturn(41L);
+        when(verificationService.verify(41L)).thenReturn(verified);
+
+        PhotoMissionVerifyResponse result = service.submitAndVerify(
+                "550e8400-e29b-41d4-a716-446655440000",
+                31L,
+                UUID.randomUUID(),
+                jpegFile(),
+                null,
+                null
+        );
+
+        assertThat(result).isSameAs(verified);
+        verify(transactionService, never()).save(
+                any(), any(), any(), any(), any(), any(), anyInt(), any(), any()
+        );
+        verify(imageStorage, never()).delete(any());
+    }
+
+    @DisplayName("동기 경로에서 DB 저장이 실패하면 업로드한 객체를 삭제하고 판정하지 않는다")
+    @Test
+    void deletesStoredImageWhenSynchronousSaveFails() {
+        RuntimeException exception = new RuntimeException("DB 저장 실패");
+        when(transactionService.saveForVerification(
+                any(), any(), any(), any(), any(), any(), anyInt(), any(), any()
+        )).thenThrow(exception);
+
+        assertThatThrownBy(() -> service.submitAndVerify(
+                "550e8400-e29b-41d4-a716-446655440000",
+                31L,
+                UUID.randomUUID(),
+                jpegFile(),
+                null,
+                null
+        )).isSameAs(exception);
+
+        ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(imageStorage).delete(keyCaptor.capture());
+        assertThat(keyCaptor.getValue()).startsWith("missions/31/");
+        verifyNoInteractions(verificationService);
     }
 
     @DisplayName("완료한 단체 미션의 추가 사진은 AI 판정 없이 저장한다")

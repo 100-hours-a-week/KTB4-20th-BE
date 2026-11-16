@@ -1,6 +1,9 @@
 package com.planit.photomission.controller;
 
 import com.planit.global.response.ApiResponse;
+import com.planit.mq.intake.AiJobIntakeGuard;
+import com.planit.mq.job.AiJobType;
+import com.planit.photomission.ai.PhotoMissionVerifyResponse;
 import com.planit.photomission.dto.PhotoMissionAlbumResponse;
 import com.planit.photomission.dto.PhotoMissionCompletionResponse;
 import com.planit.photomission.dto.PhotoMissionDetailResponse;
@@ -39,9 +42,14 @@ public class PhotoMissionController {
     private final PhotoMissionPhotoManagementService photoManagementService;
     private final PhotoMissionManualCompletionService manualCompletionService;
     private final PhotoMissionQueryService queryService;
+    private final AiJobIntakeGuard intakeGuard;
 
+    /**
+     * 전환 플래그가 켜져 있으면 메시지 큐로 접수하고 202를, 꺼져 있으면 기존처럼 AI를 동기 호출하고
+     * 판정 결과와 함께 200을 반환한다.
+     */
     @PostMapping(path = "/photomissions/{missionId}/photos", consumes = "multipart/form-data")
-    public ResponseEntity<ApiResponse<PhotoMissionSubmissionAcceptedResponse>> submitPhoto(
+    public ResponseEntity<?> submitPhoto(
             Authentication authentication,
             @PathVariable Long missionId,
             @RequestHeader("Idempotency-Key") UUID idempotencyKey,
@@ -49,6 +57,23 @@ public class PhotoMissionController {
             @RequestParam(required = false) BigDecimal latitude,
             @RequestParam(required = false) BigDecimal longitude
     ) {
+        if (!intakeGuard.isAsync(AiJobType.PHOTO_JUDGE)) {
+            PhotoMissionVerifyResponse verified =
+                    submissionService.submitAndVerify(
+                            authentication.getName(),
+                            missionId,
+                            idempotencyKey,
+                            photo,
+                            latitude,
+                            longitude
+                    );
+            return ResponseEntity.ok(ApiResponse.success(
+                    "PHOTO_MISSION_VERIFIED",
+                    "사진 판정이 완료되었습니다.",
+                    verified
+            ));
+        }
+
         PhotoMissionSubmissionAcceptedResponse response =
                 submissionService.submit(
                         authentication.getName(),
