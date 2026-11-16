@@ -39,6 +39,28 @@ services:
       retries: 20
       start_period: 10s
 
+  rabbitmq:
+    image: rabbitmq:4.1-management
+    container_name: planit-rabbitmq
+    restart: unless-stopped
+    hostname: planit-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-planit-backend}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-planit}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - planit-rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
 volumes:
   planit-mysql-data:
   planit-redis-data:
+  planit-rabbitmq-data:

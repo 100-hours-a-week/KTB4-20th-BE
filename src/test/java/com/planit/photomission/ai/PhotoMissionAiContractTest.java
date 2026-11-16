@@ -99,7 +99,7 @@ class PhotoMissionAiContractTest {
         assertThat(json.get("photo_coordinates").isNull()).isTrue();
     }
 
-    @DisplayName("AI retry 응답을 BE 판정 값으로 명시적으로 매핑한다")
+    @DisplayName("AI의 기존 추가 필드를 무시하고 retry 응답을 매핑한다")
     @Test
     void mapsRetryResponse() throws Exception {
         PhotoMissionVerifyResponse response = objectMapper.readValue("""
@@ -125,8 +125,6 @@ class PhotoMissionAiContractTest {
         assertThat(evaluation.getMatchScore()).isEqualByComparingTo("75.0");
         assertThat(objectMapper.readTree(evaluation.getDetectedLabelsJson()))
                 .hasSize(2);
-        assertThat(evaluation.getLandmarkConfidence())
-                .isEqualByComparingTo("92.0");
         assertThat(evaluation.getRetryHint())
                 .isEqualTo("탑이 사람에 가려졌어요.");
     }
@@ -139,7 +137,6 @@ class PhotoMissionAiContractTest {
                 "location_mismatch",
                 BigDecimal.ZERO,
                 List.of(),
-                null,
                 null
         );
         PhotoEvaluation evaluation = runningEvaluation();
@@ -161,7 +158,6 @@ class PhotoMissionAiContractTest {
                 null,
                 BigDecimal.TEN,
                 List.of(),
-                null,
                 null
         );
 

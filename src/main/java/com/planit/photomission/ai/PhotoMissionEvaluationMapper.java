@@ -30,7 +30,6 @@ public class PhotoMissionEvaluationMapper {
                 mapReason(response.reason()),
                 response.matchScore(),
                 objectMapper.writeValueAsString(response.detectedLabels()),
-                response.landmarkConfidence(),
                 response.retryHint(),
                 evaluatedAt
         );

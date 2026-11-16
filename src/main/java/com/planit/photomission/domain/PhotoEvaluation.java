@@ -19,10 +19,16 @@ import java.time.LocalDateTime;
 @Entity
 @Table(
         name = "photo_evaluations",
-        uniqueConstraints = @UniqueConstraint(
-                name = "uk_photo_evaluations_photo_attempt",
-                columnNames = {"mission_photo_id", "attempt_no"}
-        )
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_photo_evaluations_photo_attempt",
+                        columnNames = {"mission_photo_id", "attempt_no"}
+                ),
+                @UniqueConstraint(
+                        name = "uk_photo_evaluations_active",
+                        columnNames = {"mission_photo_id", "active_slot"}
+                )
+        }
 )
 public class PhotoEvaluation {
 
@@ -37,9 +43,15 @@ public class PhotoEvaluation {
     @Column(name = "attempt_no", nullable = false)
     private byte attemptNo;
 
+    @Column(name = "execution_attempt_count", nullable = false)
+    private byte executionAttemptCount;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "execution_status", nullable = false, length = 20)
     private PhotoEvaluationExecutionStatus executionStatus;
+
+    @Column(name = "active_slot")
+    private Byte activeSlot;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "result", length = 20)
@@ -55,9 +67,6 @@ public class PhotoEvaluation {
     @Column(name = "detected_labels_json", columnDefinition = "json")
     private String detectedLabelsJson;
 
-    @Column(name = "landmark_confidence", precision = 5, scale = 2)
-    private BigDecimal landmarkConfidence;
-
     @Column(name = "retry_hint", length = 1000)
     private String retryHint;
 
@@ -67,6 +76,9 @@ public class PhotoEvaluation {
     @Column(name = "requested_at", nullable = false)
     private LocalDateTime requestedAt;
 
+    @Column(name = "deadline_at")
+    private LocalDateTime deadlineAt;
+
     @Column(name = "evaluated_at")
     private LocalDateTime evaluatedAt;
 
@@ -74,6 +86,31 @@ public class PhotoEvaluation {
     private LocalDateTime retryAfterAt;
 
     protected PhotoEvaluation() {
+    }
+
+    public static PhotoEvaluation queue(
+            MissionPhoto missionPhoto,
+            LocalDateTime requestedAt,
+            LocalDateTime deadlineAt
+    ) {
+        if (requestedAt == null) {
+            throw new IllegalArgumentException("AI 판정 요청 시각은 필수입니다");
+        }
+        if (deadlineAt == null || !deadlineAt.isAfter(requestedAt)) {
+            throw new IllegalArgumentException(
+                    "AI 판정 마감 시각은 요청 시각 이후여야 합니다"
+            );
+        }
+
+        PhotoEvaluation evaluation = new PhotoEvaluation();
+        evaluation.missionPhoto = missionPhoto;
+        evaluation.attemptNo = 1;
+        evaluation.executionAttemptCount = 0;
+        evaluation.executionStatus = PhotoEvaluationExecutionStatus.QUEUED;
+        evaluation.activeSlot = (byte) 1;
+        evaluation.requestedAt = requestedAt;
+        evaluation.deadlineAt = deadlineAt;
+        return evaluation;
     }
 
     public static PhotoEvaluation start(
@@ -90,8 +127,10 @@ public class PhotoEvaluation {
         PhotoEvaluation evaluation = new PhotoEvaluation();
         evaluation.missionPhoto = missionPhoto;
         evaluation.attemptNo = (byte) attemptNo;
+        evaluation.executionAttemptCount = (byte) attemptNo;
         evaluation.executionStatus =
                 PhotoEvaluationExecutionStatus.RUNNING;
+        evaluation.activeSlot = (byte) 1;
         evaluation.requestedAt = requestedAt;
         return evaluation;
     }
@@ -101,7 +140,6 @@ public class PhotoEvaluation {
             PhotoEvaluationReason reason,
             BigDecimal matchScore,
             String detectedLabelsJson,
-            BigDecimal landmarkConfidence,
             String retryHint,
             LocalDateTime evaluatedAt
     ) {
@@ -110,15 +148,14 @@ public class PhotoEvaluation {
         validateScore(matchScore);
         validateDetectedLabels(detectedLabelsJson);
         validateReason(result, reason);
-        validateLandmarkConfidence(landmarkConfidence);
         validateRetryHint(result, retryHint);
 
         executionStatus = PhotoEvaluationExecutionStatus.SUCCEEDED;
+        activeSlot = null;
         this.result = result;
         this.reason = reason;
         this.matchScore = matchScore;
         this.detectedLabelsJson = detectedLabelsJson;
-        this.landmarkConfidence = landmarkConfidence;
         this.retryHint = retryHint;
         this.evaluatedAt = evaluatedAt;
     }
@@ -133,6 +170,7 @@ public class PhotoEvaluation {
         }
 
         executionStatus = PhotoEvaluationExecutionStatus.FAILED;
+        activeSlot = null;
         this.errorCode = errorCode;
         evaluatedAt = failedAt;
     }
@@ -164,6 +202,7 @@ public class PhotoEvaluation {
             throw new IllegalArgumentException("AI 재시도 시각은 필수입니다");
         }
         executionStatus = PhotoEvaluationExecutionStatus.FAILED;
+        activeSlot = null;
         evaluatedAt = retriedAt;
         retryAfterAt = null;
     }
@@ -197,18 +236,6 @@ public class PhotoEvaluation {
         if (reason != null && result != PhotoEvaluationResult.FAIL) {
             throw new IllegalArgumentException(
                     "실패 판정에만 실패 사유를 저장할 수 있습니다"
-            );
-        }
-    }
-
-    private void validateLandmarkConfidence(BigDecimal confidence) {
-        if (confidence == null) {
-            return;
-        }
-        if (confidence.compareTo(BigDecimal.ZERO) < 0
-                || confidence.compareTo(BigDecimal.valueOf(100)) > 0) {
-            throw new IllegalArgumentException(
-                    "랜드마크 신뢰도는 0부터 100까지입니다"
             );
         }
     }
@@ -248,8 +275,16 @@ public class PhotoEvaluation {
         return attemptNo;
     }
 
+    public int getExecutionAttemptCount() {
+        return executionAttemptCount;
+    }
+
     public PhotoEvaluationExecutionStatus getExecutionStatus() {
         return executionStatus;
+    }
+
+    public Byte getActiveSlot() {
+        return activeSlot;
     }
 
     public PhotoEvaluationResult getResult() {
@@ -268,10 +303,6 @@ public class PhotoEvaluation {
         return detectedLabelsJson;
     }
 
-    public BigDecimal getLandmarkConfidence() {
-        return landmarkConfidence;
-    }
-
     public String getRetryHint() {
         return retryHint;
     }
@@ -282,6 +313,10 @@ public class PhotoEvaluation {
 
     public LocalDateTime getRequestedAt() {
         return requestedAt;
+    }
+
+    public LocalDateTime getDeadlineAt() {
+        return deadlineAt;
     }
 
     public LocalDateTime getEvaluatedAt() {

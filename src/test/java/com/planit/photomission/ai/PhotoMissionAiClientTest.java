@@ -93,7 +93,6 @@ class PhotoMissionAiClientTest {
                             {"name": "석탑", "matched": true},
                             {"name": "사람", "matched": false}
                           ],
-                          "landmark_confidence": 92.0,
                           "retry_hint": "탑이 사람에 가려졌어요."
                         }
                         """, MediaType.APPLICATION_JSON));
@@ -103,8 +102,6 @@ class PhotoMissionAiClientTest {
         assertThat(response.result()).isEqualTo("retry");
         assertThat(response.matchScore()).isEqualByComparingTo("75.0");
         assertThat(response.detectedLabels()).hasSize(2);
-        assertThat(response.landmarkConfidence())
-                .isEqualByComparingTo("92.0");
         assertThat(response.retryHint())
                 .isEqualTo("탑이 사람에 가려졌어요.");
         server.verify();

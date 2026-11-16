@@ -19,6 +19,9 @@ import com.planit.schedule.repository.ScheduleLegRepository;
 import com.planit.schedule.repository.ScheduleRepository;
 import com.planit.schedule.repository.ScheduleVisitRepository;
 import com.planit.schedule.route.PlaceCategoryGroup;
+import com.planit.schedule.route.RoutePlace;
+import com.planit.schedule.route.RoutePlan;
+import com.planit.schedule.route.ShortestRouteCalculator;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,6 +31,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.IntStream;
@@ -189,8 +193,7 @@ class SchedulePersistenceServiceTest {
     @DisplayName("세 전략 후보를 확정되지 않은 일정으로 함께 저장한다")
     @Test
     void savesThreeDraftCandidates() {
-        List<GeneratedScheduleResult> results = service.saveCandidates(
-                1L,
+        List<GeneratedScheduleResult> results = saveCandidates(
                 candidates(),
                 ScheduleGenerationMode.INITIAL
         );
@@ -239,8 +242,7 @@ class SchedulePersistenceServiceTest {
                         day.getSchedule().getStrategy().equals("DIVERSITY")
                 ));
 
-        assertThatThrownBy(() -> service.saveCandidates(
-                1L,
+        assertThatThrownBy(() -> saveCandidates(
                 candidates(),
                 ScheduleGenerationMode.INITIAL
         )).isInstanceOf(IllegalStateException.class);
@@ -253,8 +255,7 @@ class SchedulePersistenceServiceTest {
     void savesTwoPlacesOnLastDayOfMultiDayCandidates() {
         when(trip.getEndDate()).thenReturn(LocalDate.of(2026, 10, 2));
 
-        List<GeneratedScheduleResult> results = service.saveCandidates(
-                1L,
+        List<GeneratedScheduleResult> results = saveCandidates(
                 candidatesByDay(5, 2),
                 ScheduleGenerationMode.INITIAL
         );
@@ -269,8 +270,7 @@ class SchedulePersistenceServiceTest {
     void rejectsFewerThanFivePlacesBeforeLastDay() {
         when(trip.getEndDate()).thenReturn(LocalDate.of(2026, 10, 2));
 
-        assertThatThrownBy(() -> service.saveCandidates(
-                1L,
+        assertThatThrownBy(() -> saveCandidates(
                 candidatesByDay(4, 2),
                 ScheduleGenerationMode.INITIAL
         )).isInstanceOfSatisfying(
@@ -287,8 +287,7 @@ class SchedulePersistenceServiceTest {
     void rejectsFewerThanTwoPlacesOnLastDay() {
         when(trip.getEndDate()).thenReturn(LocalDate.of(2026, 10, 2));
 
-        assertThatThrownBy(() -> service.saveCandidates(
-                1L,
+        assertThatThrownBy(() -> saveCandidates(
                 candidatesByDay(5, 1),
                 ScheduleGenerationMode.INITIAL
         )).isInstanceOfSatisfying(
@@ -304,20 +303,19 @@ class SchedulePersistenceServiceTest {
     @Test
     void validatesCandidateValuesBeforeReplacingExistingSchedule() {
         givenExistingSchedule();
-        List<RecommendedRoute> invalidCandidates = List.of(
+        List<RecommendedRoute> invalidCandidateRoutes = List.of(
                 new RecommendedRoute(
                         ScheduleStrategy.SHORTEST,
                         100,
                         null,
                         List.of(recommendations("shortest", 5))
                 ),
-                candidates().get(1),
-                candidates().get(2)
+                candidateRoutes().get(1),
+                candidateRoutes().get(2)
         );
 
-        assertThatThrownBy(() -> service.saveCandidates(
-                1L,
-                invalidCandidates,
+        assertThatThrownBy(() -> saveCandidates(
+                planRoutes(invalidCandidateRoutes),
                 ScheduleGenerationMode.GENERAL_REGENERATION
         ))
                 .isInstanceOfSatisfying(
@@ -337,8 +335,7 @@ class SchedulePersistenceServiceTest {
                 LocalDateTime.of(2026, 9, 30, 23, 50)
         );
 
-        assertThatThrownBy(() -> service.saveCandidates(
-                1L,
+        assertThatThrownBy(() -> saveCandidates(
                 candidates(),
                 ScheduleGenerationMode.INITIAL
         ))
@@ -388,8 +385,7 @@ class SchedulePersistenceServiceTest {
         when(scheduleRepository.existsByTripIdAndStatus(1L, "DRAFT"))
                 .thenReturn(true);
 
-        assertThatThrownBy(() -> service.saveCandidates(
-                1L,
+        assertThatThrownBy(() -> saveCandidates(
                 candidates(),
                 ScheduleGenerationMode.INITIAL
         ))
@@ -469,11 +465,32 @@ class SchedulePersistenceServiceTest {
                 .thenReturn(List.of(mock(Schedule.class)));
     }
 
+    private List<GeneratedScheduleResult> saveCandidates(
+            List<PlannedRoute> plannedRoutes,
+            ScheduleGenerationMode mode
+    ) {
+        AtomicLong placeId = new AtomicLong(100);
+        Map<String, Long> placeIds = plannedRoutes.stream()
+                .flatMap(route -> route.route().days().stream())
+                .flatMap(List::stream)
+                .map(RecommendedPlace::googlePlaceId)
+                .distinct()
+                .collect(java.util.stream.Collectors.toMap(
+                        googlePlaceId -> googlePlaceId,
+                        ignored -> placeId.getAndIncrement()
+                ));
+        return service.saveCandidates(1L, plannedRoutes, placeIds, mode);
+    }
+
     private List<RecommendedPlace> recommendations() {
         return recommendations(6);
     }
 
-    private List<RecommendedRoute> candidates() {
+    private List<PlannedRoute> candidates() {
+        return planRoutes(candidateRoutes());
+    }
+
+    private List<RecommendedRoute> candidateRoutes() {
         return List.of(
                 new RecommendedRoute(
                         ScheduleStrategy.SHORTEST,
@@ -496,11 +513,11 @@ class SchedulePersistenceServiceTest {
         );
     }
 
-    private List<RecommendedRoute> candidatesByDay(
+    private List<PlannedRoute> candidatesByDay(
             int firstDayCount,
             int lastDayCount
     ) {
-        return List.of(
+        return planRoutes(List.of(
                 new RecommendedRoute(
                         ScheduleStrategy.SHORTEST,
                         null,
@@ -528,7 +545,41 @@ class SchedulePersistenceServiceTest {
                                 recommendations("diversity-last", lastDayCount)
                         )
                 )
-        );
+        ));
+    }
+
+    private List<PlannedRoute> planRoutes(List<RecommendedRoute> routes) {
+        ShortestRouteCalculator calculator = new ShortestRouteCalculator();
+        return routes.stream()
+                .map(route -> new PlannedRoute(
+                        route,
+                        route.days().stream()
+                                .map(places -> {
+                                    if (places.size() < 2) {
+                                        return new RoutePlan(
+                                                List.of(),
+                                                List.of(),
+                                                0
+                                        );
+                                    }
+                                    List<RoutePlace> routePlaces = places.stream()
+                                            .map(place -> new RoutePlace(
+                                                    place.googlePlaceId(),
+                                                    place.latitude(),
+                                                    place.longitude(),
+                                                    place.categoryGroup()
+                                            ))
+                                            .toList();
+                                    return route.strategy()
+                                            == ScheduleStrategy.SHORTEST
+                                            ? calculator.calculate(routePlaces)
+                                            : calculator.calculateInGivenOrder(
+                                                    routePlaces
+                                            );
+                                })
+                                .toList()
+                ))
+                .toList();
     }
 
     private List<RecommendedPlace> recommendations(int count) {

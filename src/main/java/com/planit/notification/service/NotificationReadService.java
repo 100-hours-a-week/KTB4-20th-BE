@@ -5,9 +5,11 @@ import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
 import com.planit.notification.domain.Notification;
 import com.planit.notification.domain.NotificationTargetStatus;
+import com.planit.notification.domain.NotificationTargetType;
 import com.planit.notification.dto.AllNotificationsReadResponse;
 import com.planit.notification.dto.NotificationReadResponse;
 import com.planit.notification.repository.NotificationRepository;
+import com.planit.photomission.repository.MissionRepository;
 import com.planit.repository.TripRepository;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
@@ -25,15 +27,18 @@ public class NotificationReadService {
 
     private final NotificationRepository notificationRepository;
     private final TripRepository tripRepository;
+    private final MissionRepository missionRepository;
     private final Clock clock;
 
     public NotificationReadService(
             NotificationRepository notificationRepository,
             TripRepository tripRepository,
+            MissionRepository missionRepository,
             @Qualifier("tripRemindClock") Clock clock
     ) {
         this.notificationRepository = notificationRepository;
         this.tripRepository = tripRepository;
+        this.missionRepository = missionRepository;
         this.clock = clock;
     }
 
@@ -94,10 +99,20 @@ public class NotificationReadService {
             return NotificationTargetStatus.EXPIRED;
         }
 
-        return tripRepository.findById(notification.getTargetId())
-                .filter(trip -> trip.getDeletedAt() == null)
-                .map(Trip::getId)
-                .map(ignored -> NotificationTargetStatus.ACTIVE)
-                .orElse(NotificationTargetStatus.EXPIRED);
+        NotificationTargetType targetType = notification.getTargetType();
+        if (targetType == NotificationTargetType.TRIP) {
+            return tripRepository.findById(notification.getTargetId())
+                    .filter(trip -> trip.getDeletedAt() == null)
+                    .map(Trip::getId)
+                    .map(ignored -> NotificationTargetStatus.ACTIVE)
+                    .orElse(NotificationTargetStatus.EXPIRED);
+        }
+        if (targetType == NotificationTargetType.PHOTO_MISSION) {
+            return missionRepository.findById(notification.getTargetId())
+                    .filter(mission -> mission.getTrip().getDeletedAt() == null)
+                    .map(ignored -> NotificationTargetStatus.ACTIVE)
+                    .orElse(NotificationTargetStatus.EXPIRED);
+        }
+        return NotificationTargetStatus.EXPIRED;
     }
 }

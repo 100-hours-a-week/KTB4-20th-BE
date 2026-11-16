@@ -23,17 +23,20 @@ import com.planit.repository.UserRepository;
 import com.planit.schedule.domain.ScheduleGenerationReason;
 import com.planit.schedule.dto.SchedulePlaceSelectionResponse;
 import com.planit.schedule.ai.AiRecommendedPlaceMapper;
+import com.planit.schedule.ai.ScheduleAiResultValidator;
 import com.planit.trip.service.TripMemberAccessService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.web.client.RestClientException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -42,6 +45,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -60,6 +64,7 @@ class ScheduleGenerationServiceTest {
     private SurveyExcludedCategoryRepository excludedCategoryRepository;
     private AiTripClient aiTripClient;
     private AiRecommendedPlaceMapper recommendedPlaceMapper;
+    private PlacePersistenceService placePersistenceService;
     private SchedulePersistenceService schedulePersistenceService;
     private ScheduleRegenerationPolicy regenerationPolicy;
     private ScheduleGenerationServiceImpl service;
@@ -80,20 +85,28 @@ class ScheduleGenerationServiceTest {
         );
         aiTripClient = mock(AiTripClient.class);
         recommendedPlaceMapper = mock(AiRecommendedPlaceMapper.class);
+        placePersistenceService = mock(PlacePersistenceService.class);
         schedulePersistenceService = mock(SchedulePersistenceService.class);
         regenerationPolicy = mock(ScheduleRegenerationPolicy.class);
+        ScheduleGenerationPreparationService preparationService =
+                new ScheduleGenerationPreparationService(
+                        userRepository,
+                        tripRepository,
+                        tripMemberRepository,
+                        new TripMemberAccessService(tripMemberRepository),
+                        surveyRepository,
+                        surveyAnswerRepository,
+                        excludedCategoryRepository,
+                        regenerationPolicy
+                );
         service = new ScheduleGenerationServiceImpl(
-                userRepository,
-                tripRepository,
-                tripMemberRepository,
-                new TripMemberAccessService(tripMemberRepository),
-                surveyRepository,
-                surveyAnswerRepository,
-                excludedCategoryRepository,
+                preparationService,
                 aiTripClient,
                 recommendedPlaceMapper,
+                placePersistenceService,
                 schedulePersistenceService,
-                regenerationPolicy
+                new ScheduleAiResultValidator(),
+                new ScheduleRoutePlanner()
         );
 
         user = mock(User.class);
@@ -113,6 +126,7 @@ class ScheduleGenerationServiceTest {
         when(trip.getSurveyDeadlineAt())
                 .thenReturn(LocalDateTime.now().plusDays(1));
         when(trip.getRegion()).thenReturn(region);
+        when(region.getId()).thenReturn(10L);
         when(region.getCode()).thenReturn("REGION-SEOUL");
         when(host.getRole()).thenReturn(TripMemberRole.HOST);
         when(host.getActiveSlot()).thenReturn((byte) 1);
@@ -128,18 +142,21 @@ class ScheduleGenerationServiceTest {
         when(tripMemberRepository.findActiveMembersByTrip(trip))
                 .thenReturn(List.of(host));
         when(hostSurvey.getTripMember()).thenReturn(host);
+        when(hostSurvey.getId()).thenReturn(1L);
         when(hostSurvey.getSubmittedAt()).thenReturn(LocalDateTime.now());
         when(surveyRepository.findByTripMemberInAndSubmittedAtIsNotNull(
                 List.of(host)
         )).thenReturn(List.of(hostSurvey));
         List<SurveyAnswer> submittedAnswers = answers();
         when(surveyAnswerRepository
-                .findBySurveyOrderByPreferenceQuestionDisplayOrderAsc(
-                        hostSurvey
+                .findBySurveyInOrderByPreferenceQuestionDisplayOrderAsc(
+                        List.of(hostSurvey)
                 )).thenReturn(submittedAnswers);
         SurveyExcludedCategory seafood = excludedCategory("해산물");
         when(excludedCategoryRepository
-                .findBySurveyOrderByExclusionCategoryIdAsc(hostSurvey))
+                .findBySurveyInOrderByExclusionCategoryIdAsc(
+                        List.of(hostSurvey)
+                ))
                 .thenReturn(List.of(seafood));
         when(aiTripClient.selectPlaces(any()))
                 .thenReturn(aiResponse());
@@ -153,6 +170,8 @@ class ScheduleGenerationServiceTest {
                 any(Trip.class),
                 any(ScheduleGenerationReason.class)
         )).thenReturn(ScheduleGenerationMode.INITIAL);
+        when(placePersistenceService.upsertAndFindIds(any(Long.class), any()))
+                .thenReturn(Map.of());
     }
 
     @DisplayName("날씨 재생성으로 판정되면 같은 AI 요청을 다시 보내고 재생성 방식으로 저장한다")
@@ -170,6 +189,7 @@ class ScheduleGenerationServiceTest {
         verify(aiTripClient).selectPlaces(any());
         verify(schedulePersistenceService).saveCandidates(
                 org.mockito.ArgumentMatchers.eq(TRIP_ID),
+                any(),
                 any(),
                 org.mockito.ArgumentMatchers.eq(
                         ScheduleGenerationMode.WEATHER_REGENERATION
@@ -229,8 +249,76 @@ class ScheduleGenerationServiceTest {
         verify(schedulePersistenceService).saveCandidates(
                 org.mockito.ArgumentMatchers.eq(TRIP_ID),
                 any(),
+                any(),
                 org.mockito.ArgumentMatchers.eq(ScheduleGenerationMode.INITIAL)
         );
+    }
+
+    @DisplayName("장소 저장 잠금 충돌은 최대 횟수 안에서 재시도한다")
+    @Test
+    void retriesPlaceSaveAfterLockFailure() {
+        when(placePersistenceService.upsertAndFindIds(any(Long.class), any()))
+                .thenThrow(new PessimisticLockingFailureException("충돌"))
+                .thenThrow(new PessimisticLockingFailureException("충돌"))
+                .thenReturn(Map.of());
+
+        service.generate(
+                USER_ID.toString(),
+                TRIP_ID,
+                ScheduleGenerationReason.GENERAL
+        );
+
+        verify(placePersistenceService, times(3))
+                .upsertAndFindIds(any(Long.class), any());
+        verify(schedulePersistenceService).saveCandidates(
+                org.mockito.ArgumentMatchers.eq(TRIP_ID),
+                any(),
+                any(),
+                org.mockito.ArgumentMatchers.eq(ScheduleGenerationMode.INITIAL)
+        );
+    }
+
+    @DisplayName("장소 저장 잠금 충돌이 계속되면 세 번째 실패를 전달한다")
+    @Test
+    void stopsRetryingPlaceSaveAfterThreeAttempts() {
+        PessimisticLockingFailureException exception =
+                new PessimisticLockingFailureException("충돌");
+        when(placePersistenceService.upsertAndFindIds(any(Long.class), any()))
+                .thenThrow(exception);
+
+        assertThatThrownBy(() -> service.generate(
+                USER_ID.toString(),
+                TRIP_ID,
+                ScheduleGenerationReason.GENERAL
+        )).isSameAs(exception);
+
+        verify(placePersistenceService, times(3))
+                .upsertAndFindIds(any(Long.class), any());
+        verify(schedulePersistenceService, never())
+                .saveCandidates(any(Long.class), any(), any(), any());
+    }
+
+    @DisplayName("제출된 설문의 답변과 제외 카테고리를 각각 한 번에 조회한다")
+    @Test
+    void queriesSubmittedSurveyDetailsInBatches() {
+        service.generate(
+                USER_ID.toString(),
+                TRIP_ID,
+                ScheduleGenerationReason.GENERAL
+        );
+
+        verify(surveyAnswerRepository)
+                .findBySurveyInOrderByPreferenceQuestionDisplayOrderAsc(
+                        List.of(hostSurvey)
+                );
+        verify(excludedCategoryRepository)
+                .findBySurveyInOrderByExclusionCategoryIdAsc(
+                        List.of(hostSurvey)
+                );
+        verify(surveyAnswerRepository, never())
+                .findBySurveyOrderByPreferenceQuestionDisplayOrderAsc(any());
+        verify(excludedCategoryRepository, never())
+                .findBySurveyOrderByExclusionCategoryIdAsc(any());
     }
 
     @DisplayName("여행 기간과 같은 개수의 날짜별 장소 목록을 생성한다")
@@ -251,6 +339,7 @@ class ScheduleGenerationServiceTest {
                 .allSatisfy(places -> assertThat(places).hasSize(5));
         verify(schedulePersistenceService).saveCandidates(
                 org.mockito.ArgumentMatchers.eq(TRIP_ID),
+                any(),
                 any(),
                 org.mockito.ArgumentMatchers.eq(ScheduleGenerationMode.INITIAL)
         );
@@ -302,7 +391,7 @@ class ScheduleGenerationServiceTest {
         assertError(ErrorCode.AI_SCHEDULE_GENERATION_FAILED);
 
         verify(schedulePersistenceService, never())
-                .saveCandidates(any(Long.class), any(), any());
+                .saveCandidates(any(Long.class), any(), any(), any());
     }
 
     @DisplayName("방장이 아닌 사용자의 일정 생성을 거부한다")
@@ -333,8 +422,8 @@ class ScheduleGenerationServiceTest {
     void rejectsSurveyWithoutFifteenAnswers() {
         List<SurveyAnswer> fourteenAnswers = answers().subList(0, 14);
         when(surveyAnswerRepository
-                .findBySurveyOrderByPreferenceQuestionDisplayOrderAsc(
-                        hostSurvey
+                .findBySurveyInOrderByPreferenceQuestionDisplayOrderAsc(
+                        List.of(hostSurvey)
                 )).thenReturn(fourteenAnswers);
 
         assertError(ErrorCode.SCHEDULE_GENERATION_NOT_READY);
@@ -434,6 +523,7 @@ class ScheduleGenerationServiceTest {
         verify(schedulePersistenceService).saveCandidates(
                 org.mockito.ArgumentMatchers.eq(TRIP_ID),
                 any(),
+                any(),
                 org.mockito.ArgumentMatchers.eq(ScheduleGenerationMode.INITIAL)
         );
     }
@@ -455,7 +545,7 @@ class ScheduleGenerationServiceTest {
         assertError(ErrorCode.AI_SCHEDULE_GENERATION_FAILED);
 
         verify(schedulePersistenceService, never())
-                .saveCandidates(any(Long.class), any(), any());
+                .saveCandidates(any(Long.class), any(), any(), any());
     }
 
     @DisplayName("AI 응답에 같은 전략의 코스가 중복되면 거부한다")
@@ -620,6 +710,7 @@ class ScheduleGenerationServiceTest {
         List<SurveyAnswer> answers = new ArrayList<>();
         for (int index = 0; index < 15; index++) {
             SurveyAnswer answer = mock(SurveyAnswer.class);
+            when(answer.getSurvey()).thenReturn(hostSurvey);
             when(answer.getScore()).thenReturn(index % 5 + 1);
             answers.add(answer);
         }
@@ -632,6 +723,7 @@ class ScheduleGenerationServiceTest {
                 SurveyExclusionCategory.class
         );
         when(category.getName()).thenReturn(name);
+        when(excluded.getSurvey()).thenReturn(hostSurvey);
         when(excluded.getExclusionCategory()).thenReturn(category);
         return excluded;
     }
@@ -674,7 +766,9 @@ class ScheduleGenerationServiceTest {
                         4820,
                         null,
                         List.of("user_id_1", "user_id_3"),
-                        List.of("HISTORY_CULTURE")
+                        index % 2 == 0
+                                ? List.of("ACTIVITY")
+                                : List.of("HISTORY_CULTURE")
                 ));
             }
             dailyPlaces.add(places);

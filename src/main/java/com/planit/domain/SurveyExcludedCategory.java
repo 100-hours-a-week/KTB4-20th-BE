@@ -38,4 +38,8 @@ public class SurveyExcludedCategory {
     public SurveyExclusionCategory getExclusionCategory() {
         return exclusionCategory;
     }
+
+    public Survey getSurvey() {
+        return survey;
+    }
 }

@@ -3,6 +3,7 @@ package com.planit.notification.service;
 import com.planit.domain.Trip;
 import com.planit.notification.domain.Notification;
 import com.planit.notification.domain.NotificationTargetStatus;
+import com.planit.notification.domain.NotificationTargetType;
 import com.planit.notification.domain.NotificationType;
 import com.planit.notification.dto.NotificationListResponse;
 import com.planit.notification.dto.NotificationTargetResponse;
@@ -11,6 +12,7 @@ import com.planit.notification.dto.UnreadNotificationCountResponse;
 import com.planit.notification.pagination.NotificationListCursorCodec;
 import com.planit.notification.pagination.NotificationListCursorCodec.Cursor;
 import com.planit.notification.repository.NotificationRepository;
+import com.planit.photomission.repository.MissionRepository;
 import com.planit.repository.TripRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -34,22 +36,29 @@ public class NotificationListService {
     private static final ZoneOffset SEOUL_OFFSET = ZoneOffset.ofHours(9);
     private static final List<NotificationType> DELIVERABLE_TYPES = List.of(
             NotificationType.TRIP_D1,
-            NotificationType.TRIP_WEATHER_ALERT
+            NotificationType.TRIP_WEATHER_ALERT,
+            NotificationType.SCHEDULE_GENERATION_SUCCEEDED,
+            NotificationType.SCHEDULE_GENERATION_FAILED,
+            NotificationType.PHOTO_MISSION_EVALUATION_SUCCEEDED,
+            NotificationType.PHOTO_MISSION_EVALUATION_FAILED
     );
 
     private final NotificationRepository notificationRepository;
     private final TripRepository tripRepository;
+    private final MissionRepository missionRepository;
     private final NotificationListCursorCodec cursorCodec;
     private final Clock clock;
 
     public NotificationListService(
             NotificationRepository notificationRepository,
             TripRepository tripRepository,
+            MissionRepository missionRepository,
             NotificationListCursorCodec cursorCodec,
             @Qualifier("tripRemindClock") Clock clock
     ) {
         this.notificationRepository = notificationRepository;
         this.tripRepository = tripRepository;
+        this.missionRepository = missionRepository;
         this.cursorCodec = cursorCodec;
         this.clock = clock;
     }
@@ -74,9 +83,14 @@ public class NotificationListService {
         boolean hasNext = found.size() > pageSize;
         List<Notification> page = found.subList(0, Math.min(pageSize, found.size()));
         Set<Long> activeTripIds = findActiveTripIds(page);
+        Set<Long> activeMissionIds = findActiveMissionIds(page);
 
         List<NotificationListResponse.Item> items = page.stream()
-                .map(notification -> toItem(notification, activeTripIds))
+                .map(notification -> toItem(
+                        notification,
+                        activeTripIds,
+                        activeMissionIds
+                ))
                 .toList();
         String nextCursor = hasNext
                 ? encodeCursor(recipientPublicId, page.getLast())
@@ -136,7 +150,8 @@ public class NotificationListService {
 
     private Set<Long> findActiveTripIds(List<Notification> notifications) {
         List<Long> targetIds = notifications.stream()
-                .filter(notification -> notification.getTargetType() != null)
+                .filter(notification -> notification.getTargetType()
+                        == NotificationTargetType.TRIP)
                 .map(Notification::getTargetId)
                 .distinct()
                 .toList();
@@ -152,9 +167,29 @@ public class NotificationListService {
         return activeTripIds;
     }
 
+    private Set<Long> findActiveMissionIds(List<Notification> notifications) {
+        List<Long> targetIds = notifications.stream()
+                .filter(notification -> notification.getTargetType()
+                        == NotificationTargetType.PHOTO_MISSION)
+                .map(Notification::getTargetId)
+                .distinct()
+                .toList();
+        if (targetIds.isEmpty()) {
+            return Set.of();
+        }
+
+        Set<Long> activeMissionIds = new HashSet<>();
+        missionRepository.findAllById(targetIds).stream()
+                .filter(mission -> mission.getTrip().getDeletedAt() == null)
+                .map(mission -> mission.getId())
+                .forEach(activeMissionIds::add);
+        return activeMissionIds;
+    }
+
     private NotificationListResponse.Item toItem(
             Notification notification,
-            Set<Long> activeTripIds
+            Set<Long> activeTripIds,
+            Set<Long> activeMissionIds
     ) {
         return new NotificationListResponse.Item(
                 notification.getId().toString(),
@@ -169,8 +204,10 @@ public class NotificationListService {
                                 notification.getTargetId().toString(),
                                 notification.getTargetStatus()
                                         == NotificationTargetStatus.ACTIVE
-                                        && activeTripIds.contains(
-                                                notification.getTargetId()
+                                        && isActiveTarget(
+                                                notification,
+                                                activeTripIds,
+                                                activeMissionIds
                                         )
                                         ? NotificationTargetStatus.ACTIVE
                                         : NotificationTargetStatus.EXPIRED
@@ -179,6 +216,19 @@ public class NotificationListService {
                 toOffset(notification.getReadAt()),
                 toOffset(notification.getCreatedAt())
         );
+    }
+
+    private boolean isActiveTarget(
+            Notification notification,
+            Set<Long> activeTripIds,
+            Set<Long> activeMissionIds
+    ) {
+        return switch (notification.getTargetType()) {
+            case TRIP -> activeTripIds.contains(notification.getTargetId());
+            case PHOTO_MISSION -> activeMissionIds.contains(
+                    notification.getTargetId()
+            );
+        };
     }
 
     private String encodeCursor(UUID recipientPublicId, Notification last) {

@@ -45,6 +45,10 @@ public class SurveyAnswer {
         return preferenceQuestion;
     }
 
+    public Survey getSurvey() {
+        return survey;
+    }
+
     public int getScore() {
         return score;
     }

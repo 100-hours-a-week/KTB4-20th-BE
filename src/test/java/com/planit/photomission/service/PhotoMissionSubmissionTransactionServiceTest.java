@@ -7,6 +7,11 @@ import com.planit.domain.TripMember;
 import com.planit.domain.User;
 import com.planit.global.error.BusinessException;
 import com.planit.global.error.ErrorCode;
+import com.planit.image.storage.ImageStorage;
+import com.planit.mq.job.AiJobType;
+import com.planit.mq.outbox.OutboxService;
+import com.planit.photomission.ai.PhotoMissionVerifyRequest;
+import com.planit.photomission.ai.PhotoMissionVerifyRequestFactory;
 import com.planit.photomission.domain.Mission;
 import com.planit.photomission.domain.MissionGroupState;
 import com.planit.photomission.domain.MissionCompletionMethod;
@@ -14,10 +19,13 @@ import com.planit.photomission.domain.MissionCompletionStatus;
 import com.planit.photomission.domain.MissionParticipation;
 import com.planit.photomission.domain.MissionPhoto;
 import com.planit.photomission.domain.MissionScope;
+import com.planit.photomission.domain.PhotoEvaluation;
+import com.planit.photomission.domain.PhotoEvaluationExecutionStatus;
 import com.planit.photomission.repository.MissionGroupStateRepository;
 import com.planit.photomission.repository.MissionParticipationRepository;
 import com.planit.photomission.repository.MissionPhotoRepository;
 import com.planit.photomission.repository.MissionRepository;
+import com.planit.photomission.repository.PhotoEvaluationRepository;
 import com.planit.repository.ImageFileRepository;
 import com.planit.repository.TripMemberRepository;
 import com.planit.repository.UserRepository;
@@ -29,9 +37,13 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -43,6 +55,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -65,9 +79,14 @@ class PhotoMissionSubmissionTransactionServiceTest {
     private MissionParticipationRepository participationRepository;
     private MissionGroupStateRepository groupStateRepository;
     private MissionPhotoRepository photoRepository;
+    private PhotoEvaluationRepository evaluationRepository;
     private UserRepository userRepository;
     private TripMemberRepository tripMemberRepository;
     private ImageFileRepository imageFileRepository;
+    private OutboxService outboxService;
+    private ImageStorage imageStorage;
+    private PhotoMissionVerifyRequestFactory requestFactory;
+    private ObjectMapper objectMapper;
     private PhotoMissionSubmissionTransactionService service;
     private Clock clock;
 
@@ -77,19 +96,115 @@ class PhotoMissionSubmissionTransactionServiceTest {
         participationRepository = mock(MissionParticipationRepository.class);
         groupStateRepository = mock(MissionGroupStateRepository.class);
         photoRepository = mock(MissionPhotoRepository.class);
+        evaluationRepository = mock(PhotoEvaluationRepository.class);
         userRepository = mock(UserRepository.class);
         tripMemberRepository = mock(TripMemberRepository.class);
         imageFileRepository = mock(ImageFileRepository.class);
+        outboxService = mock(OutboxService.class);
+        imageStorage = mock(ImageStorage.class);
+        requestFactory = mock(PhotoMissionVerifyRequestFactory.class);
+        objectMapper = JsonMapper.builder().findAndAddModules().build();
         clock = SEOUL_CLOCK;
         service = new PhotoMissionSubmissionTransactionService(
                 missionRepository,
                 participationRepository,
                 groupStateRepository,
                 photoRepository,
+                evaluationRepository,
                 userRepository,
                 tripMemberRepository,
                 imageFileRepository,
+                outboxService,
+                objectMapper,
+                imageStorage,
+                requestFactory,
                 clock
+        );
+        when(imageStorage.createReadUrl(anyString(), any(Duration.class)))
+                .thenReturn("https://image.example/photo.jpg");
+        when(requestFactory.create(any(MissionPhoto.class), anyString()))
+                .thenReturn(new PhotoMissionVerifyRequest(
+                        "https://image.example/photo.jpg",
+                        "place-1",
+                        "첨성대",
+                        new PhotoMissionVerifyRequest.Coordinates(
+                                BigDecimal.valueOf(35.8347),
+                                BigDecimal.valueOf(129.219)
+                        ),
+                        "포토미션",
+                        null
+                ));
+        when(evaluationRepository.save(any(PhotoEvaluation.class)))
+                .thenAnswer(invocation -> {
+                    PhotoEvaluation evaluation = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(evaluation, "id", 51L);
+                    return evaluation;
+                });
+    }
+
+    @DisplayName("사진과 고정 deadline의 QUEUED 판정을 하나의 접수 트랜잭션에서 저장한다")
+    @Test
+    void savesQueuedEvaluationWithAbsoluteDeadline() {
+        Fixture fixture = fixture(MissionScope.GROUP);
+        stubCommon(fixture);
+        when(groupStateRepository.findByMissionId(31L))
+                .thenReturn(Optional.of(MissionGroupState.create(
+                        fixture.mission(), SEOUL_NOW
+                )));
+        when(imageFileRepository.save(any(ImageFile.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(photoRepository.save(any(MissionPhoto.class)))
+                .thenAnswer(invocation -> {
+                    MissionPhoto photo = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(photo, "id", 41L);
+                    return photo;
+                });
+
+        QueuedSubmission result = service.save(
+                USER_PUBLIC_ID.toString(),
+                31L,
+                UUID.randomUUID(),
+                "missions/31/photo.jpg",
+                "photo.jpg",
+                "image/jpeg",
+                1024,
+                null,
+                null
+        );
+
+        assertThat(result.photoId()).isEqualTo(41L);
+        assertThat(result.evaluationId()).isEqualTo(51L);
+        ArgumentCaptor<PhotoEvaluation> captor =
+                ArgumentCaptor.forClass(PhotoEvaluation.class);
+        verify(evaluationRepository).save(captor.capture());
+        PhotoEvaluation evaluation = captor.getValue();
+        assertThat(evaluation.getMissionPhoto().getId()).isEqualTo(41L);
+        assertThat(evaluation.getExecutionStatus())
+                .isEqualTo(PhotoEvaluationExecutionStatus.QUEUED);
+        assertThat(evaluation.getRequestedAt()).isEqualTo(SEOUL_NOW);
+        assertThat(evaluation.getDeadlineAt())
+                .isEqualTo(SEOUL_NOW.plusMinutes(16));
+        ArgumentCaptor<String> payloadCaptor =
+                ArgumentCaptor.forClass(String.class);
+        verify(outboxService).enqueue(
+                eq(AiJobType.PHOTO_JUDGE),
+                eq(51L),
+                payloadCaptor.capture()
+        );
+        JsonNode payload = objectMapper.readTree(payloadCaptor.getValue());
+        assertThat(payload.get("schemaVersion").asInt()).isEqualTo(1);
+        assertThat(payload.get("jobId").isString()).isTrue();
+        assertThat(payload.get("jobId").asText()).isEqualTo("51");
+        assertThat(payload.get("jobType").asText()).isEqualTo("PHOTO_JUDGE");
+        assertThat(payload.get("deadlineAt").asText())
+                .isEqualTo("2026-10-18T10:16:00+09:00");
+        assertThat(payload.get("request").get("mission_id").asLong())
+                .isEqualTo(31L);
+        assertThat(payload.get("request").get("image_url").asText())
+                .isEqualTo("https://image.example/photo.jpg");
+        verify(imageStorage).createReadUrl(
+                "missions/31/photo.jpg",
+                Duration.ofSeconds(990)
         );
     }
 
@@ -112,7 +227,7 @@ class PhotoMissionSubmissionTransactionServiceTest {
                     return photo;
                 });
 
-        Long photoId = service.save(
+        QueuedSubmission submission = service.save(
                 USER_PUBLIC_ID.toString(),
                 31L,
                 UUID.randomUUID(),
@@ -124,7 +239,7 @@ class PhotoMissionSubmissionTransactionServiceTest {
                 BigDecimal.valueOf(129.2188)
         );
 
-        assertThat(photoId).isEqualTo(41L);
+        assertThat(submission.photoId()).isEqualTo(41L);
         ArgumentCaptor<MissionPhoto> captor =
                 ArgumentCaptor.forClass(MissionPhoto.class);
         verify(photoRepository).save(captor.capture());
@@ -222,6 +337,7 @@ class PhotoMissionSubmissionTransactionServiceTest {
                 null,
                 LocalDateTime.now().minusMinutes(1)
         );
+        ReflectionTestUtils.setField(previous, "id", 41L);
         stubCommon(fixture);
         when(participationRepository.findByMissionIdAndTripMemberId(31L, 21L))
                 .thenReturn(Optional.of(participation));
@@ -236,7 +352,7 @@ class PhotoMissionSubmissionTransactionServiceTest {
                     return photo;
                 });
 
-        Long photoId = service.save(
+        QueuedSubmission submission = service.save(
                 USER_PUBLIC_ID.toString(),
                 31L,
                 UUID.randomUUID(),
@@ -248,8 +364,13 @@ class PhotoMissionSubmissionTransactionServiceTest {
                 null
         );
 
-        assertThat(photoId).isEqualTo(42L);
+        assertThat(submission.photoId()).isEqualTo(42L);
         assertThat(previous.getReplacedAt()).isNotNull();
+        verify(evaluationRepository).failQueuedByMissionPhotoId(
+                41L,
+                "PHOTO_REPLACED",
+                SEOUL_NOW
+        );
         verify(photoRepository).flush();
     }
 
@@ -364,9 +485,14 @@ class PhotoMissionSubmissionTransactionServiceTest {
                 participationRepository,
                 groupStateRepository,
                 photoRepository,
+                evaluationRepository,
                 userRepository,
                 tripMemberRepository,
                 imageFileRepository,
+                outboxService,
+                objectMapper,
+                imageStorage,
+                requestFactory,
                 fixedClock(LocalTime.of(0, 29, 59))
         );
         Fixture fixture = fixture(MissionScope.GROUP, TODAY);
@@ -398,9 +524,14 @@ class PhotoMissionSubmissionTransactionServiceTest {
                 participationRepository,
                 groupStateRepository,
                 photoRepository,
+                evaluationRepository,
                 userRepository,
                 tripMemberRepository,
                 imageFileRepository,
+                outboxService,
+                objectMapper,
+                imageStorage,
+                requestFactory,
                 fixedClock(LocalTime.of(0, 30))
         );
         Fixture fixture = fixture(MissionScope.GROUP, TODAY);
@@ -419,7 +550,7 @@ class PhotoMissionSubmissionTransactionServiceTest {
                     return photo;
                 });
 
-        Long photoId = service.save(
+        QueuedSubmission submission = service.save(
                 USER_PUBLIC_ID.toString(),
                 31L,
                 UUID.randomUUID(),
@@ -431,7 +562,7 @@ class PhotoMissionSubmissionTransactionServiceTest {
                 null
         );
 
-        assertThat(photoId).isEqualTo(43L);
+        assertThat(submission.photoId()).isEqualTo(43L);
         verify(imageFileRepository).save(any(ImageFile.class));
     }
 

@@ -14,9 +14,6 @@ import com.planit.photomission.domain.MissionGroupState;
 import com.planit.photomission.domain.MissionParticipation;
 import com.planit.photomission.domain.MissionPhoto;
 import com.planit.photomission.domain.MissionScope;
-import com.planit.photomission.domain.PhotoEvaluation;
-import com.planit.photomission.domain.PhotoEvaluationExecutionStatus;
-import com.planit.photomission.domain.PhotoEvaluationResult;
 import com.planit.photomission.dto.PhotoMissionAlbumResponse;
 import com.planit.photomission.dto.PhotoMissionCompletionResponse;
 import com.planit.photomission.dto.PhotoMissionDetailResponse;
@@ -524,10 +521,6 @@ class PhotoMissionQueryServiceTest {
         MissionPhoto groupAdditional = photo(
                 303L, completedGroup, myMember, false, "group-more.jpg"
         );
-        PhotoEvaluation personalEvaluation = recognized(personalPhoto);
-        PhotoEvaluation groupMainEvaluation = recognized(groupMain);
-        PhotoEvaluation groupAdditionalEvaluation = recognized(groupAdditional);
-
         List<Long> missionIds = List.of(101L, 102L, 103L);
         when(missionRepository
                 .findByTripIdAndScheduleDayDayNumberOrderByMissionOrderAsc(
@@ -551,13 +544,6 @@ class PhotoMissionQueryServiceTest {
         when(evaluationRepository.findSuccessfulMissionPhotoIds(
                 List.of(301L, 302L, 303L)
         )).thenReturn(List.of(301L, 302L, 303L));
-        when(evaluationRepository.findRecognizedByMissionPhotoIdIn(
-                List.of(301L, 302L, 303L)
-        )).thenReturn(List.of(
-                personalEvaluation,
-                groupMainEvaluation,
-                groupAdditionalEvaluation
-        ));
         when(imageStorage.createReadUrl("personal.jpg"))
                 .thenReturn("https://image/personal.jpg");
         when(imageStorage.createReadUrl("group-main.jpg"))
@@ -577,7 +563,6 @@ class PhotoMissionQueryServiceTest {
         assertThat(response.totalMissionCount()).isEqualTo(3);
         assertThat(response.incompleteMissionCount()).isEqualTo(1);
         assertThat(response.totalPhotoCount()).isEqualTo(3);
-        assertThat(response.landmarkCount()).isEqualTo(2);
         assertThat(response.completed()).isFalse();
         assertThat(response.tripEnded()).isFalse();
         assertThat(response.nextDayExists()).isTrue();
@@ -630,7 +615,6 @@ class PhotoMissionQueryServiceTest {
         assertThat(response.totalMissionCount()).isEqualTo(2);
         assertThat(response.incompleteMissionCount()).isEqualTo(1);
         assertThat(response.totalPhotoCount()).isZero();
-        assertThat(response.landmarkCount()).isZero();
         assertThat(response.completed()).isFalse();
         assertThat(response.tripEnded()).isTrue();
         assertThat(response.nextDayExists()).isFalse();
@@ -700,17 +684,6 @@ class PhotoMissionQueryServiceTest {
         assertThat(response.completedMissionCount()).isZero();
         assertThat(response.totalPhotoCount()).isZero();
         assertThat(response.days()).isEmpty();
-    }
-
-    private PhotoEvaluation recognized(MissionPhoto photo) {
-        PhotoEvaluation evaluation = mock(PhotoEvaluation.class);
-        when(evaluation.getMissionPhoto()).thenReturn(photo);
-        when(evaluation.getExecutionStatus())
-                .thenReturn(PhotoEvaluationExecutionStatus.SUCCEEDED);
-        when(evaluation.getResult()).thenReturn(PhotoEvaluationResult.SUCCESS);
-        when(evaluation.getLandmarkConfidence())
-                .thenReturn(java.math.BigDecimal.valueOf(92));
-        return evaluation;
     }
 
     private TripMember member(Long id, User user, String username) {
