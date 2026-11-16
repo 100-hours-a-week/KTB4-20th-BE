@@ -5,6 +5,7 @@ import com.planit.global.error.ErrorCode;
 import com.planit.image.config.ImageProperties;
 import com.planit.image.service.ImageValidator;
 import com.planit.image.storage.ImageStorage;
+import com.planit.photomission.ai.PhotoMissionVerifyResponse;
 import com.planit.photomission.domain.PhotoEvaluationExecutionStatus;
 import com.planit.photomission.dto.PhotoMissionSubmissionAcceptedResponse;
 import io.sentry.Sentry;
@@ -29,17 +30,20 @@ public class PhotoMissionSubmissionService {
     private final ImageStorage imageStorage;
     private final PhotoMissionSubmissionTransactionService transactionService;
     private final ImageProperties imageProperties;
+    private final PhotoMissionVerificationService verificationService;
 
     public PhotoMissionSubmissionService(
             ImageValidator imageValidator,
             ImageStorage imageStorage,
             PhotoMissionSubmissionTransactionService transactionService,
-            ImageProperties imageProperties
+            ImageProperties imageProperties,
+            PhotoMissionVerificationService verificationService
     ) {
         this.imageValidator = imageValidator;
         this.imageStorage = imageStorage;
         this.transactionService = transactionService;
         this.imageProperties = imageProperties;
+        this.verificationService = verificationService;
     }
 
     public PhotoMissionSubmissionAcceptedResponse submit(
@@ -75,6 +79,41 @@ public class PhotoMissionSubmissionService {
                 submission.evaluationId(),
                 PhotoEvaluationExecutionStatus.QUEUED
         );
+    }
+
+    /**
+     * 메시지 큐 전환 플래그가 꺼져 있을 때의 기존 동기 경로.
+     * 사진을 저장한 뒤 AI를 직접 호출해 판정 결과를 바로 돌려준다.
+     */
+    public PhotoMissionVerifyResponse submitAndVerify(
+            String userPublicId,
+            Long missionId,
+            UUID idempotencyKey,
+            MultipartFile file,
+            BigDecimal latitude,
+            BigDecimal longitude
+    ) {
+        StoredImage image = storeImage(missionId, file, latitude, longitude);
+
+        Long photoId;
+        try {
+            photoId = transactionService.saveForVerification(
+                    userPublicId,
+                    missionId,
+                    idempotencyKey,
+                    image.imageKey(),
+                    image.originalFilename(),
+                    image.mimeType(),
+                    image.sizeBytes(),
+                    image.latitude(),
+                    image.longitude()
+            );
+        } catch (RuntimeException exception) {
+            compensateDelete(image.imageKey());
+            throw exception;
+        }
+
+        return verificationService.verify(photoId);
     }
 
     public Long addGroupPhoto(

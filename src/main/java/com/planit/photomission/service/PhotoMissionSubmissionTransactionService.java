@@ -85,6 +85,9 @@ public class PhotoMissionSubmissionTransactionService {
         this.clock = clock;
     }
 
+    /**
+     * 메시지 큐 경로. 사진과 QUEUED 판정을 저장하고, 같은 트랜잭션에서 판정 요청을 Outbox에 넣는다.
+     */
     @Transactional
     public QueuedSubmission save(
             String userPublicId,
@@ -102,6 +105,99 @@ public class PhotoMissionSubmissionTransactionService {
                 missionId,
                 idempotencyKey
         );
+        MissionPhoto savedPhoto = savePhoto(
+                context,
+                missionId,
+                idempotencyKey,
+                imageKey,
+                originalFilename,
+                mimeType,
+                sizeBytes,
+                latitude,
+                longitude
+        );
+        LocalDateTime now = context.now();
+        LocalDateTime deadlineAt =
+                now.plusSeconds(PROCESSING_DEADLINE_SECONDS);
+        PhotoEvaluation evaluation = evaluationRepository.save(
+                PhotoEvaluation.queue(
+                        savedPhoto,
+                        now,
+                        deadlineAt
+                )
+        );
+        Duration imageUrlTtl = Duration.between(now, deadlineAt)
+                .plusSeconds(30);
+        String imageUrl = imageStorage.createReadUrl(
+                savedPhoto.getImageFile().getImageKey(),
+                imageUrlTtl
+        );
+        PhotoMissionVerifyRequest verifyRequest = requestFactory.create(
+                savedPhoto,
+                imageUrl
+        );
+        PhotoEvaluationRequestedMessage message =
+                PhotoEvaluationRequestedMessage.create(
+                        evaluation.getId(),
+                        deadlineAt.atZone(clock.getZone()).toOffsetDateTime(),
+                        missionId,
+                        verifyRequest
+                );
+        outboxService.enqueue(
+                AiJobType.PHOTO_JUDGE,
+                evaluation.getId(),
+                objectMapper.writeValueAsString(message)
+        );
+        return new QueuedSubmission(savedPhoto.getId(), evaluation.getId());
+    }
+
+    /**
+     * 동기 판정 경로. 사진만 저장하고 판정 행과 Outbox는 만들지 않는다.
+     * 판정은 커밋 뒤 PhotoMissionVerificationService가 AI를 직접 호출해 만든다.
+     *
+     * @return 저장한 사진 ID
+     */
+    @Transactional
+    public Long saveForVerification(
+            String userPublicId,
+            Long missionId,
+            UUID idempotencyKey,
+            String imageKey,
+            String originalFilename,
+            String mimeType,
+            int sizeBytes,
+            BigDecimal latitude,
+            BigDecimal longitude
+    ) {
+        SubmissionContext context = loadSubmissionContext(
+                userPublicId,
+                missionId,
+                idempotencyKey
+        );
+        return savePhoto(
+                context,
+                missionId,
+                idempotencyKey,
+                imageKey,
+                originalFilename,
+                mimeType,
+                sizeBytes,
+                latitude,
+                longitude
+        ).getId();
+    }
+
+    private MissionPhoto savePhoto(
+            SubmissionContext context,
+            Long missionId,
+            UUID idempotencyKey,
+            String imageKey,
+            String originalFilename,
+            String mimeType,
+            int sizeBytes,
+            BigDecimal latitude,
+            BigDecimal longitude
+    ) {
         Mission mission = context.mission();
         TripMember member = context.member();
         LocalDateTime now = context.now();
@@ -160,39 +256,7 @@ public class PhotoMissionSubmissionTransactionService {
                     now
             );
         }
-        MissionPhoto savedPhoto = photoRepository.save(photo);
-        LocalDateTime deadlineAt =
-                now.plusSeconds(PROCESSING_DEADLINE_SECONDS);
-        PhotoEvaluation evaluation = evaluationRepository.save(
-                PhotoEvaluation.queue(
-                        savedPhoto,
-                        now,
-                        deadlineAt
-                )
-        );
-        Duration imageUrlTtl = Duration.between(now, deadlineAt)
-                .plusSeconds(30);
-        String imageUrl = imageStorage.createReadUrl(
-                savedPhoto.getImageFile().getImageKey(),
-                imageUrlTtl
-        );
-        PhotoMissionVerifyRequest verifyRequest = requestFactory.create(
-                savedPhoto,
-                imageUrl
-        );
-        PhotoEvaluationRequestedMessage message =
-                PhotoEvaluationRequestedMessage.create(
-                        evaluation.getId(),
-                        deadlineAt.atZone(clock.getZone()).toOffsetDateTime(),
-                        mission.getId(),
-                        verifyRequest
-                );
-        outboxService.enqueue(
-                AiJobType.PHOTO_JUDGE,
-                evaluation.getId(),
-                objectMapper.writeValueAsString(message)
-        );
-        return new QueuedSubmission(savedPhoto.getId(), evaluation.getId());
+        return photoRepository.save(photo);
     }
 
     @Transactional

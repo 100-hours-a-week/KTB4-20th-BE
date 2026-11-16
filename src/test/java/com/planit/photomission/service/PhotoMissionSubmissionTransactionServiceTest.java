@@ -208,6 +208,42 @@ class PhotoMissionSubmissionTransactionServiceTest {
         );
     }
 
+    @DisplayName("동기 판정 경로는 사진만 저장하고 판정 행과 Outbox는 만들지 않는다")
+    @Test
+    void savesPhotoOnlyForSynchronousVerification() {
+        Fixture fixture = fixture(MissionScope.GROUP);
+        stubCommon(fixture);
+        when(groupStateRepository.findByMissionId(31L))
+                .thenReturn(Optional.of(MissionGroupState.create(
+                        fixture.mission(), SEOUL_NOW
+                )));
+        when(imageFileRepository.save(any(ImageFile.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(photoRepository.save(any(MissionPhoto.class)))
+                .thenAnswer(invocation -> {
+                    MissionPhoto photo = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(photo, "id", 41L);
+                    return photo;
+                });
+
+        Long photoId = service.saveForVerification(
+                USER_PUBLIC_ID.toString(),
+                31L,
+                UUID.randomUUID(),
+                "missions/31/photo.jpg",
+                "photo.jpg",
+                "image/jpeg",
+                1024,
+                null,
+                null
+        );
+
+        assertThat(photoId).isEqualTo(41L);
+        verify(photoRepository).save(any(MissionPhoto.class));
+        verify(evaluationRepository, never()).save(any(PhotoEvaluation.class));
+        verify(outboxService, never()).enqueue(any(), any(), any());
+    }
+
     @DisplayName("단체 미션 사진을 제출자와 연결해 저장한다")
     @Test
     void savesGroupMissionPhoto() {

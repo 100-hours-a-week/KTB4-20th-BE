@@ -1,5 +1,8 @@
 package com.planit.photomission.controller;
 
+import com.planit.mq.intake.AiJobIntakeGuard;
+import com.planit.mq.job.AiJobType;
+import com.planit.photomission.ai.PhotoMissionVerifyResponse;
 import com.planit.photomission.domain.PhotoEvaluationExecutionStatus;
 import com.planit.photomission.dto.PhotoMissionAlbumResponse;
 import com.planit.photomission.dto.PhotoMissionCompletionResponse;
@@ -46,6 +49,7 @@ class PhotoMissionControllerTest {
     private PhotoMissionPhotoManagementService managementService;
     private PhotoMissionManualCompletionService manualCompletionService;
     private PhotoMissionQueryService queryService;
+    private AiJobIntakeGuard intakeGuard;
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -54,19 +58,22 @@ class PhotoMissionControllerTest {
         managementService = mock(PhotoMissionPhotoManagementService.class);
         manualCompletionService = mock(PhotoMissionManualCompletionService.class);
         queryService = mock(PhotoMissionQueryService.class);
+        intakeGuard = mock(AiJobIntakeGuard.class);
         mockMvc = MockMvcBuilders.standaloneSetup(
                 new PhotoMissionController(
                         submissionService,
                         managementService,
                         manualCompletionService,
-                        queryService
+                        queryService,
+                        intakeGuard
                 )
         ).build();
     }
 
-    @DisplayName("사진 판정 요청을 접수하고 202와 QUEUED 상태를 반환한다")
+    @DisplayName("전환 플래그가 켜져 있으면 사진 판정 요청을 접수하고 202와 QUEUED 상태를 반환한다")
     @Test
     void acceptsPhotoEvaluationRequest() throws Exception {
+        when(intakeGuard.isAsync(AiJobType.PHOTO_JUDGE)).thenReturn(true);
         when(submissionService.submit(
                 any(), any(), any(), any(), any(), any()
         )).thenReturn(new PhotoMissionSubmissionAcceptedResponse(
@@ -87,6 +94,45 @@ class PhotoMissionControllerTest {
                 .andExpect(jsonPath("$.data.photoId").value(41))
                 .andExpect(jsonPath("$.data.evaluationId").value(51))
                 .andExpect(jsonPath("$.data.status").value("QUEUED"));
+
+        verify(submissionService, never()).submitAndVerify(
+                any(), any(), any(), any(), any(), any()
+        );
+    }
+
+    @DisplayName("전환 플래그가 꺼져 있으면 AI를 동기 호출하고 200과 판정 결과를 반환한다")
+    @Test
+    void verifiesPhotoSynchronouslyWhenAsyncFlagIsOff() throws Exception {
+        when(intakeGuard.isAsync(AiJobType.PHOTO_JUDGE)).thenReturn(false);
+        when(submissionService.submitAndVerify(
+                any(), any(), any(), any(), any(), any()
+        )).thenReturn(new PhotoMissionVerifyResponse(
+                "retry",
+                null,
+                BigDecimal.valueOf(62.5),
+                List.of(new PhotoMissionVerifyResponse.DetectedLabel(
+                        "첨성대",
+                        true
+                )),
+                "건물 전체가 보이게 다시 찍어 주세요"
+        ));
+
+        mockMvc.perform(multipart("/api/photomissions/31/photos")
+                        .file(jpegPhoto())
+                        .header("Idempotency-Key", UUID.randomUUID())
+                        .principal(authentication()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("PHOTO_MISSION_VERIFIED"))
+                .andExpect(jsonPath("$.data.result").value("retry"))
+                .andExpect(jsonPath("$.data.match_score").value(62.5))
+                .andExpect(jsonPath("$.data.detected_labels[0].name")
+                        .value("첨성대"))
+                .andExpect(jsonPath("$.data.retry_hint")
+                        .value("건물 전체가 보이게 다시 찍어 주세요"));
+
+        verify(submissionService, never()).submit(
+                any(), any(), any(), any(), any(), any()
+        );
     }
 
     @DisplayName("본인이 제출한 포토미션 사진을 삭제한다")
